@@ -1,0 +1,13 @@
+irb -- intaractive ruby
+
+installのしかた
+
+% ruby instirb.rb
+
+を実行してください. 必要なファイルがrubyのインストールディレクトリにイン
+ストールされます.
+
+その他, irbの使い方など詳しくは doc/irb.rd.jp を参照してください.
+
+
+

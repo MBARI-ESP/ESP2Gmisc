@@ -1,0 +1,16 @@
+irb -- intaractive ruby
+
+How to install
+
+Run:
+
+% ruby instirb.rb
+
+Files of irb are installed in installation directory of ruby.
+
+See also doc/irb.rd.
+
+
+
+
+
