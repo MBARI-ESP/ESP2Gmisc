@@ -1,4 +1,4 @@
-##############  sourceref.rb   2/11/03  brent@mbari.org  ###################
+##############  sourceref.rb   2/13/03  brent@mbari.org  ###################
 #
 #  The SourceRef class relies on a patched version of ruby/eval.c
 #  to provide access to the source file and line # where every Method
@@ -14,11 +14,12 @@
 #  edit methods directly as a convenience.
 #
 #  Examples:
-#     SourceRef.instance_method (:list).source  ==> ./sourceline.rb:47
+#     SourceRef.instance_method (:list).source  ==> ./sourceref.rb:47
 #     SourceRef.instance_method (:list).edit    ==>  opens an editor window
 #     SourceRef.source[:list].edit              ==>  opens an editor window
 #     Date.edit    ==> edits all files that define methods in class Date
-#     Date.source  ==> returns hash of Date methods to SourceLines
+#     Date.source  ==> returns hash of Date methods to SourceRefs
+#     puts Date.source.join  ==> display Data methods with SourceRefs
 #     Date.sources ==> returns the list of files containing Date methods
 #     Date.reload  ==> (re-)loads Date.sources
 #
@@ -87,83 +88,116 @@ class SourceRef   #combines source_file_name and line number
     end
   end
   
+
+  module Code #for objects supporting source_file_name & source_line
+
+    def source
+      SourceRef.new (source_file_name, source_line)
+    end
+
+    def list (lineCount=16, lineOffset=0)
+    # return the first lineCount lines of receiver's source text
+      source.list (lineCount, lineOffset)
+    end
+
+    def edit
+    # start an editor session on the receiver's source
+      source.edit
+    end
+
+    def view
+    # start a read-only editor session on the receiver's source
+      source.view
+    end
+
+    def reload
+    # load entire file containing receiver's source text
+      source.reload
+    end
+
+  end #module SourceRef::Code
+
 end #class SourceRef
 
-
-class Object  #is the nearest common ancestor of Proc and Method :-(
-
-  def source
-    SourceRef.new (source_file_name, source_line)
-  end
-  
-  def list (lineCount=16, lineOffset=0)
-  # return the first lineCount lines of receiver's source text
-    source.list (lineCount, lineOffset)
-  end
-  
-  def edit
-  # start an editor session on the receiver's source
-    source.edit
-  end
-  
-  def view
-  # start a read-only editor session on the receiver's source
-    source.view
-  end
-
-  def reload
-  # load entire file containing receiver's source text
-    source.reload
-  end
-  
-end
-  
+#mix source code manipulation utilites into the appropriate classes
+class Proc; include SourceRef::Code; end
+class Method; include SourceRef::Code; end
   
 class Module
 
-  def source  
-  # return hash on receiver's methods to corresponding SourceRefs
+  def sourceHash (methodType, methodNameArray)
+  # private method to build a hash of methodNames to sourceRefs
   # exclude methods for which no ruby source is available
     h = {};
-    singleton_methods.each {|m|
+    methodGetter = method(methodType)
+    methodNameArray.each {|m|
       m = m.intern
-      src = method(m).source
-      h[m] = src if src.line > 0 && src.file != "(eval)"
-    }
-    (private_instance_methods+protected_instance_methods+
-             instance_methods).each {|m|
-      m = m.intern
-      src = instance_method(m).source
+      src = methodGetter[m].source
       h[m] = src if src.line > 0 && src.file != "(eval)"
     }
     h
   end
-    
-  def sources
-  # return array of unique source file names for all receiver's methods
-    (source.values.collect{|s| s.file}.uniq).collect{|fn| SourceRef.new(fn)}    
-  end
-    
-  def reload
-  # load all source files that define receiver's methods
-    sources.each {|s| s.reload}
+  private :sourceHash    
+
+  def singleton_source
+  # return hash on receiver's singleton methods to corresponding SourceRefs
+    sourceHash (:method, singleton_methods)
   end
   
-  def edit
+  def instance_source (includeAncestors=true)
+  # return hash on receiver's instance methods to corresponding SourceRefs
+  #        optionally include accessible methods in ancestor classes
+    sourceHash (:instance_method,
+                private_instance_methods+
+                protected_instance_methods(includeAncestors)+
+                public_instance_methods(includeAncestors))
+  end
+  
+  def source (*args)
+  # return hash on receiver's methods to corresponding SourceRefs
+    singleton_source.update(instance_source(*args))
+  end
+    
+  def sources (*args)
+  # return array of unique source file names for all receiver's methods
+    (singleton_source.values+instance_source(*args).values).collect{|s|
+       s.file
+    }.uniq.collect{|fn| SourceRef.new(fn)}    
+  end
+    
+  def reload (*args)
+  # load all source files that define receiver's methods
+    sources(*args).each {|s| s.reload}
+  end
+  
+  def edit (*args)
   # start editor sessions on all files that define receiver's methods
-    sources.each{|srcFile| srcFile.edit}
+    sources(*args).each{|srcFile| srcFile.edit}
   end
 
-  def view
+  def view (*args)
   # start read-only editor sessions on files containing receiver's methods
-    sources.each{|srcFile| srcFile.view}
+    sources(*args).each{|srcFile| srcFile.view}
   end
   
-  def list (lineCount=16, lineOffset=0)
+  def list (*args)
   # return first few lines of all files containing self.methods
     result=""
-    sources.each{|srcFile| result+=srcFile.list (lineCount, lineOffset)}
+    sources.each{|srcFile| result+=srcFile.list (*args)}
     result
   end
 
-end       
+end
+
+
+class Hash
+
+  def join (sep = " => ")
+  # most useful for displaying hashes with puts hsh.join
+    strAry = []
+    each {|key,value| strAry << key.inspect+sep+value.to_s}
+    strAry
+  end
+  
+end
+       
