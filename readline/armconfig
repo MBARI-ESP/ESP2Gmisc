@@ -1,13 +1,13 @@
 #!/bin/bash
-# configure readline-4.3 build for arm-linux -- 2/18/05 brent@mbari.org
-: ${CFLAGS:=-Os}
+# unpack & configure readline-4.3 build for arm-linux -- 3/15/05 brent@mbari.org
+: ${CFLAGS:=-Os -fomit-frame-pointer}
 : ${CXXFLAGS:=$CFLAGS}
 : ${ARMGCC:=/arm}
 : ${CC:=$ARMGCC/bin/gcc}
 : ${LIBTOP:=${1-$ARMGCC/usr}}
+: ${READLNVERS:=readline-4.3}
 export CC CFLAGS CXXFLAGS
-cd ${READLNVERS-readline-4.3}
-[ -r Makefile ] && make distclean
+rm -rf $READLNVERS && tar xzf $READLNVERS.tar.gz && cd $READLNVERS &&
 bash_cv_have_mbstate_t=yes bash_cv_func_sigsetjmp=present \
 ac_cv_func_strcoll_works=yes bash_cv_func_strcoll_broken=no \
 bash_cv_must_reinstall_sighandlers=no configure --host=arm-unknown-linux \
