@@ -11,6 +11,8 @@
 #
 ########################################################################
 
+require 'mbari.so'  #sundry 'C' extensions including Kernel.doze method
+
 class Module
   unless defined? constants_at
     def constants_at
@@ -61,6 +63,8 @@ class Struct
   def with hash
   #assign fields of struct specified in given hash(-like) object
     hash.each {|fieldName, value| self[fieldName]=value }
+    self
   end
+
 end
 
