@@ -21,11 +21,11 @@ module GTK
 
   class ModuleDisplay < Gtk::VPaned
     
-    def initialize(database)
+    def initialize(database, docviewer=SimpleDocViewer.new(database))
       super()
 
       @database = database
-      @docviewer = SimpleDocViewer.new(database)
+      @docviewer = docviewer
 
       # create display paned
       display_box = Gtk::VBox.new(false, 0)
