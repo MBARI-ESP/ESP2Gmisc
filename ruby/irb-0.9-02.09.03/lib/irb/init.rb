@@ -44,6 +44,7 @@ module IRB
     @CONF[:RC] = true
     @CONF[:LOAD_MODULES] = []
     @CONF[:IRB_RC] = nil
+    @CONF[:IRB_THREAD] = Thread   #class of new threads
 
     @CONF[:MATH_MODE] = false
     @CONF[:USE_READLINE] = false unless defined?(ReadlineInputMethod)
