@@ -89,7 +89,8 @@ class SourceRef   #combines source file name and line number
       localPath
     end
   end
-  
+  @@remote = @@remoteStub   #use stub remote definition until changed
+    
   def self.remote= remoteObject
 # configure SourceRef for remote editting
 # remoteObject must implement remap to convert pathnames and
