@@ -184,7 +184,9 @@ class SourceRef   #combines source file name and line number
     
     Code::OPS.each {|m|
       define_method (m) { |*args|
-        src = args.length==0 ? IRB.CurrentContext.exception.last : args.shift
+        lastErr = IRB.CurrentContext.exception.last
+        lastErr = lastErr.rootCause if lastErr.respond_to? :rootCause
+        src = args.length==0 ? lastErr : args.shift
         #convert src to an appropriate SourceRef by whatever means possible
         #Modified irb.rb saves last back_trace & exception in IRB.conf
         if src.kind_of?(Module)
@@ -192,7 +194,7 @@ class SourceRef   #combines source file name and line number
         else
           if src.kind_of?(Integer) || src.kind_of?(Symbol) 
             #assume parameter is a backtrace level or method name
-            srcFromTrace = IRB.CurrentContext.exception.last.to_srcRef src
+            srcFromTrace = lastErr.to_srcRef src
             src = srcFromTrace unless srcFromTrace.nil?
           end
           if src.respond_to? :to_srcRef
