@@ -130,7 +130,8 @@ class Module
       src = method(m).source
       h[m] = src if src.line > 0 && src.file != "(eval)"
     }
-    instance_methods.each {|m|
+    (private_instance_methods+protected_instance_methods+
+             instance_methods).each {|m|
       m = m.intern
       src = instance_method(m).source
       h[m] = src if src.line > 0 && src.file != "(eval)"
