@@ -1,0 +1,38 @@
+# Automatically generated....
+raise 'Must be invoked by installation process' unless $opfile
+
+# -----------------------------------------
+aClass = ClassModule.new("Math", "", "module")
+aClass.addFragment(Paragraph.new("The <code>Math</code> module contains module functions for basic trigonometric and transcendental functions.\n"))
+m0002 = MethodDesc.new("atan2", "Math", "class", "Math.atan2( <i>y, x</i> ) -> <i>aFloat</i>")
+m0002.addFragment(Paragraph.new("Computes the arc tangent given <i>y</i> and <i>x</i>. Returns -PI..PI.\n"))
+aClass.addMethod(m0002)
+m0003 = MethodDesc.new("cos", "Math", "class", "Math.cos( <i>aNumeric</i> ) -> <i>aFloat</i>")
+m0003.addFragment(Paragraph.new("Computes the cosine of <i>aNumeric</i> (expressed in radians). Returns -1..1.\n"))
+aClass.addMethod(m0003)
+m0004 = MethodDesc.new("exp", "Math", "class", "Math.exp( <i>aNumeric</i> ) -> <i>aFloat</i>")
+m0004.addFragment(Paragraph.new("Returns e raised to the power of <i>aNumeric</i>.\n"))
+aClass.addMethod(m0004)
+m0005 = MethodDesc.new("frexp", "Math", "class", "Math.frexp( <i>aNumeric</i> ) -> <i>anArray</i>")
+m0005.addFragment(Paragraph.new("Returns a two-element array ([<i>aFloat, aFixnum</i>]) containing the normalized fraction and exponent of <i>aNumeric</i>.\n"))
+aClass.addMethod(m0005)
+m0006 = MethodDesc.new("ldexp", "Math", "class", "Math.ldexp( <i>aFloat</i>, <i>anInteger</i> ) -> <i>aFloat</i>")
+m0006.addFragment(Paragraph.new("Returns the value of <i>aFloat</i> *2<i>anInteger</i>.\n"))
+aClass.addMethod(m0006)
+m0007 = MethodDesc.new("log", "Math", "class", "Math.log( <i>aNumeric</i> ) -> <i>aFloat</i>")
+m0007.addFragment(Paragraph.new("Returns the natural logarithm of <i>aNumeric</i>.\n"))
+aClass.addMethod(m0007)
+m0008 = MethodDesc.new("log10", "Math", "class", "Math.log10( <i>aNumeric</i> ) -> <i>aFloat</i>")
+m0008.addFragment(Paragraph.new("Returns the base 10 logarithm of <i>aNumeric</i>.\n"))
+aClass.addMethod(m0008)
+m0009 = MethodDesc.new("sin", "Math", "class", "Math.sin( <i>aNumeric</i> ) -> <i>aFloat</i>")
+m0009.addFragment(Paragraph.new("Computes the sine of <i>aNumeric</i> (expressed in radians). Returns -1..1.\n"))
+aClass.addMethod(m0009)
+m0010 = MethodDesc.new("sqrt", "Math", "class", "Math.sqrt( <i>aNumeric</i> ) -> <i>aFloat</i>")
+m0010.addFragment(Paragraph.new("Returns the non-negative square root of <i>aNumeric</i>. Raises <code>ArgError</code> if <i>aNumeric</i> is less than zero.\n"))
+aClass.addMethod(m0010)
+m0011 = MethodDesc.new("tan", "Math", "class", "Math.tan( <i>aNumeric</i> ) -> <i>aFloat</i>")
+m0011.addFragment(Paragraph.new("Returns the tangent of <i>aNumeric</i> (expressed in radians).\n"))
+aClass.addMethod(m0011)
+
+File.open($opfile, "w") {|f| Marshal.dump(aClass, f) }
