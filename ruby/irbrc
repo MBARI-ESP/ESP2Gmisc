@@ -18,7 +18,7 @@ if IRB.conf[:HOST]  #target configured to use a remote host for source code
         Kernel.system ('rsh '+IRB.conf[:HOST]+' "'+prefix+suffix)
       end
       def remap path  #clever symlinks obviate the need for path remapping :-)
-        self
+        path
       end
     end
   end
