@@ -18,7 +18,8 @@
 #  Examples:
 #     SourceRef.instance_method (:list).source  ==> ./sourceref.rb:47
 #     SourceRef.instance_method (:list).edit    ==>  opens an editor window
-#     SourceRef.source[:list].edit              ==>  opens an editor window
+#     (SourceRef/:list).edit                    ==>  opens same window
+#     SourceRef.source[:list].view              ==>  opens same window r/o
 #     Date.edit    ==> edits all files that define methods in class Date
 #     Date.source  ==> returns hash of Date methods to SourceRefs
 #     puts Date.source.join  ==> display Data methods with SourceRefs
@@ -217,7 +218,19 @@ class Module
   
   def source (*args)
   # return hash on receiver's methods to corresponding SourceRefs
+  # note that instance_methods will overwrite singletons of the same name
     singleton_source.update(instance_source(*args))
+  end
+  
+  def / (method_name)
+  # return location of method named method_name in module's source
+    source(true)[method_name.intern]
+  end
+    
+  def % (method_name)
+  # return location of singleton method named method_name in module's source
+  # Use / above unless method_name is both a singleton and instance method
+    singleton_source[method_name.intern]
   end
     
   def sources (*args)
@@ -261,7 +274,13 @@ class String
   end
 end
 
-  
+class Symbol
+  def intern  #just for mathematical completeness!
+    self
+  end
+end
+
+
 class Hash
 
   def join (sep = " => ")
