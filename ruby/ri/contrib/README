@@ -1,0 +1,13 @@
+csteele/              ri support for emacs
+dblack/emacs          ri support for emacs. Includes browsing.
+fpizlo                gtkri - a GTK-based browser for ri information
+
+To install, run install.rb in the individual sub directories.
+
+Please contact the authors directly for support.
+
+
+Regards
+
+
+Dave
