@@ -1,11 +1,11 @@
 #!/bin/bash
 #Build ruby
-cd ruby-1.6.8
+cd ${RUBYVERS:=ruby-1.6.8}
 [ -n "$1" ] && target=$1
-echo "Making $target in $dir:"
+echo "Making $target in $RUBYVERS:"
 make $target
 if [ ! -r Makefile ]; then
   CFLAGS=-O2 CXXFLAGS=-O2 configure
 fi
-echo "Making $dir:"
+echo "Making $RUBYVERS:"
 make
