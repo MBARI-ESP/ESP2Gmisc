@@ -20,7 +20,8 @@ module ObjectSpace
   #useful if you can't figure out why something won't GC
   #VERY SLOW!
     n=0
-    block=proc {|mod, names| puts "#{mod}::#{names.inspect}"} unless block
+    block=proc {|mod, names| 
+      puts "#{mod}#{names ? "::"+names.inspect : ""}"} unless block
     unless klass
       refs=global_variables
       refs.delete_if {|v| !(eval v).eql? target}
