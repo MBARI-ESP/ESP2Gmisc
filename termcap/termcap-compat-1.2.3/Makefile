@@ -69,9 +69,9 @@ install: lib install-dirs install-data
 		/usr/include/termcap.h; \
 	else \
 	  cp -f $(STATIC_LIB) $(prefix)/lib; \
-	  ln -sf $(prefix)/lib/$(SHARED_LIB) \
+	  ln -sf $(SHARED_LIB) \
 		$(prefix)/lib/libtermcap.so.$(SONAME_VERSION); \
-	  ln -sf $(prefix)/lib/libtermcap.so.$(SONAME_VERSION) \
+	  ln -sf libtermcap.so.$(SONAME_VERSION) \
 		$(prefix)/lib/libtermcap.so; \
 	  cp -f termcap.h $(incprefix)/include; \
 	  chown $(OWNER) \
