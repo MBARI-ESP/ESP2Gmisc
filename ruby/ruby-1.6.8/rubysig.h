@@ -66,22 +66,20 @@ EXTERN int rb_thread_critical;
 void rb_thread_schedule _((void));
 #if defined(HAVE_SETITIMER) && !defined(__BOW__)
 EXTERN int rb_thread_pending;
-# define CHECK_INTS if (!rb_prohibit_interrupt) {\
+# define CHECK_INTS if (!(rb_prohibit_interrupt | rb_thread_critical)) {\
+    if (rb_thread_pending) rb_thread_schedule();\
     if (rb_trap_pending) rb_trap_exec();\
-    if (rb_thread_pending && !rb_thread_critical) rb_thread_schedule();\
 }
 #else
 /* pseudo preemptive thread switching */
 EXTERN int rb_thread_tick;
 #define THREAD_TICK 500
-#define CHECK_INTS if (!rb_prohibit_interrupt) {\
-    if (rb_trap_pending) rb_trap_exec();\
-    if (!rb_thread_critical) {\
+#define CHECK_INTS if (!rb_prohibit_interrupt && !rb_thread_critical) {\
 	if (rb_thread_tick-- <= 0) {\
 	    rb_thread_tick = THREAD_TICK;\
 	    rb_thread_schedule();\
 	}\
-    }\
+    if (rb_trap_pending) rb_trap_exec();\
 }
 #endif
 
