@@ -74,6 +74,7 @@ module GTK
       
       cal_edit = Proc.new{ edit @displayedSource }
       cal_view = Proc.new{ view @displayedSource }
+      cal_reload = Proc.new{ reload @displayedSource; cal_update.call }
       
       cal_stockbrowser = Proc.new{
         stockbrowser = RBBR::UI::GTK::StockDialog.new(self)
@@ -92,7 +93,9 @@ module GTK
 
       ifp.create_items([
                          ["/_File"],
-                         ["/_File/_Require Library...", "<StockItem>", "<control>R", Gtk::Stock::ADD, cal_req],
+                         ["/_File/Reload Source", "<StockItem>", "<control>R", Gtk::Stock::REFRESH, cal_reload],
+                         ["/_File/_Separator", "<Separator>"],
+                         ["/_File/_Require Library...", "<StockItem>", "<control>Y", Gtk::Stock::ADD, cal_req],
                          ["/_File/_Load Script...", "<StockItem>", "<control>L", Gtk::Stock::OPEN, cal_load],
                          ["/_File/_Separator", "<Separator>"],
                          ["/_File/_Quit", "<StockItem>", "<control>Q", Gtk::Stock::QUIT, cal_quit],
@@ -116,6 +119,7 @@ module GTK
       ifp.get_widget("/View/Filter Setting...").sensitive = false
       @viewSource = ifp.get_widget("/View/Source Code")
       @editSource = ifp.get_widget("/Edit/Source Code")
+      @reloadSource = ifp.get_widget("/File/Reload Source")
       update(nil)  #ghost out source display menu items 
 
       ifp.get_widget("<main>")
@@ -193,6 +197,7 @@ module GTK
       @displayedSource = displayed
       @viewSource.sensitive = displayed
       @editSource.sensitive = displayed
+      @reloadSource.sensitive = displayed
     end
     
     def quit
