@@ -151,7 +151,7 @@ module IRB
   def IRB.irb(file = nil, *main)
     workspace = WorkSpace.new(*main)
     parent_thread = Thread.current
-    Thread.start do
+    @CONF[:IRB_THREAD].new do
       begin
 	irb = Irb.new(workspace, file)
       rescue 
