@@ -7,24 +7,25 @@
 #  Selected Methods:
 #   Module.rename_method -> alias_method only if alias dosn't already exist
 #   Module.constants_at -> list of constants def'd in Module
-#   ObjectSpace.each -> search after collecting the trash
 #   Hash.join -> convert Hash to a String Array
 #
 ########################################################################
 
 class Module
-  def constants_at
-  #return Array of names of constants defined at specified module
-    acs = ancestors
-    cs = constants
-    if acs.length > 1
-      acs[1..-1].each do |ac|
-        both = ac.constants & cs
-        both = both.select{|c| ac.const_get(c) == const_get(c)}
-        cs -= both if both
+  unless defined? constants_at
+    def constants_at
+    #return Array of names of constants defined in specified module
+      acs = ancestors
+      cs = constants
+      if acs.length > 1
+        acs[1..-1].each do |ac|
+          both = ac.constants & cs
+          both = both.select{|c| ac.const_get(c) == const_get(c)}
+          cs -= both if both
+        end
       end
+      cs
     end
-    cs
   end
   
   private
