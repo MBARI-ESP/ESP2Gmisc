@@ -97,10 +97,10 @@ class SourceRef   #combines source_file_name and line number
       }
     rescue EOFError  # don't sweat EOF unless its before target line #
       if lineno < line
-        $stderr.puts "--> Truncated ruby source file: #{self}"
+        raise $!,"--> Truncated ruby source file: #{self}"
       end
     rescue
-      $stderr.puts "--> Missing ruby source: #{self}"
+      raise $!,"--> Missing ruby source: #{self}"
     end
     text
   end
@@ -131,8 +131,8 @@ class SourceRef   #combines source_file_name and line number
   # load file referenced by receiver
     begin
       load file
-    rescue LoadError
-      $stderr.puts "--> Missing ruby source fle: #{file}" 
+    rescue LoadError 
+      raise $!, "--> Missing ruby source fle: #{file}" 
     end
   end
   
@@ -165,15 +165,17 @@ class SourceRef   #combines source_file_name and line number
       SourceRef.new (source_file_name, source_line)
     end
     
+    # can't use define_method because in ruby 1.6 self would be SourceRef::Code
     (OPS = [ :list, :edit, :view, :reload ]).each {|m|
-      define_method (m) { | *args | source.method(m).call(*args) }
+      eval "def #{m}; source.#{m}; end"
     }
-
+    
   end #module SourceRef::Code
 
   
   module CommandBundle   #add convenient commands for viewing source code
-
+    private
+    
     Code::OPS.each {|m|
       define_method (m) { |*args|
         src = args.length==0 ? IRB.conf[:exception] : args.shift
@@ -201,6 +203,12 @@ class SourceRef   #combines source_file_name and line number
       }
     }
 
+    def startRBBR  #start another Ruby Class Browser
+      require 'rbbr'
+      (rbbrThread=Thread.new {RBBR.main}).priority=Thread.current.priority+1
+      rbbrThread    
+    end
+    
   end  
 
 end #class SourceRef
@@ -248,15 +256,19 @@ class Module
     singleton_source.update(instance_source(*args))
   end
   
-  def / (method_name)
-  # return location of method named method_name in module's source
-    source(true)[method_name.intern]
+  def % (method_name)
+  # return singleton method named method_name in module
+  # Use / below unless method_name is also an instance method
+    method method_name
   end
     
-  def % (method_name)
-  # return location of singleton method named method_name in module's source
-  # Use / above unless method_name is both a singleton and instance method
-    singleton_source[method_name.intern]
+  def / (method_name)
+  # return method named method_name in module
+    begin
+      return instance_method method_name
+    rescue NameError
+    end
+    method method_name
   end
     
   def sources (*args)
