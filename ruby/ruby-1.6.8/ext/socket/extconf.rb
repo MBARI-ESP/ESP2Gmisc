@@ -1,5 +1,10 @@
 require 'mkmf'
 
+#brent@mbari.org -- 2/21/03
+require 'rbconfig'
+CONFIG = Config::MAKEFILE_CONFIG
+$CrossCompiling = CONFIG["build_alias"] != CONFIG["target_alias"]
+
 $CPPFLAGS += " -Dss_family=__ss_family -Dss_len=__ss_len"
 
 case RUBY_PLATFORM
@@ -187,7 +192,7 @@ have_header("netinet/tcp.h") if not /cygwin/ === RUBY_PLATFORM # for cygwin 1.1.
 have_header("netinet/udp.h")
 
 $getaddr_info_ok = false
-if not enable_config("wide-getaddrinfo", false) and try_run(<<EOF)
+if $CrossCompiling or (not enable_config("wide-getaddrinfo", false) and try_run(<<EOF))
 #include <sys/types.h>
 #include <netdb.h>
 #include <string.h>
