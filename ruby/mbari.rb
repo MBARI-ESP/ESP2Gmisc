@@ -11,7 +11,7 @@
 #
 ########################################################################
 
-require 'mbari.so'  #sundry 'C' extensions including Kernel.doze method
+require 'mbarilib'  #sundry 'C' extensions including Kernel.doze method
 
 class Module
   unless defined? constants_at
