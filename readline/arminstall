@@ -6,13 +6,26 @@
 : ${LIBTOP:=$ARMGCC/usr}
 : ${TARGETTOP:=${2-/usr/lib}}
 : ${HOSTTOP:=${1-$HOME/armHost$TARGETTOP}}
+
+cplinks() {
+#recursively copy symlinks having the specified target $1
+  for target in `find -lname "$1"`; do
+    cp -a $target $HOSTTOP || return $?
+    cplinks $target
+  done
+}
+
+cplib() {
+#copy and strip ARM library $1 and all symlinks to it
+   $ARMSTRIP $1 -o $HOSTTOP/$1 && cplinks $1
+}
+
 echo "Installing in $HOSTTOP"
 echo "  for execution at $TARGETTOP on the ARM target"
 cd ${READLNVERS-readline-4.3} || exit 2
 make install || exit 1
-mkdir -p $HOSTTOP || exit 3
-for lib in libreadline libhistory; do
-  cp -af $LIBTOP/lib/$lib.so*[^.old] $HOSTTOP &&
-  $ARMSTRIP $HOSTTOP/$lib.so.?.? || exit 3
+mkdir -pm 755 $HOSTTOP && cd $LIBTOP/lib || exit 3
+for lib in libreadline.so.?.? libhistory.so.?.?; do
+  cplib $lib
 done
 echo "Done."
