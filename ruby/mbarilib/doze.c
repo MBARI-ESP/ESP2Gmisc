@@ -78,7 +78,7 @@ rb_doze(argc, argv)
 }
 
 void
-Init_mbari()
+Init_mbarilib()
 {
     rb_define_global_function("doze", rb_doze, -1);
 }
