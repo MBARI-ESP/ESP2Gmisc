@@ -6,7 +6,7 @@
 #   	by Keiju ISHITSUKA(keiju@ishitsuka.com)
 #
 # --
-#
+#stores most recent exception -- brent@mbari.org 2/27/03
 #
 #
 require "e2mmap"
@@ -176,9 +176,8 @@ module IRB
 		  end
 		end
 	      end
-	    end
-	    IRB.conf[:back_trace]=messages  #store most recent backtrace
-	    IRB.conf[:exception]=$!
+	    end  #store most recent exception -- brent@mbari.org 2/27/03
+	    IRB.conf[:exception]=$! 
 	    print messages.join("\n"), "\n"
 	    unless lasts.empty?
 	      printf "... %d levels...\n", levels if levels > 0
