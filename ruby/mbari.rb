@@ -32,7 +32,7 @@ class Module
   
   private
   def rename_method newId,oldId
-    alias_method newId, oldId unless instance_methods.include? (newId.to_s)
+    alias_method newId, oldId unless instance_methods.include? newId.to_s
   end
 end
  
@@ -53,6 +53,10 @@ class Object
     eval "class << self; def intern; #{identifier.inspect}; end; end"
     identifier
   end
+  def deepClone
+    Marshal::load(Marshal::dump(self))
+  end
+  alias_method :reallyEqual?, :==  #override for recursive equality tests
 end
 
 class Class  #create an uninitialized class instance
@@ -70,12 +74,14 @@ class Struct
     self
   end
   
-  def === other
-  #built-in Struct#== appears to get confused when a singleton
+  def reallyEqual? other
+  #built-in Struct#== gets confused when a singleton
   #method is associated with the Struct.  This version does not.
-    return false unless type == other.type
-    for i in 0...length
-      return false unless self[i] == other[i]
+    unless equal? other.id
+      return false unless type == other.type
+      for i in 0...length
+        return false unless self[i].reallyEqual? other[i]
+      end
     end
     true
   end
