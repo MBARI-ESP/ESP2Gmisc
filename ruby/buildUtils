@@ -1,5 +1,6 @@
 #!/bin/bash
 #Build the extra ruby utilities MBARI needs for ESP
+#first parameter is typically "clean" or omitted
 toolDirs='mbarilib termios'
 [ -n "$1" ] && target=$1
 ruby=$2
@@ -7,19 +8,11 @@ ruby=$2
   ruby=`which ruby 2>/dev/null`
   [ "$?" = 0 -a -x $ruby ] || ruby=../ruby-1.6.8/miniruby
 }
-if [ -n "$target" ]; then
-  for d in $toolDirs; do
-    echo "Making $target in $d:"
-    (cd $d; make $target)
-  done
-fi
 for d in $toolDirs; do
   echo "Making $d:"
   cd $d
-  if [ ! -r Makefile ]; then
-    $ruby extconf.rb || exit 1
-  fi
-  make
+  $ruby extconf.rb || exit 1
+  make $target all || exit 1
   cd ..
 done
 
