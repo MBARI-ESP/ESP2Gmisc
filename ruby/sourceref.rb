@@ -1,4 +1,5 @@
-##############  sourceref.rb   2/13/03  brent@mbari.org  ###################
+##################  sourceref.rb -- brent@mbari.org  #####################
+# $Header$
 #
 #  The SourceRef class relies on a patched version of ruby/eval.c
 #  to provide access to the source file and line # where every Method
@@ -10,8 +11,8 @@
 #    edit source code
 #    reload source code
 #
-#  This file also adds methods to Object and Module to list, view, and
-#  edit methods directly as a convenience.
+#  This file also adds methods to Object and Module to list, view, 
+#  edit, and reload methods and modules as a convenience.
 #
 #  Examples:
 #     SourceRef.instance_method (:list).source  ==> ./sourceref.rb:47
@@ -38,6 +39,11 @@ class SourceRef   #combines source_file_name and line number
   def to_s
     return file unless line > 0
     file+':'+line.to_s
+  end
+  alias_method :inspect, :to_s
+  
+  def to_srcRef
+    self
   end
   
   def list (lineCount=16, lineOffset=0)
@@ -89,6 +95,25 @@ class SourceRef   #combines source_file_name and line number
   end
   
 
+  def SourceRef.from_back_trace (trace, level=0)
+  # return sourceref at level in backtace
+  #   if level is a :symbol, search for first method with that name in trace
+    if level.kind_of? Symbol
+      symbol = level
+      level = 0
+      for msg in trace
+        if inPart = msg.split(':',4)[2]
+          name = inPart.split('in\s*', 2)[1][1...-1]
+          break if symbol == name.intern
+        end
+        level += 1
+      end
+      # level is now always an index into trace 
+    end
+    trace[level].split[1].split(':',3)[0..1].join(':').to_srcRef
+  end
+
+
   module Code #for objects supporting source_file_name & source_line
 
     def source
@@ -101,11 +126,39 @@ class SourceRef   #combines source_file_name and line number
 
   end #module SourceRef::Code
 
+  
+  module CommandBundle   #add convenient commands for viewing source code
+
+    Code::OPS.each {|m|
+      define_method (m) { |*args|
+        src = args.length==0 ? 0 : args.shift
+        if src.kind_of?(Module)
+          src.sources.each {|srcRef| srcRef.method(m).call (*args)}
+        else
+          if src.kind_of?(Method) || src.kind_of?(Proc)
+            src = src.source
+          elsif src.kind_of?(Integer) || src.kind_of?(Symbol) 
+            #assume parameter is a backtrace level or method name
+            #Rely on modified irb.rb to save last back_trace in IRB.conf!
+            src = SourceRef.from_back_trace(IRB.conf[:back_trace], src)
+          else
+            src = src.to_srcRef      
+          end
+          src.method(m).call (*args)
+        end
+      }
+    }
+
+  end  
+
 end #class SourceRef
+
 
 #mix source code manipulation utilites into the appropriate classes
 class Proc; include SourceRef::Code; end
 class Method; include SourceRef::Code; end
+class Object; include SourceRef::CommandBundle; end
+
   
 class Module
 
@@ -156,12 +209,12 @@ class Module
   
   def edit (*args)
   # start editor sessions on all files that define receiver's methods
-    sources(*args).each{|srcFile| srcFile.edit}
+    sources(*args).each{|srcFile| srcFile.edit (*args)}
   end
 
   def view (*args)
   # start read-only editor sessions on files containing receiver's methods
-    sources(*args).each{|srcFile| srcFile.view}
+    sources(*args).each{|srcFile| srcFile.view (*args)}
   end
   
   def list (*args)
@@ -173,14 +226,13 @@ class Module
 
 end
 
-
 class String
   def to_srcRef
   # parse a source reference from string of form fn:line#
     strip!
-    a = split(sep=':')
+    a = split(':')
     return SourceRef.new (self, 0) if a.length < 2
-    SourceRef.new (a[0..-2].join(sep), a[-1].to_i)
+    SourceRef.new (a[0..-2].join(':'), a[-1].to_i)
   end
 end
 
@@ -196,22 +248,3 @@ class Hash
   
 end
        
-
-module Kernel   #add convenient commands for viewing source code
-
-  SourceRef::Code::OPS.each {|m|
-    define_method (m) { |src, *args|      
-      if src.kind_of?(Module)
-        src.sources.each {|srcRef| srcRef.method(m).call (*args)}
-      else 
-        if src.kind_of?(Method) || src.kind_of?(Proc)
-          src = src.source
-        else
-          src = src.to_srcRef if src.respond_to? :to_srcRef       
-        end
-        src.method(m).call (*args)
-      end
-    }
-  }
-      
-end  
