@@ -41,6 +41,32 @@
 ############################################################################
 
 
+class Symbol
+  def intern  #just for mathematical completeness!
+    self
+  end
+end
+
+class Hash
+  def join (sep = " => ")
+  # most useful for displaying hashes with puts hsh.join
+    strAry = []
+    each {|key,value| strAry << key.inspect+sep+value.to_s}
+    strAry
+  end
+end
+
+class String
+  def to_srcRef
+  # parse a source reference from string of form fn:line#
+    strip!
+    a = split(':')
+    return SourceRef.new (self, 0) if a.length < 2
+    SourceRef.new (a[0..-2].join(':'), a[-1].to_i)
+  end
+end
+
+      
 class SourceRef   #combines source_file_name and line number
 
   def initialize (file_name, line=0)
@@ -169,7 +195,7 @@ class SourceRef   #combines source_file_name and line number
           if src.respond_to? :to_srcRef
             src.to_srcRef.method(m).call (*args)
           else
-            print "No source file corresponds to ",src.type,':',src.inspect, "\n"
+            print "No source file corresponds to ",src.type,':',src.inspect,"\n"
           end
         end
       }
@@ -263,32 +289,3 @@ class Module
   end
 
 end
-
-class String
-  def to_srcRef
-  # parse a source reference from string of form fn:line#
-    strip!
-    a = split(':')
-    return SourceRef.new (self, 0) if a.length < 2
-    SourceRef.new (a[0..-2].join(':'), a[-1].to_i)
-  end
-end
-
-class Symbol
-  def intern  #just for mathematical completeness!
-    self
-  end
-end
-
-
-class Hash
-
-  def join (sep = " => ")
-  # most useful for displaying hashes with puts hsh.join
-    strAry = []
-    each {|key,value| strAry << key.inspect+sep+value.to_s}
-    strAry
-  end
-  
-end
-       
