@@ -42,18 +42,56 @@
 ############################################################################
 
       
+class String
+  def to_srcRef
+  # parse a source reference from string of form fn:line#
+    strip!
+    a = split(':')
+    return SourceRef.new (self, 0) if a.length < 2
+    sym=nil
+    if a.length > 2 and a[-1][0,3] == 'in '
+      s=a.pop
+      s=s[4,s.length-5]
+      s="" unless s
+      sym=s.intern
+    end
+    SourceRef.new (a[0..-2].join(':'), a[-1].to_i, sym)
+  end
+end
+
+class Exception
+  def to_srcRef (level=0)
+  # default given any exception the best guess as to its location
+    SourceRef.from_back_trace(backtrace, level)
+  end
+  def rootCause
+  # define as a NOP so subclasses can override
+    self
+  end
+end
+
+class SyntaxError < ScriptError
+  # Decode the Source Ref from a compiler error message
+  def to_srcRef (level=nil)
+    return super level if level
+    to_s.split("\s",2)[0].to_srcRef
+  end
+end
+
+
 class SourceRef   #combines source file name and line number
 
-  def initialize (file_name, line=0)
+  def initialize (file_name, line=0, symbol=nil)
     @file = file_name
     @line = line
+    @symbol = symbol
   end
-
-  attr_reader :file, :line
+  attr_reader :file, :line, :symbol
   
   def to_s
     return file unless line > 0
-    file+':'+line.to_s
+    return file+':'+line.to_s unless symbol
+    file+':'+line.to_s+':in `'+symbol.to_s+"'"
   end
   alias_method :inspect, :to_s
   
@@ -144,10 +182,8 @@ class SourceRef   #combines source file name and line number
   # return first element in trace containing symbol
   # returns nil if no such stack level found
     for msg in trace
-      if inPart = msg.split(':',4)[2]
-        name = inPart.split('in\s*', 2)[1][1...-1]
-        return msg if symbol == name.intern
-      end
+      src = msg.to_srcRef
+      return src if src.symbol == symbol
     end
     return nil
   end
@@ -155,12 +191,9 @@ class SourceRef   #combines source file name and line number
   def self.from_back_trace (trace, level=0)
   # return sourceref at level in backtace
   #  or return level if no such level found
-    traceLvl=level.kind_of?(Symbol) ?
-                find_in_back_trace (trace, level) : trace[level]
-    return nil if traceLvl.nil?
-    possibleIRBprefix, traceLvl = traceLvl.split(' ', 3)
-    traceLvl = possibleIRBprefix unless possibleIRBprefix == "from"
-    traceLvl.split(':',3)[0..1].join(':').to_srcRef
+    return find_in_back_trace (trace, level) if level.kind_of? Symbol    
+    return unless lvl = trace[level]
+    lvl.to_srcRef
   end
 
 
@@ -179,35 +212,38 @@ class SourceRef   #combines source file name and line number
   end #module SourceRef::Code
 
   
-  def self.lastErr
+  def self.lastErr (err=IRB.CurrentContext.exception)
   #the root cause of the last exception recorded by IRB
-    IRB.CurrentContext.exception.last.rootCause
+    err.last.rootCause
   end
   
+  def self.doMethod (m, *args)
+    src = args.length==0 ? SourceRef.lastErr : args.shift
+    #convert src to an appropriate SourceRef by whatever means possible
+    #Modified irb.rb saves last back_trace & exception in IRB.conf
+    case src
+      when Module
+        srcs=(src.sources).each {|srcRef| srcRef.send m, *args}
+        return srcs
+      when Integer, Symbol
+        #assume parameter is a backtrace level or method name
+        srcFromTrace = SourceRef.lastErr.to_srcRef src
+        src = srcFromTrace if srcFromTrace
+      when Thread
+        src = src.exception.last.rootCause
+    end
+    if src.respond_to? :to_srcRef
+      src.to_srcRef.send m, *args
+    else
+      print "No source file corresponds to ",src.type,':',src.inspect,"\n"
+    end
+  end
+
+
   module CommandBundle   #add convenient commands for viewing source code
     private
     
-    Code::OPS.each {|m|
-      define_method (m) { |*args|
-        src = args.length==0 ? SourceRef.lastErr : args.shift
-        #convert src to an appropriate SourceRef by whatever means possible
-        #Modified irb.rb saves last back_trace & exception in IRB.conf
-        if src.kind_of?(Module)
-          src.sources.each {|srcRef| srcRef.method(m).call (*args)}
-        else
-          if src.kind_of?(Integer) || src.kind_of?(Symbol) 
-            #assume parameter is a backtrace level or method name
-            srcFromTrace = SourceRef.lastErr.to_srcRef src
-            src = srcFromTrace unless srcFromTrace.nil?
-          end
-          if src.respond_to? :to_srcRef
-            src.to_srcRef.method(m).call (*args)
-          else
-            print "No source file corresponds to ",src.type,':',src.inspect,"\n"
-          end
-        end
-      }
-    }
+    Code::OPS.each{|m|define_method(m){|*args|SourceRef.doMethod(m,*args)}}
 
     def startRBBR  #start another Ruby Class Browser
       require 'rbbr'
@@ -224,36 +260,6 @@ end #class SourceRef
 class Proc; include SourceRef::Code; end
 class Method; include SourceRef::Code; end
 class Object; include SourceRef::CommandBundle; end
-
-
-class String
-  def to_srcRef
-  # parse a source reference from string of form fn:line#
-    strip!
-    a = split(':')
-    return SourceRef.new (self, 0) if a.length < 2
-    SourceRef.new (a[0..-2].join(':'), a[-1].to_i)
-  end
-end
-
-class Exception
-  def to_srcRef (level=0)
-  # default given any exception the best guess as to its location
-    SourceRef.from_back_trace(backtrace, level)
-  end
-  def rootCause
-  # define as a NOP so subclasses can override
-    self
-  end
-end
-
-class SyntaxError < ScriptError
-  # Decode the Source Ref from the compiler error message
-  def to_srcRef (level=nil)
-    return super level unless level.nil?
-    to_s.split("\s",2)[0].to_srcRef
-  end
-end
 
   
 class Module
