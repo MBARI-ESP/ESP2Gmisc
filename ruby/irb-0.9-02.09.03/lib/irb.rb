@@ -52,7 +52,7 @@ module IRB
   def IRB.start(ap_path = nil)
     $0 = File::basename(ap_path, ".rb") if ap_path
 
-    IRB.initialize(ap_path)
+    IRB.initialize(ap_path) unless IRB.conf[:PROMPT]
 
     if @CONF[:SCRIPT]
       irb = Irb.new(nil, @CONF[:SCRIPT])
@@ -304,12 +304,12 @@ module IRB
       p
     end
 
-    def output_value
-      if @context.inspect?
-        printf @context.return_format, @context.last_value.inspect
-      else
-        printf @context.return_format, @context.last_value
-      end
+    def output_value      
+      displayMethod = @context.inspect_mode
+      displayMethod = :inspect unless 
+                      (lastVal = @context.last_value).respond_to?(displayMethod)
+      printf @context.return_format, 
+	       @context.last_value.method(displayMethod).call
     end
 
     def inspect
