@@ -1,5 +1,5 @@
 # things to do before the start of any interactive ruby session
-#  2/27/03 brent@mbari.org
+#  2/28/03 brent@mbari.org
 require 'irb/completion'
 require 'sourceref'
 
@@ -7,15 +7,18 @@ prompt = IRB.conf[:PROMPT][:DEFAULT]
 prompt[:RETURN] = "=> %s\n"
 prompt[:AUTO_INDENT] = true
 
-#IRB.conf[:HOST] = "bufflehead"
+#IRB.conf[:HOST] = "bufflehead"  #remote host for source files via NFS
 
-if IRB.conf[:HOST]  #if target configured to use a remote host for source code
+if IRB.conf[:HOST]  #target configured to use a remote host for source code
   if ENV["DISPLAY"]
-    class <<SourceRef.remote = "ESParmImage"  #file path prefix on remote HOST
+    class <<SourceRef.remote = Object.new
       def system localCmd
         prefix="PATH=/usr/bin/X11:$PATH DISPLAY=#{ENV["DISPLAY"]} "
         suffix=localCmd[-1,1]=='&' ? localCmd[0...-1]+'"&' : localCmd+'"'
         Kernel.system ('rsh '+IRB.conf[:HOST]+' "'+prefix+suffix)
+      end
+      def remap path  #clever symlinks obviate the need for path remapping :-)
+        path
       end
     end
   end

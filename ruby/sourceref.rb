@@ -80,13 +80,21 @@ class SourceRef   #combines source file name and line number
     text
   end
       
-  @@remote = nil
   
-  def self.remote= path_prefix
+  class <<@@remoteStub = Object.new
+    def system localCmd
+      Kernel.system (localCmd)
+    end
+    def remap localPath
+      localPath
+    end
+  end
+  
+  def self.remote= remoteObject
 # configure SourceRef for remote editting
-# path_prefix is a string that will be prepended to all remote filenames AND
-# it must implement the method :system(string) similar to Kernel::system
-    @@remote = path_prefix
+# remoteObject must implement remap to convert pathnames and
+# must implement the method :system(string) similar to Kernel::system
+    @@remote = remoteObject ? remoteObject : @@remoteStub
   end
     
   def self.remote 
@@ -94,7 +102,7 @@ class SourceRef   #combines source file name and line number
   end
 
   def sys os_cmd
-    (@@remote ? @@remote:Kernel).system os_cmd
+    @@remote.system os_cmd
   end  
   private :sys
     
@@ -102,7 +110,7 @@ class SourceRef   #combines source file name and line number
   # start an editor session on file at line
   # If X-windows display available, try nedit client, then nedit directly
     if ENV["DISPLAY"]
-      path = File.expand_path (@@remote+file)
+      path = @@remote.remap(File.expand_path (file))
       neditArgs = "-lm Ruby #{options} '#{path}'"
       neditArgs = "-line #{line} " + neditArgs if line > 1
       neditArgs = "-read " + neditArgs if readonly
