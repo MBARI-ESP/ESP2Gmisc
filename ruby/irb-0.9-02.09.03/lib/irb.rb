@@ -82,12 +82,8 @@ module IRB
     throw :IRB_EXIT, ret
   end
 
-  def IRB.irb_abort(irb, exception = Abort)
-    if defined? Thread
-      irb.context.thread.raise exception, "abort then interrupt!!"
-    else
-      raise exception, "abort then interrupt!!"
-    end
+  def IRB.irb_abort(irb, exception = Abort.new ("abort then interrupt!!"))
+    irb.raise exception 
   end
 
 
@@ -107,6 +103,12 @@ module IRB
     attr_reader :context
     attr_accessor :scanner
 
+    if defined? Thread
+      def raise exception
+        @context.thread.raise exception
+      end
+    end
+  
     def log_exception    
       $! = RuntimeError.new("unknown exception raised") unless $!
       context.thread.exception=$! if context.thread.respond_to? :exception
