@@ -30,7 +30,6 @@ module IRB
   def IRB.init_config(ap_path)
     # class instance variables
     @TRACER_INITIALIZED = false
-
     # default configurations
     # (JP: デフォルトコンフィギュレーション)
     unless ap_path and @CONF[:AP_NAME]
@@ -48,7 +47,7 @@ module IRB
 
     @CONF[:MATH_MODE] = false
     @CONF[:USE_READLINE] = false unless defined?(ReadlineInputMethod)
-    @CONF[:INSPECT_MODE] = nil
+    @CONF[:INSPECT_MODE] = :to_s
     @CONF[:USE_TRACER] = false
     @CONF[:USE_LOADER] = false
     @CONF[:IGNORE_SIGINT] = true
@@ -133,9 +132,9 @@ module IRB
       when /^-K(.)/
 	$KCODE = $1
       when "--inspect"
-	@CONF[:INSPECT_MODE] = true
+	@CONF[:INSPECT_MODE] = :inspect
       when "--noinspect"
-	@CONF[:INSPECT_MODE] = false
+	@CONF[:INSPECT_MODE] = :to_s
       when "--readline"
 	@CONF[:USE_READLINE] = true
       when "--noreadline"
