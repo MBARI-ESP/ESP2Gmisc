@@ -1,0 +1,12 @@
+#!/bin/bash
+# configure readline-4.3 build for arm-linux -- 2/17/05 brent@mbari.org
+: ${CFLAGS:=-Os}
+: ${CXXFLAGS:=$CFLAGS}
+: ${ARMGCC:=/arm}
+: ${CC:=$ARMGCC/bin/gcc}
+export CC CFLAGS CXXFLAGS
+cd ${READLNVERS-readline-4.3}
+bash_cv_have_mbstate_t=yes bash_cv_func_sigsetjmp=present \
+ac_cv_func_strcoll_works=yes bash_cv_func_strcoll_broken=no \
+bash_cv_must_reinstall_sighandlers=no configure --host=arm-unknown-linux
+# use the command arminstall instead of make install!
