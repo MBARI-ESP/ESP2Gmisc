@@ -25,6 +25,18 @@
 #     Date.sources ==> returns the list of files containing Date methods
 #     Date.reload  ==> (re-)loads Date.sources
 #
+#   With a version of irb.rb modified to store the last backtrace,
+#   the following features are available at the irb prompt:
+#
+#     list|edit|view|reload  Module|Method|Integer|Symbol|String
+#
+#   Module operates on the list of files that comprise the Module
+#   Method operates on the text of the Method
+#   Integer n operates on the most recent backtrace at level n
+#   Symbol :sym searches backtrace for level corresponding to :sym
+#   String fn:nnn operates on file "fn" at line nnn
+#   no argument is equivalent to backtrace level 0
+#
 ############################################################################
 
 
