@@ -40,32 +40,6 @@
 #
 ############################################################################
 
-
-class Symbol
-  def intern  #just for mathematical completeness!
-    self
-  end
-end
-
-class Hash
-  def join (sep = " => ")
-  # most useful for displaying hashes with puts hsh.join
-    strAry = []
-    each {|key,value| strAry << key.inspect+sep+value.to_s}
-    strAry
-  end
-end
-
-class String
-  def to_srcRef
-  # parse a source reference from string of form fn:line#
-    strip!
-    a = split(':')
-    return SourceRef.new (self, 0) if a.length < 2
-    SourceRef.new (a[0..-2].join(':'), a[-1].to_i)
-  end
-end
-
       
 class SourceRef   #combines source file name and line number
 
@@ -155,7 +129,9 @@ class SourceRef   #combines source file name and line number
     traceLvl=level.kind_of?(Symbol) ?
                 SourceRef.find_in_back_trace (trace, level) : trace[level]
     return level if traceLvl==nil
-    traceLvl.split[1].split(':',3)[0..1].join(':').to_srcRef
+    possibleIRBprefix, traceLvl = traceLvl.split(' ', 3)
+    traceLvl = possibleIRBprefix unless possibleIRBprefix == "from"
+    traceLvl.split(':',3)[0..1].join(':').to_srcRef
   end
 
 
@@ -164,6 +140,7 @@ class SourceRef   #combines source file name and line number
     def source
       SourceRef.new (__file__, __line__)
     end
+    alias_method :to_srcRef, :source
     
     # can't use define_method because in ruby 1.6 self would be SourceRef::Code
     (OPS = [ :list, :edit, :view, :reload ]).each {|m|
@@ -181,18 +158,12 @@ class SourceRef   #combines source file name and line number
         src = args.length==0 ? IRB.conf[:exception] : args.shift
         #convert src to an appropriate SourceRef by whatever means possible
         #Modified irb.rb saves last back_trace & exception in IRB.conf
-        if src.kind_of?(Exception)
-          src = src.kind_of?(SyntaxError) ? 
-                  src.to_s.split("\s",2)[0].to_srcRef : 0
-        end          
         if src.kind_of?(Module)
           src.sources.each {|srcRef| srcRef.method(m).call (*args)}
         else
-          if src.kind_of?(Method) || src.kind_of?(Proc)
-            src = src.source
-          elsif src.kind_of?(Integer) || src.kind_of?(Symbol) 
+          if src.kind_of?(Integer) || src.kind_of?(Symbol) 
             #assume parameter is a backtrace level or method name
-            src = SourceRef.from_back_trace(IRB.conf[:back_trace], src)
+            src = SourceRef.from_back_trace(IRB.conf[:exception].backtrace, src)
           end
           if src.respond_to? :to_srcRef
             src.to_srcRef.method(m).call (*args)
@@ -218,6 +189,47 @@ end #class SourceRef
 class Proc; include SourceRef::Code; end
 class Method; include SourceRef::Code; end
 class Object; include SourceRef::CommandBundle; end
+
+
+class Symbol
+  def intern  #just for mathematical completeness!
+    self
+  end
+end
+
+class Hash
+  def join (sep = " => ")
+  # most useful for displaying hashes with puts hsh.join
+    strAry = []
+    each {|key,value| strAry << key.inspect+sep+value.to_s}
+    strAry
+  end
+end
+
+class String
+  def to_srcRef
+  # parse a source reference from string of form fn:line#
+    strip!
+    a = split(':')
+    return SourceRef.new (self, 0) if a.length < 2
+    SourceRef.new (a[0..-2].join(':'), a[-1].to_i)
+  end
+end
+
+class Exception
+  def to_srcRef (level=0)
+  # default given any exception the best guess as to its location
+    SourceRef.from_back_trace(backtrace, level)
+  end
+end
+
+class SyntaxError < ScriptError
+  # Decode the Source Ref from the compiler error message
+  def to_srcRef (level=nil)
+    return super.to_srcRef level if level
+    to_s.split("\s",2)[0].to_srcRef
+  end
+end
 
   
 class Module
