@@ -1,8 +1,10 @@
-#!/bin/sh
+#!/bin/bash
 # configure ruby 1.6.8 build for arm-linux -- 2/24/03 brent@mbari.org
+TARGETTOP=${1:-/usr/local}  #where ruby must be installed on the target system
 # ac_cv_func_getrlimit=no
 ac_cv_func_getpgrp_void=yes ac_cv_func_setpgrp_void=yes \
 CFLAGS=-O2 CXXFLAGS=-O2 CC=arm-linux-gcc \
 `dirname $0`/configure arm-unknown-linux --build=i686-pc-linux \
---prefix=`pwd`/arm #--enable-enable-shared
+--prefix=$TARGETTOP
+#--enable-enable-shared
 # use the command arminstall instead of make install!
