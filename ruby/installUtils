@@ -1,13 +1,17 @@
 #!/bin/bash
 #Install ruby and core utilities
+#to install for an arm host, force our ruby to load a different rbconfig.rb:
+#  RUBYLIB=~/armHost/usr/local/lib/ruby/1.6/arm-linux installUtils
+
 toolDirs='mbarilib termios'
-prefix=$1  #optionally installation root
+prefix=$1  #optional installation prefix
+shift  #pass extra options on to make
 
 echo "Installing ruby utilities:  $toolDirs"
 
 for d in $toolDirs; do
   echo "Installing $d:"
-  (cd $d; make install)
+  (cd $d; make install $@)
 done
 
 echo "Installing IRB and MBARI extensions..."
