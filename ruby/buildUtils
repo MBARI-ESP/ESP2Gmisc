@@ -3,6 +3,7 @@
 #first parameter is typically "clean" or omitted
 toolDirs='mbarilib termios'
 [ -n "$1" ] && target=$1
+top=$PWD
 ruby=$2
 [ -z "$ruby" ] && {
   ruby=`which ruby 2>/dev/null`
@@ -19,4 +20,4 @@ done
 ruby=$PWD
 cd $HOME
 [ -f .irbrc ] && mv .irbrc .irbrc.save
-cp $ruby/irbrc .irbrc
+cp $top/irbrc .irbrc
