@@ -1,10 +1,6 @@
 # things to do before the start of any interactive ruby session
 #  2/18/03 brent@mbari.org
 require 'irb/completion'
-require "~/ESP/gen2/software/ruby/sourceref.rb"
-
-if ENV["DISPLAY"]
-  require "rbbr.rb"
-  $RBBR=Thread.new {RBBR.main}
-  $RBBR.priority=Thread.current.priority+1
-end
+$: << "~/ESP/gen2/software/ruby"
+require 'sourceref'
+$RBBR=startRBBR if ENV["DISPLAY"]
