@@ -1,5 +1,5 @@
 # things to do before the start of any interactive ruby session
-#  3/5/03 brent@mbari.org
+#  7/9/04 brent@mbari.org
 require 'irb/completion'
 require 'sourceref'
 
@@ -23,6 +23,6 @@ if IRB.conf[:HOST]  #target configured to use a remote host for source code
     end
   end
 else  #we're running a workstation
-  #$:.unshift "~/ESP/gen2/software/ruby"
-  #$RBBR=startRBBR if ENV["DISPLAY"]
+  $:.unshift "~/ESP/gen2/software/ruby"
+#  $RBBR=startRBBR if ENV["DISPLAY"]
 end
