@@ -5,6 +5,7 @@
   $Author$
   $Date$
 
+  Copyright (C) 2003 MBARI (brent@mbari.org)
   Copyright (C) 2002 Ruby-GNOME2 Project
 
   Copyright (C) 2000-2002 Hiroshi Igarashi <iga@ruby-lang.org>
@@ -19,6 +20,7 @@ require 'rbbr/ui/gtk/windowutils'
 require 'rbbr/ui/gtk/stockbrowser'
 require 'rbbr/ui/gtk/aboutdialog'
 require 'rbbr/ui/gtk/libselectiondialog'
+require 'sourceref'
 
 module RBBR
 module UI
@@ -69,6 +71,10 @@ module GTK
       cal_fold = Proc.new{ @module_index.collapse_all }
       cal_update = Proc.new{ @module_index.update([]) }
       cal_filter = Proc.new{ not_implemented }
+      
+      cal_edit = Proc.new{ edit @displayedSource }
+      cal_view = Proc.new{ view @displayedSource }
+      
       cal_stockbrowser = Proc.new{
         stockbrowser = RBBR::UI::GTK::StockDialog.new(self)
         stockbrowser.run
@@ -91,8 +97,12 @@ module GTK
                          ["/_File/_Separator", "<Separator>"],
                          ["/_File/_Quit", "<StockItem>", "<control>Q", Gtk::Stock::QUIT, cal_quit],
                          ["/_Edit"],
+                         ["/_Edit/Source Code", "<StockItem>", "<control>O", Gtk::Stock::INDEX, cal_edit],
+                         ["/_Edit/_Separator", "<Separator>"],
                          ["/_Edit/_Copy", "<StockItem>", "<control>C", Gtk::Stock::COPY, cal_copy],
                          ["/_View"],
+                         ["/_View/Source Code", "<StockItem>", "<control>V", Gtk::Stock::JUSTIFY_FILL, cal_view],
+                         ["/_View/_Separator", "<Separator>"],
                          ["/_View/_Expand All", "<StockItem>", "<control>E", Gtk::Stock::GOTO_BOTTOM, cal_expand],
                          ["/_View/_Fold All", "<StockItem>", "<control>F", Gtk::Stock::GOTO_TOP, cal_fold],
                          ["/_View/Update Information", "<StockItem>", "<control>U", Gtk::Stock::REFRESH, cal_update],
@@ -104,6 +114,9 @@ module GTK
 
       ifp.get_widget("/Edit/Copy").sensitive = false
       ifp.get_widget("/View/Filter Setting...").sensitive = false
+      @viewSource = ifp.get_widget("/View/Source Code")
+      @editSource = ifp.get_widget("/Edit/Source Code")
+      update(nil)  #ghost out source display menu items 
 
       ifp.get_widget("<main>")
     end
@@ -147,6 +160,8 @@ module GTK
 
       # create document database
       database = Doc::MultiDatabase.new
+      sourcebase = database.find_instance_of RBBR::Doc::Source
+      sourcebase.add_observer(self) if sourcebase
 	
       # create module display
       module_display = ModuleDisplay.new(database)
@@ -173,6 +188,13 @@ module GTK
       end
     end
 
+    def update (displayed)
+    # passed SourceRef being displayed or nil if none
+      @displayedSource = displayed
+      @viewSource.sensitive = displayed
+      @editSource.sensitive = displayed
+    end
+    
     def quit
       Gtk.main_quit
     end
