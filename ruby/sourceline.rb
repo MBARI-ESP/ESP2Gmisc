@@ -24,7 +24,7 @@
 
 class SourceLine   #combines source_file_name and line number
 
-  def initialize (file_name, line)
+  def initialize (file_name, line=0)
     @file = file_name
     @line = line
   end
@@ -32,33 +32,41 @@ class SourceLine   #combines source_file_name and line number
   attr_reader :file, :line
   
   def to_s
+    return file unless line > 0
     file+':'+line.to_s
   end
   
   def list (lineCount=16, lineOffset=0)
   # return the next lineCount lines of source text
   # or nil if source line is invalid
-    f = File.new (file)
-    text = ""
+    text = ""; lineno=0
     begin
-      2.upto(line+lineOffset) { f.readline }
-      1.upto(lineCount) { text += f.readline }
-    rescue EOFError
+      File.open (file) {|f|
+        2.upto(line+lineOffset) { f.readline; lineno+=1 }
+        1.upto(lineCount) { text += f.readline; lineno+=1 }
+      }
+    rescue EOFError  # don't sweat EOF unless its before target line #
+      if lineno < line
+        $stderr.puts "--> Truncated ruby source file: #{self}"
+      end
+    rescue
+      $stderr.puts "--> Missing ruby source: #{self}"
     end
     text
   end
   
   def edit (options=nil, readonly=false)
-  # start an editor session on @file at @line
+  # start an editor session on file at line
   # If X-windows display available, try nedit client, then nedit directly
     if ENV["DISPLAY"]
-      neditArgs = "-lm Ruby -line #{@line} #{options} '#{@file}'"
+      neditArgs = "-lm Ruby #{options} '#{file}'"
+      neditArgs = "-line #{line} " + neditArgs if line > 0
       neditArgs = "-read " + neditArgs if readonly
       return self if system ("nclient -noask -svrname ruby #{neditArgs}") || 
                      system ("nedit #{neditArgs}")
     end
   # if all else fails, fall back on the venerable 'vi'
-    system ("vi #{"-R " if readonly} + #{@file}")
+    system ("vi #{"-R " if readonly} + #{file}")
     self
   end
   
@@ -79,15 +87,17 @@ class Object  #is the nearest common ancestor of Proc and Method :-(
   def list (lineCount=16, lineOffset=0)
   # return the first lineCount lines of receiver's source text
   # or nil if no source available  
-    source.list
+    source.list (lineCount, lineOffset)
   end
   
   def edit
   # start an editor session on the receiver's source
+    source.edit
   end
   
   def view
   # start a read-only editor session on the receiver's source
+    source.view
   end
 
 end
@@ -96,19 +106,42 @@ end
 class Module
 
   def source  
-  # return hash of SourceRefs of all self.methods
+  # return hash on receiver's methods to corresponding SourceLines
+  # exclude methods for which no ruby source is available
+    h = {};
+    singleton_methods.each {|m|
+      m = m.intern
+      src = method(m).source
+      h[m] = src if src.line > 0 && src.file != "(eval)"
+    }
+    instance_methods.each {|m|
+      m = m.intern
+      src = instance_method(m).source
+      h[m] = src if src.line > 0 && src.file != "(eval)"
+    }
+    h
   end
     
-  def sources  
-  # return array of unique source file names for all self.methods
+  def sources
+  # return array of unique source file names for all receiver's methods
+    (source.values.collect{|s| s.file}.uniq).collect{|fn| SourceLine.new(fn)}    
   end
     
   def edit
-  # start editor sessions on all files containing self.methods
+  # start editor sessions on all files that define receiver's methods
+    sources.each{|srcFile| srcFile.edit}
   end
 
   def view
-  # start read-only editor sessions on all files containing self.methods
+  # start read-only editor sessions on files containing receiver's methods
+    sources.each{|srcFile| srcFile.view}
   end
   
+  def list (lineCount=16, lineOffset=0)
+  # return first few lines of all files containing self.methods
+    result=""
+    sources.each{|srcFile| result+=srcFile.list (lineCount, lineOffset)}
+    result
+  end
+
 end       
