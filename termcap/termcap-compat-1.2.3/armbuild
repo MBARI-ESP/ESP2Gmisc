@@ -1,3 +1,0 @@
-#!/bin/bash
-# build termcap 1.2.3 build for arm-linux -- 2/26/03 brent@mbari.org
-CFLAGS=-O2 CC=arm-linux-gcc make
