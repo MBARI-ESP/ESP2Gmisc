@@ -1,0 +1,15 @@
+#!/bin/bash
+#Install ruby and core utilities
+toolDirs='mbarilib termios'
+
+echo "Installing ruby utilities:  $toolDirs"
+
+for d in $toolDirs; do
+  echo "Installing $d:"
+  (cd $d; make install)
+done
+
+echo "Installing IRB and MBARI extensions..."
+(cd irb-0.9-02.09.03; ./instirb.rb $prefix)
+(cd irbtools-0.9; ./inst-irbtools.rb $prefix)
+./inst-mbari.rb $prefix

@@ -1,18 +1,5 @@
 #!/bin/bash
 #Install ruby and core utilities
-prefix=$1
-rubyDir=$prefix/usr/local/lib/ruby
-siteRuby=$rubyDir/site_ruby/1.6
-toolDirs='ruby-1.6.8 mbarilib termios'
-
-echo "Installing $toolDirs in $rubyDir"
-
-for d in $toolDirs; do
-  echo "Installing $d:"
-  cd $d; make install; cd ..
-done
-
-echo "Installing IRB and MBARI extensions..."
-(cd irb-0.9-02.09.03; ./instirb.rb $prefix)
-(cd irbtools-0.9; ./inst-irbtools.rb $prefix)
-./inst-mbari.rb $prefix
+echo "Installing ruby"
+cd ruby-1.6.8
+exec make install
