@@ -7033,8 +7033,8 @@ Init_Proc()
     rb_define_method(rb_cProc, "[]", proc_call, -2);
     rb_define_method(rb_cProc, "==", proc_eq, 1);
     rb_define_method(rb_cProc, "to_s", proc_to_s, 0);
-    rb_define_method(rb_cProc, "source_file_name", proc_source_file_name, 0); /* BAR */
-    rb_define_method(rb_cProc, "source_line", proc_source_line, 0); /* BAR */    
+    rb_define_method(rb_cProc, "__file__", proc_source_file_name, 0); /* BAR */
+    rb_define_method(rb_cProc, "__line__", proc_source_line, 0); /* BAR */    
     rb_define_global_function("proc", rb_f_lambda, 0);
     rb_define_global_function("lambda", rb_f_lambda, 0);
     rb_define_global_function("binding", rb_f_binding, 0);
@@ -7052,8 +7052,8 @@ Init_Proc()
     rb_define_method(rb_cMethod, "to_s", method_inspect, 0);
     rb_define_method(rb_cMethod, "to_proc", method_proc, 0);
     rb_define_method(rb_cMethod, "unbind", method_unbind, 0);
-    rb_define_method(rb_cMethod, "source_file_name", method_source_file_name, 0); /* NK */
-    rb_define_method(rb_cMethod, "source_line", method_source_line, 0); /* NK */    
+    rb_define_method(rb_cMethod, "__file__", method_source_file_name, 0); /* NK */
+    rb_define_method(rb_cMethod, "__line__", method_source_line, 0); /* NK */    
     rb_define_method(rb_mKernel, "method", rb_obj_method, 1);
 
     rb_cUnboundMethod = rb_define_class("UnboundMethod", rb_cMethod);

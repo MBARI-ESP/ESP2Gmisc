@@ -67,7 +67,7 @@ class String
 end
 
       
-class SourceRef   #combines source_file_name and line number
+class SourceRef   #combines source file name and line number
 
   def initialize (file_name, line=0)
     @file = file_name
@@ -159,10 +159,10 @@ class SourceRef   #combines source_file_name and line number
   end
 
 
-  module Code #for objects supporting source_file_name & source_line
+  module Code #for objects supporting __file__ & __line__
 
     def source
-      SourceRef.new (source_file_name, source_line)
+      SourceRef.new (__file__, __line__)
     end
     
     # can't use define_method because in ruby 1.6 self would be SourceRef::Code
