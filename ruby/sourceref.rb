@@ -73,8 +73,10 @@ class SourceRef   #combines source_file_name and line number
       neditArgs = "-lm Ruby #{options} '#{file}'"
       neditArgs = "-line #{line} " + neditArgs if line > 0
       neditArgs = "-read " + neditArgs if readonly
-      return self if system ("nclient -noask -svrname ruby #{neditArgs}") || 
-                     system ("nedit #{neditArgs}")
+      # nclient will normally be a symlink to /usr/bin/X11/nc
+      return self if 
+        system ("nclient -noask -svrname ruby #{neditArgs} 2>/dev/null") || 
+        system ("nedit #{neditArgs} &")
     end
   # if all else fails, fall back on the venerable 'vi'
     system ("vi #{"-R " if readonly} + #{file}")
