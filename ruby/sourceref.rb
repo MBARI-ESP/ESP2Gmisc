@@ -29,12 +29,13 @@
 #   With a version of irb.rb modified to store the last backtrace,
 #   the following features are available at the irb prompt:
 #
-#     list|edit|view|reload  Module|Method|Integer|Symbol|String
+#     list|edit|view|reload  Module|Method|Integer|Symbol|Exception|String
 #
 #   Module operates on the list of files that comprise the Module
 #   Method operates on the text of the Method
 #   Integer n operates on the most recent backtrace at level n
 #   Symbol :sym searches backtrace for level corresponding to :sym
+#   Exception operates on the source where the exception occured
 #   String fn:nnn operates on file "fn" at line nnn
 #   no argument is equivalent to backtrace level 0
 #
@@ -84,15 +85,16 @@ class SourceRef   #combines source file name and line number
   # If X-windows display available, try nedit client, then nedit directly
     if ENV["DISPLAY"]
       neditArgs = "-lm Ruby #{options} '#{file}'"
-      neditArgs = "-line #{line} " + neditArgs if line > 0
+      neditArgs = "-line #{line} " + neditArgs if line > 1
       neditArgs = "-read " + neditArgs if readonly
       # nclient will normally be a symlink to /usr/bin/X11/nc
       return self if 
         system ("nclient -noask -svrname ruby #{neditArgs} 2>/dev/null") || 
         system ("nedit #{neditArgs} &")
     end
-  # if all else fails, fall back on the venerable 'vi'
-    system ("vi #{"-R " if readonly} + #{file}")
+  # if all else fails, fall back on the venerable 'vim' or busybox 'vi'
+    system ("vi #{"-R " if readonly}'#{file}'") unless 
+      system ("vim #{"-R " if readonly}#{"+"+line.to_s+" " if line>1}'#{file}'")
     self
   end
   
@@ -128,7 +130,7 @@ class SourceRef   #combines source file name and line number
   #  or return level if no such level found
     traceLvl=level.kind_of?(Symbol) ?
                 SourceRef.find_in_back_trace (trace, level) : trace[level]
-    return level if traceLvl==nil
+    return nil if traceLvl.nil?
     possibleIRBprefix, traceLvl = traceLvl.split(' ', 3)
     traceLvl = possibleIRBprefix unless possibleIRBprefix == "from"
     traceLvl.split(':',3)[0..1].join(':').to_srcRef
@@ -163,7 +165,8 @@ class SourceRef   #combines source file name and line number
         else
           if src.kind_of?(Integer) || src.kind_of?(Symbol) 
             #assume parameter is a backtrace level or method name
-            src = SourceRef.from_back_trace(IRB.conf[:exception].backtrace, src)
+            srcFromTrace = IRB.conf[:exception].to_srcRef src
+            src = srcFromTrace unless srcFromTrace.nil?
           end
           if src.respond_to? :to_srcRef
             src.to_srcRef.method(m).call (*args)
@@ -226,7 +229,7 @@ end
 class SyntaxError < ScriptError
   # Decode the Source Ref from the compiler error message
   def to_srcRef (level=nil)
-    return super.to_srcRef level if level
+    return super.to_srcRef level if level.nil?
     to_s.split("\s",2)[0].to_srcRef
   end
 end
