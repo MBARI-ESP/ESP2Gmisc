@@ -1,0 +1,54 @@
+#!/bin/sh
+# install ruby 1.6.8 build for arm-linux -- 2/25/03 brent@mbari.org
+
+# remove all fields $1 from list delminited by $2 starting with $3
+# send the filtered version of $2 to stdout
+remove ()
+{
+  toDelete=$1
+  IFS=$2
+  shift 2
+  [ "$@" ] && {
+    set $@
+    unset separator
+    for field; do
+      if [ "$field" != "$toDelete" ]; then
+        echo -n "$separator$field"
+        separator=$IFS
+      fi
+    done
+  }
+}
+
+
+export DESTDIR=${3:-/tmp}
+: ${ARMGCC:=/arm}
+: ${ARMSTRIP:=$ARMGCC/bin/strip}
+: ${TARGETTOP:=${1-/opt}}
+: ${HOSTTOP:=${2-$HOME/armHost$TARGETTOP}}
+DESTTOP=$DESTDIR$ARMGCC
+echo "Installing in $HOSTTOP"
+echo "  for execution at $TARGETTOP on the ARM target"
+rm -rf $DESTTOP
+PATH=`remove . : $PATH`  #remove current directory from PATH
+make -C ${RUBYVERS-ruby-1.6.8} all install || exit 1
+cd $DESTTOP || exit 2
+echo "Deleting docs and intermediate files"
+rm -rf `find -name man`
+rm -f `find -name "*.[aoh]"` #remove all compiler & linker intermediate files
+objs="bin/ruby `find -name "*.so*"`"
+chmod +w $objs || exit 6
+$ARMSTRIP $objs || exit 7
+chmod -w $objs || exit 8
+rbcfg=`find -name "rbconfig.rb"` || {
+  echo "Cannot find rbconfig.rb under $DESTTOP"
+  exit 1
+}
+echo "Changing prefix from $ARMGCC to $TARGETTOP in $rbcfg"
+sed -e "s:+ \"$ARMGCC\":+ \"$TARGETTOP\":" $rbcfg >$rbcfg.patched || {
+  echo "Failed to patch $rbcfg"
+  exit 2
+}
+mv -f $rbcfg.patched $rbcfg && mkdir -p $HOSTTOP &&
+tar c * | tar xC $HOSTTOP
+

@@ -1,0 +1,13 @@
+#!/bin/bash
+# configure ruby 1.6.8 build for arm-linux -- 2/14/05 brent@mbari.org
+# ac_cv_func_getrlimit=no
+: ${CFLAGS:=-O2}
+: ${CXXFLAGS:=$CFLAGS}
+: ${ARMGCC:=/arm}
+: ${CC:=$ARMGCC/bin/gcc}
+export CC CFLAGS CXXFLAGS
+cd ${RUBYVERS-ruby-1.6.8}
+ac_cv_func_getpgrp_void=yes ac_cv_func_setpgrp_void=yes \
+configure --target=arm-unknown-linux --prefix=$ARMGCC $@
+#--enable-enable-shared
+# use the command arminstall instead of make install!
