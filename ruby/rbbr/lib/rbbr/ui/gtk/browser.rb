@@ -29,42 +29,40 @@ module GTK
   class Browser < Gtk::Window
     include WindowUtils
 
+    def loadFile (filename, loadOp=:load)  #...or :require
+      begin
+        Kernel.method(loadOp) [filename]
+      rescue ScriptError => scriptErr
+        show_error_message("Ruby Browser", scriptErr)
+        @docviewer.update (ScriptError, scriptErr)
+        update (scriptErr.to_srcRef)
+      ensure
+        @module_nesting_tree.update
+      end
+    end
+    private :loadFile
+    
+    
     def create_menubar
+    
       cal_req = Proc.new{ 
         libselection = RBBR::UI::GTK::LibrarySelectionDialog.new(self)
 
         if libselection.run == Gtk::Dialog::RESPONSE_OK
           feature = libselection.result
-          begin
-            unless feature.nil?
-              Kernel.require(feature) 
-              @module_nesting_tree.update
-            end
-          rescue LoadError
-            show_error_message("Ruby Browser", $!)
-          end
+          loadFile (feature, :require) unless feature.nil?
         end
         libselection.destroy
       }
-
       cal_load = Proc.new{
         fs = Gtk::FileSelection.new(title)
         fs.set_transient_for(self)
-        filename = nil
         fs.show_all
         fs.run
-        filename = fs.filename
-        begin
-          if FileTest.file?(filename)
-            load(filename)
-            @module_nesting_tree.update
-          end
-        rescue LoadError, SyntaxError
-          show_error_message("Ruby Browser", $!)
-        end
+        filename = fs.filename        
+        loadFile filename if FileTest.file? filename
         fs.destroy
       }
-
       cal_quit = Proc.new{ Gtk.main_quit }
       cal_copy = Proc.new{ not_implemented }
       cal_expand = Proc.new{ @module_index.expand_all }
@@ -74,7 +72,7 @@ module GTK
       
       cal_edit = Proc.new{ edit @displayedSource }
       cal_view = Proc.new{ view @displayedSource }
-      cal_reload = Proc.new{ reload @displayedSource; cal_update.call }
+      cal_reload = Proc.new{ loadFile @displayedSource.file }
       
       cal_stockbrowser = Proc.new{
         stockbrowser = RBBR::UI::GTK::StockDialog.new(self)
@@ -167,8 +165,9 @@ module GTK
       sourcebase = database.find_instance_of RBBR::Doc::Source
       sourcebase.add_observer(self) if sourcebase
 	
-      # create module display
-      module_display = ModuleDisplay.new(database)
+      # create module display while keeping a link to the base document viewer
+      @docviewer = SimpleDocViewer.new(database)
+      module_display = ModuleDisplay.new(database, @docviewer)
       @module_index.add_observer(module_display)
       main_paned.add2(module_display)
 
