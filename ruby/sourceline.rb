@@ -38,7 +38,7 @@ class SourceLine   #combines source_file_name and line number
   
   def list (lineCount=16, lineOffset=0)
   # return the next lineCount lines of source text
-  # or nil if source line is invalid
+  # or "" if no source is available
     text = ""; lineno=0
     begin
       File.open (file) {|f|
@@ -71,8 +71,17 @@ class SourceLine   #combines source_file_name and line number
   end
   
   def view (options=nil)
-  # start a read-only editor session on @file at @line
+  # start a read-only editor session on file at line
     edit (options, true)
+  end
+  
+  def reload
+  # load file referenced by receiver
+    begin
+      load file
+    rescue LoadError
+      $stderr.puts "--> Missing ruby source fle: #{file}" 
+    end
   end
   
 end #class SourceRef
@@ -86,7 +95,6 @@ class Object  #is the nearest common ancestor of Proc and Method :-(
   
   def list (lineCount=16, lineOffset=0)
   # return the first lineCount lines of receiver's source text
-  # or nil if no source available  
     source.list (lineCount, lineOffset)
   end
   
@@ -100,6 +108,11 @@ class Object  #is the nearest common ancestor of Proc and Method :-(
     source.view
   end
 
+  def reload
+  # load entire file containing receiver's source text
+    source.reload
+  end
+  
 end
   
   
@@ -127,6 +140,11 @@ class Module
     (source.values.collect{|s| s.file}.uniq).collect{|fn| SourceLine.new(fn)}    
   end
     
+  def reload
+  # load all source files that define receiver's methods
+    sources.each {|s| s.reload}
+  end
+  
   def edit
   # start editor sessions on all files that define receiver's methods
     sources.each{|srcFile| srcFile.edit}
