@@ -1,5 +1,5 @@
 # things to do before the start of any interactive ruby session
-#  3/4/03 brent@mbari.org
+#  3/5/03 brent@mbari.org
 require 'irb/completion'
 require 'sourceref'
 
@@ -14,7 +14,7 @@ if IRB.conf[:HOST]  #target configured to use a remote host for source code
     class <<SourceRef.remote = Object.new
       def system localCmd
         prefix="PATH=/usr/bin/X11:$PATH DISPLAY=#{ENV["DISPLAY"]} "
-        suffix=localCmd[-1,1]=='&' ? localCmd[0...-1]+'"&' : localCmd+'"'
+        suffix=localCmd[-1]==?& ? localCmd[0...-1]+'"&' : localCmd+'"'
         Kernel.system ('rsh '+IRB.conf[:HOST]+' "'+prefix+suffix)
       end
       def remap path  #clever symlinks obviate the need for path remapping :-)
