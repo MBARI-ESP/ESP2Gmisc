@@ -69,6 +69,15 @@ class Struct
     hash.each {|fieldName, value| self[fieldName]=value }
     self
   end
-
+  
+  def === other
+  #built-in Struct#== appears to get confused when a singleton
+  #method is associated with the Struct.  This version does not.
+    return false unless type == other.type
+    for i in 0...length
+      return false unless self[i] == other[i]
+    end
+    true
+  end
 end
 
