@@ -6,7 +6,7 @@
 #   	by Keiju ISHITSUKA(keiju@ishitsuka.com)
 #
 # --
-#stores most recent exception -- brent@mbari.org 2/27/03
+#stores most recent exception -- brent@mbari.org 7/15/03
 #
 #
 require "e2mmap"
@@ -109,8 +109,7 @@ module IRB
 
     def log_exception    
       $! = RuntimeError.new("unknown exception raised") unless $!
-      context.exception=[] unless context.exception.respond_to? :<<
-      context.exception << $! 
+      context.thread.exception=$! if context.thread.respond_to? :exception
       print $!.type, ": ", $!, "\n" 
     end
     

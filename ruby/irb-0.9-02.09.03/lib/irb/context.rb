@@ -115,7 +115,6 @@ module IRB
     attr_reader :debug_level
 
     attr_accessor :back_trace_limit
-    attr_accessor :exception
 
     alias use_readline? use_readline
     alias rc? rc
