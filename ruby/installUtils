@@ -1,6 +1,7 @@
 #!/bin/bash
 #Install ruby and core utilities
 toolDirs='mbarilib termios'
+prefix=$1  #optionally installation root
 
 echo "Installing ruby utilities:  $toolDirs"
 
