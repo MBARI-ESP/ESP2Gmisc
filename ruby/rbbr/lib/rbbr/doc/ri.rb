@@ -40,14 +40,13 @@ module RBBR
       
       def lookup_method( method )
 	begin
-    	  result = `ri "#{method}"`
+          escaped = method.gsub ("`", "\\\\`")
+    	  result = `ri "#{escaped}"`
 	  if /(?:Cannot|Couldn't) find/ === result
-            kname, mname = method.split('#',2)
+            kname, mname = escaped.split('#',2)
             #ri catalogs Object(Kernel) mixins in the Object methods
-            if mname && kname == "Kernel"
-              result = `ri "Object##{mname}"`
-              raise LookupError if /(?:Cannot|Couldn't) find/ === result
-            end
+            result = `ri "Object##{mname}"` if mname && kname == "Kernel"
+            raise LookupError if /(?:Cannot|Couldn't) find/ === result
 	  end
 	  result
 	rescue
