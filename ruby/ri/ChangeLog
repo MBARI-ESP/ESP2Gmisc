@@ -1,0 +1,92 @@
+2002-05-01  Dave Thomas  <Dave@Thomases.com>
+
+	* ri/ri.rb: Fix bug where class names were output with
+	underscores. Also tidy up some typos. Patch from Derek Peschel.
+
+2001-08-18  Dave Thomas  <Dave@Thomases.com>
+
+	* ri/ri.rb: Fix bug which failed to match plain 'blksize' because
+	it couldn't parse out the classname part (File::Stat)
+
+2001-08-15  Dave Thomas  <Dave@Thomases.com>
+
+	* ri/ri.rb: Re-organize to allow can_handle? to be implemented
+	without generating output. Add caching for loaded description files.
+
+2001-08-13  Dave Thomas  <Dave@Thomases.com>
+
+	* install.rb: Add support for DESTDIR (patch from Christian
+	Lademann)
+
+	* ri/ri.rb (defined?): New method to fid out if a particular
+	name exists
+	* post_process: convert --@ to -@ in a method name. (I can't to it
+	in the text - there are too many other occurances of --).
+
+2001-03-25  Dave Thomas  <Dave@Thomases.com>
+
+	* op/Tagged.rb: Fix problem if the subclass array is empty
+
+2001-03-13  Dave Thomas  <Dave@Thomases.com>
+
+	* post_process.rb: (and others) Make subclass list an array
+
+2001-03-10  Dave Thomas  <Dave@Thomases.com>
+
+	* ri_cmd.rb: You can now specify the name of a .rb file for the
+	output format routine. Any argument to -f that contains a '/' or
+	that ends in .rb will be loaded directly.
+
+	* ri/ri.rb: Added class and method names to the call to the output 
+	formatter for method names.
+
+2001-03-06  Dave Thomas  <Dave@Thomases.com>
+
+	* ri.rb: Add --synopsis switch
+
+	* ri.rb: Split off output methods, and add -f switch to allow
+	differnt output methods to be selected. Implemented Plain and
+	Tagged.
+
+	* rb.rb: partitioned off to allow ri to be required and called by
+	other code
+
+2001-03-03  Dave Thomas  <Dave@Thomases.com>
+
+	* ref_to_simple.xsl: Ignore new fullcode tag.
+
+	* post_process.rb: remove spaces in some punctuation-only method
+	names. 
+
+	* rb.rb: change abbreviation handling. Now properly looks for
+	leading matches, and deals with case when both class and method
+	names are abbreviated.
+
+2001-02-26  Dave Thomas  <Dave@Thomases.com>
+
+	* install.rb: CONFIG["sitedir"] isn't set in 1.4.3 Ruby, so fake
+	it out.
+
+	* ri.rb: Add Ribert Feldt's code to allow abbreviations of class
+	and method names.
+
+	* install.rb: Change installation so that I no longer distribute
+ 	binary files.
+
+	* ri.rb: Add --version and --line-length
+
+2001-02-25  Dave Thomas  <Dave@Thomases.com>
+
+	* ri.rb: Applied patch from Steven Grady to add breaks back in to
+	wrapped text.
+
+	* ri.rb: Map '_' back to ':' when displaying a list of class
+	filenames.
+
+	* ref_m_filetest.tip: missing \begin{methods}!
+	
+2001-02-25  Dave Thomas  <Dave@Thomases.com>
+
+	* ri.rb: Handle class names with ':'s better, and map ':' to '_'
+	in external file names for DOS users.
+
