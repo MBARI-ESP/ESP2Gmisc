@@ -68,7 +68,12 @@ module IRB
     end
     
     catch(:IRB_EXIT) do
-      irb.eval_input
+      begin
+        irb.eval_input
+      rescue Exception
+        irb.log_exception
+        retry
+      end
     end
 #    print "\n"
   end
@@ -84,6 +89,7 @@ module IRB
       raise exception, "abort then interrupt!!"
     end
   end
+
 
   #
   # irb interpriter main routine 
@@ -101,6 +107,12 @@ module IRB
     attr_reader :context
     attr_accessor :scanner
 
+    def log_exception    
+      $! = RuntimeError.new("unknown exception raised") unless $!
+      context.exception=$! 
+      print $!.type, ": ", $!, "\n" 
+    end
+    
     def eval_input
       @scanner.set_prompt do
 	|ltype, indent, continue, line_no|
@@ -136,7 +148,7 @@ module IRB
 	  else
 	    if @context.ignore_eof? and @context.io.readable_atfer_eof?
 	      l = "\n"
-	      if @context.verbose?
+	      if @context.verbose
 		printf "Use \"exit\" to leave %s\n", @context.ap_name
 	      end
 	    end
@@ -152,8 +164,7 @@ module IRB
 	    @context.evaluate(line, line_no)
 	    output_value if @context.echo?
 	  rescue StandardError, ScriptError, Abort
-	    $! = RuntimeError.new("unknown exception raised") unless $!
-	    print $!.type, ": ", $!, "\n"
+            log_exception
 	    if  $@[0] =~ /irb(2)?(\/.*|-.*|\.rb)?:/ && $!.type.to_s !~ /^IRB/
 	      irb_bug = true 
 	    else
@@ -176,8 +187,7 @@ module IRB
 		  end
 		end
 	      end
-	    end  #store most recent exception -- brent@mbari.org 2/27/03
-	    IRB.conf[:exception]=$! 
+	    end
 	    print messages.join("\n"), "\n"
 	    unless lasts.empty?
 	      printf "... %d levels...\n", levels if levels > 0
