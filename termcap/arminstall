@@ -1,5 +1,5 @@
 #!/bin/sh
-# build & install libtermcap for arm-linux -- 2/18/05 brent@mbari.org
+# build & install libtermcap for arm-linux -- 3/15/05 brent@mbari.org
 
 : ${ARMGCC:=/arm}
 : ${ARMSTRIP:=$ARMGCC/bin/strip}
@@ -9,15 +9,26 @@
 : ${HOSTTOP:=${1-$HOME/armHost$TARGETTOP}}
 : ${CC:=$ARMGCC/bin/gcc}
 : ${CFLAGS:=-Os}
+
+cplinks() {
+#recursively copy symlinks having the specified target $1
+  for target in `find -lname "$1"`; do
+    cp -a $target $HOSTTOP || return $?
+    cplinks $target
+  done
+}
+
+cplib() {
+#copy and strip ARM library $1 and all symlinks to it
+   mkdir -pm 755 $HOSTTOP &&
+   $ARMSTRIP $1 -o $HOSTTOP/$1 && cplinks $1 || exit $?
+}
+
 echo "Installing in $HOSTTOP"
 echo "  for execution at $TARGETTOP on the ARM target"
 mkdir -p $HOSTETC && cp termcap $HOSTETC
-cd ${READLNVERS-termcap-compat-1.2.3} || exit 2
+cd ${TERMCAPVERS-termcap-compat-1.2.3} || exit 2
 make CC=$CC CFLAGS="$CFLAGS -I." \
   prefix=$LIBTOP incprefix=$ARMGCC OWNER=$USER distclean install || exit 1
-mkdir -p $HOSTTOP || exit 3
-for lib in libtermcap; do
-  cp -af $LIBTOP/lib/$lib.so* $HOSTTOP &&
-  $ARMSTRIP $HOSTTOP/$lib.so.* || exit 3
-done
+cd $LIBTOP/lib && cplib libtermcap.so.*.*.* &&
 echo "Done"
