@@ -49,6 +49,10 @@ class Object
   def intern  #Symbol class overrides this. All classes respond to it
     self
   end
+  def intern= identifier  #return identifier for Object.intern
+    eval "class << self; def intern; #{identifier.inspect}; end; end"
+    identifier
+  end
 end
 
 class Class  #create an uninitialized class instance
