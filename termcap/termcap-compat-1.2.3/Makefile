@@ -26,6 +26,7 @@ TARGETS=$(STATIC_LIB) $(SHARED_LIB)
 
 # Where is include and dir located?
 prefix=/
+incprefix=$(prefix)
 
 .c.o:
 	$(CC) $(CFLAGS) -c $<
@@ -54,9 +55,6 @@ install: lib install-dirs install-data
 	fi
 	cp $(SHARED_LIB) $(prefix)/lib
 	chown $(OWNER) $(prefix)/lib/$(SHARED_LIB)
-	if [ -x /sbin/ldconfig -o -x /etc/ldconfig ]; then \
-	  ldconfig; \
-	fi
 	-if [ $(prefix) = "/" ]; then \
 	  cp -f $(STATIC_LIB) /usr/lib; \
 	  rm -f /lib/libtermcap.so; \
@@ -71,19 +69,22 @@ install: lib install-dirs install-data
 		/usr/include/termcap.h; \
 	else \
 	  cp -f $(STATIC_LIB) $(prefix)/lib; \
-	  rm -f $(prefix)/lib/libtermcap.so; \
-	  ln -s $(prefix)/lib/$(SHARED_LIB) \
+	  ln -sf $(prefix)/lib/$(SHARED_LIB) \
+		$(prefix)/lib/libtermcap.so.$(SONAME_VERSION); \
+	  ln -sf $(prefix)/lib/libtermcap.so.$(SONAME_VERSION) \
 		$(prefix)/lib/libtermcap.so; \
-	  cp -f termcap.h $(prefix)/include; \
+	  cp -f termcap.h $(incprefix)/include; \
 	  chown $(OWNER) \
 		$(prefix)/lib/$(STATIC_LIB) \
 		$(prefix)/lib/libtermcap.so \
-		$(prefix)/include/termcap.h; \
+		$(incprefix)/include/termcap.h; \
 	fi
 
 install-dirs:
 	-if [ $(prefix) = "/" ]; then \
-	  mkdir -p /usr/lib /usr/info /usr/include /etc /lib; \
+          for dir in /usr/lib /usr/info /usr/include /etc /lib; do \
+	    mkdir -p $$dir; \
+	  done \
 	fi
 
 install-data:
