@@ -256,7 +256,7 @@ end
 class SyntaxError < ScriptError
   # Decode the Source Ref from the compiler error message
   def to_srcRef (level=nil)
-    return super.to_srcRef level if level.nil?
+    return super.to_srcRef level unless level.nil?
     to_s.split("\s",2)[0].to_srcRef
   end
 end
