@@ -111,22 +111,24 @@ class SourceRef   #combines source_file_name and line number
   
 
   def SourceRef.find_in_back_trace (trace, symbol)
-  # return highest level in trace referencing symbol
-    symbol = level
-    level = 0
+  # return first element in trace containing symbol
+  # returns nil if no such stack level found
     for msg in trace
       if inPart = msg.split(':',4)[2]
         name = inPart.split('in\s*', 2)[1][1...-1]
-        break if symbol == name.intern
+        return msg if symbol == name.intern
       end
-      level += 1
     end
+    return nil
   end
    
   def SourceRef.from_back_trace (trace, level=0)
   # return sourceref at level in backtace
-    SourceRef.find_in_back_trace (trace, level) if level.kind_of?(Symbol)
-    trace[level].split[1].split(':',3)[0..1].join(':').to_srcRef
+  #  or return level if no such level found
+    traceLvl=level.kind_of?(Symbol) ?
+                SourceRef.find_in_back_trace (trace, level) : trace[level]
+    return level if traceLvl==nil
+    traceLvl.split[1].split(':',3)[0..1].join(':').to_srcRef
   end
 
 
@@ -163,7 +165,11 @@ class SourceRef   #combines source_file_name and line number
             #assume parameter is a backtrace level or method name
             src = SourceRef.from_back_trace(IRB.conf[:back_trace], src)
           end
-          src.to_srcRef.method(m).call (*args)
+          if src.respond_to? :to_srcRef
+            src.to_srcRef.method(m).call (*args)
+          else
+            print "No source file corresponds to ",src.type,':',src.inspect, "\n"
+          end
         end
       }
     }
