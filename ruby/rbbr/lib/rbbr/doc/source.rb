@@ -48,7 +48,12 @@ module RBBR
       end
       
       def lookup_method( method )
+        #passed either a method specification OR an Exception
 	begin
+          if method.kind_of? Exception
+            srcRef = method.to_srcRef  #extract SourceRef from exception
+            return srcRef.list 300
+          end
           kname, mname = method.split('#',2)
           methodType = if mname
                          :instance_method
