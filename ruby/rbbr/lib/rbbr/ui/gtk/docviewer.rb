@@ -33,6 +33,7 @@ module GTK
   class SimpleDocViewer < DocViewer
     def initialize( database )
       super( database )
+      self.editable = false
 
       @font = {}
 #      @font[:header] = Gdk::Font.fontset_load('-*-*-bold-r-normal-*-18-*-*-*-m-*-iso8859-1,*')
