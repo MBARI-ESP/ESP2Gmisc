@@ -1,0 +1,8 @@
+#!/bin/sh
+# install ruby 1.6.8 build for arm-linux -- 2/24/03 brent@mbari.org
+[ -d arm ] && rm -rf arm
+make install
+cd arm
+rm -rf man
+rm -f `find -name libruby.a`
+arm-linux-strip bin/ruby `find lib -name "*.so"`
