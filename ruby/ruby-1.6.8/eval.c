@@ -5362,7 +5362,6 @@ rb_feature_p(feature, wait)
 		    return Qtrue;
 		}
 		CHECK_INTS;
-		rb_thread_schedule();
 	    }
 	}
     }
@@ -7755,7 +7754,7 @@ rb_thread_schedule()
     int need_select = 0;
     int select_timeout = 0;
 
-    rb_thread_pending = 0;
+    rb_thread_pending = rb_thread_critical = 0;
     if (curr_thread == curr_thread->next
 	&& curr_thread->status == THREAD_RUNNABLE)
 	return;
@@ -8280,7 +8279,6 @@ rb_thread_stop()
 {
     enum thread_status last_status = THREAD_RUNNABLE;
 
-    rb_thread_critical = 0;
     if (curr_thread == curr_thread->next) {
 	rb_raise(rb_eThreadError, "stopping only thread\n\tnote: use sleep to stop forever");
     }
