@@ -221,21 +221,6 @@ class Method; include SourceRef::Code; end
 class Object; include SourceRef::CommandBundle; end
 
 
-class Symbol
-  def intern  #just for mathematical completeness!
-    self
-  end
-end
-
-class Hash
-  def join (sep = " => ")
-  # most useful for displaying hashes with puts hsh.join
-    strAry = []
-    each {|key,value| strAry << key.inspect+sep+value.to_s}
-    strAry
-  end
-end
-
 class String
   def to_srcRef
   # parse a source reference from string of form fn:line#
