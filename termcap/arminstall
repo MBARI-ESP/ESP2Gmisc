@@ -1,0 +1,23 @@
+#!/bin/sh
+# build & install libtermcap for arm-linux -- 2/18/05 brent@mbari.org
+
+: ${ARMGCC:=/arm}
+: ${ARMSTRIP:=$ARMGCC/bin/strip}
+: ${LIBTOP:=$ARMGCC/usr}
+: ${TARGETTOP:=${2-/usr/lib}}
+: ${HOSTETC:=${1-$HOME/armHost/etc}}
+: ${HOSTTOP:=${1-$HOME/armHost$TARGETTOP}}
+: ${CC:=$ARMGCC/bin/gcc}
+: ${CFLAGS:=-Os}
+echo "Installing in $HOSTTOP"
+echo "  for execution at $TARGETTOP on the ARM target"
+mkdir -p $HOSTETC && cp termcap $HOSTETC
+cd ${READLNVERS-termcap-compat-1.2.3} || exit 2
+make CC=$CC CFLAGS="$CFLAGS -I." \
+  prefix=$LIBTOP incprefix=$ARMGCC OWNER=$USER distclean install || exit 1
+mkdir -p $HOSTTOP || exit 3
+for lib in libtermcap; do
+  cp -af $LIBTOP/lib/$lib.so* $HOSTTOP &&
+  $ARMSTRIP $HOSTTOP/$lib.so.* || exit 3
+done
+echo "Done"
