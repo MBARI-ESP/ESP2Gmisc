@@ -1,0 +1,1329 @@
+######## minimal /etc/termcap  -- 2/26/03 brent@mbari.org
+#
+# Pointers to related resources may
+# be found at <http://www.tuxedo.org/terminfo>.
+#
+
+#### Specials
+
+dumb|80-column dumb tty:\
+	:am:\
+	:co#80:\
+	:bl=^G:cr=^M:do=^J:sf=^J:
+unknown|unknown terminal type:\
+	:gn:tc=dumb:
+lpr|printer|line printer:\
+	:bs:hc:os:\
+	:co#132:li#66:\
+	:bl=^G:cr=^M:do=^J:ff=^L:le=^H:sf=^J:
+glasstty|classic glass tty interpreting ASCII control characters:\
+	:am:bs:\
+	:co#80:\
+	:bl=^G:cl=^L:cr=^M:do=^J:kd=^J:kl=^H:le=^H:nw=^M^J:ta=^I:
+
+vanilla:\
+	:bs:\
+	:bl=^G:cr=^M:do=^J:sf=^J:
+
+#### ANSI.SYS/ISO 6429/ECMA-48 Capabilities
+#
+# See the end-of-file comment for more on these.
+#
+
+# ANSI capabilities are broken up into pieces, so that a terminal
+# implementing some ANSI subset can use many of them.
+ansi+local1:\
+	:do=\E[B:le=\E[D:nd=\E[C:up=\E[A:
+ansi+local:\
+	:DO=\E[%dB:LE=\E[%dD:RI=\E[%dC:UP=\E[%dA:tc=ansi+local1:
+ansi+tabs:\
+	:bt=\E[Z:ct=\E[2g:st=\EH:ta=^I:
+ansi+inittabs:\
+	:it#8:tc=ansi+tabs:
+ansi+erase:\
+	:cd=\E[J:ce=\E[K:cl=\E[H\E[J:
+ansi+rca:\
+	:ch=\E[%+^AG:cv=\E[%+^Ad:
+ansi+cup:\
+	:cm=\E[%i%d;%dH:ho=\E[H:
+ansi+rep:\
+	:..rp=%p1%c\E[%p2%{1}%-%db:
+ansi+idl1:\
+	:al=\E[L:dl=\E[M:
+ansi+idl:\
+	:AL=\E[%dL:DL=\E[%dM:tc=ansi+idl1:
+ansi+idc:\
+	:IC=\E[%d@:dc=\E[P:ei=\E6:ic=\E[@:im=\E6:
+ansi+arrows:\
+	:kb=^H:kd=\E[B:kh=\E[H:kl=\E[D:kr=\E[C:ku=\E[A:
+ansi+sgr|ansi graphic renditions:\
+	:mb=\E[5m:me=\E[0m:mk=\E[8m:mr=\E[7m:
+ansi+sgrso|ansi standout only:\
+	:se=\E[m:so=\E[7m:
+ansi+sgrul|ansi underline only:\
+	:ue=\E[m:us=\E[4m:
+ansi+sgrbold|ansi graphic renditions; assuming terminal has bold; not dim:\
+	:md=\E[1m:\
+	:..sa=\E[%?%p1%t7;%;%?%p2%t4;%;%?%p3%t7;%;%?%p4%t5;%;%?%p6%t1;%;%?%p7%t8;%;m:\
+	:tc=ansi+sgr:tc=ansi+sgrso:tc=ansi+sgrul:
+ansi+sgrdim|ansi graphic renditions; assuming terminal has dim; not bold:\
+	:mh=\E[2m:\
+	:..sa=\E[%?%p1%t7;%;%?%p2%t4;%;%?%p3%t7;%;%?%p4%t5;%;%?%p5%t2;%;%?%p7%t8;%;m:\
+	:tc=ansi+sgr:tc=ansi+sgrso:tc=ansi+sgrul:
+ansi+pp|ansi printer port:\
+	:pf=\E[4i:po=\E[5i:ps=\E[0i:
+ansi+csr|ansi scroll-region plus cursor save & restore:\
+	:cs=\E[%i%d;%dr:rc=\E8:sc=\E7:
+
+klone+acs|alternate character set for ansi.sys displays:\
+	:ac=+\020,\021-\030.^Y0\333`\004a\261f\370g\361h\260j\331k\277l\332m\300n\305o~p\304q\304r\304s_t\303u\264v\301w\302x\263y\363z\362{\343|\330}\234~\376:\
+	:ae=\E[10m:as=\E[11m:
+
+
+ansi-mr|mem rel cup ansi:\
+	:am:xo:\
+	:co#80:li#24:tc=vanilla:tc=ansi+erase:tc=ansi+local1:
+
+ansi-mini|any ansi terminal with pessimistic assumptions:\
+	:am:xo:\
+	:co#80:li#24:tc=vanilla:tc=ansi+cup:tc=ansi+erase:
+
+ansi-mtabs|any ansi terminal with pessimistic assumptions:\
+	:it#8:\
+	:ta=^I:tc=ansi+local1:tc=ansi-mini:
+
+ansi77|ansi 3.64 standard 1977 version:\
+	:am:bs:mi:\
+	:co#80:it#8:li#24:\
+	:al=5*\E[L:bl=^G:cd=\E[J:ce=\E[K:cl=\E[;H\E[2J:\
+	:cm=\E[%i%d;%dH:cr=^M:cs=\E[%i%d;%dr:dc=\E[P:dl=5*\E[M:\
+	:do=\E[B:ei=\E[4l:ho=\E[H:im=\E[4h:k1=\EOP:k2=\EOR:k4=\EOS:\
+	:kb=^H:kd=\E[B:kh=\E[H:kl=\E[D:kr=\E[C:ku=\E[A:le=^H:\
+	:nd=\E[C:nw=^M\ED:rc=\E8:sc=\E7:se=\E[m:sf=\ED:so=\E[7m:\
+	:sr=\EM:ta=^I:ue=\E[m:up=\E[A:us=\E[4m:
+
+pcansi-m|pcansi-mono|ibm-pc terminal programs claiming to be ansi (mono mode):\
+	:am:bs:mi:ms:\
+	:co#80:it#8:li#24:\
+	:al=\E[L:bl=^G:bt=\E[Z:cd=\E[J:ce=\E[K:cl=\E[H\E[J:\
+	:cm=\E[%i%d;%dH:cr=^M:ct=\E[2g:dc=\E[P:dl=\E[M:do=\E[B:\
+	:ho=\E[H:kb=^H:kd=\E[B:kh=\E[H:kl=\E[D:kr=\E[C:ku=\E[A:\
+	:le=\E[D:nd=\E[C:sf=^J:st=\EH:ta=^I:up=\E[A:\
+	:tc=klone+sgr-dumb:
+pcansi-25-m|pcansi25m|ibm-pc terminal programs with 25 lines (mono mode):\
+	:li#25:tc=pcansi-m:
+pcansi-33-m|pcansi33m|ibm-pc terminal programs with 33 lines (mono mode):\
+	:li#33:tc=pcansi-m:
+pcansi-43-m|ansi43m|ibm-pc terminal programs with 43 lines (mono mode):\
+	:li#43:tc=pcansi-m:
+pcansi|ibm-pc terminal programs claiming to be ansi:\
+	:tc=klone+color:tc=pcansi-m:
+pcansi-25|pcansi25|ibm-pc terminal programs with 25 lines:\
+	:li#25:tc=pcansi:
+pcansi-33|pcansi33|ibm-pc terminal programs with 33 lines:\
+	:li#33:tc=pcansi:
+pcansi-43|pcansi43|ibm-pc terminal programs with 43 lines:\
+	:li#43:tc=pcansi:
+
+ansi-m|ansi-mono|ANSI X3.64-1979 terminal with ANSI.SYS compatible attributes:\
+	:5i:\
+	:AL=\E[%dL:DC=\E[%dP:DL=\E[%dM:DO=\E[%dB:IC=\E[%d@:\
+	:LE=\E[%dD:RI=\E[%dC:SF=\E[%dS:SR=\E[%dT:UP=\E[%dA:\
+	:cb=\E[1K:ch=\E[%i%dG:ct=\E[2g:cv=\E[%i%dd:ec=\E[%dX:ei=:\
+	:im=:kB=\E[Z:kI=\E[L:kb=^H:kd=\E[B:kl=\E[D:kr=\E[C:ku=\E[A:\
+	:nw=\r\E[S:pf=\E[4i:po=\E[5i:..rp=%p1%c\E[%p2%{1}%-%db:\
+	:s0=\E(B:s1=\E)B:s2=\E*B:s3=\E+B:ta=\E[I:tc=pcansi-m:
+
+ansi|ansi/pc-term compatible with color:\
+	:u6=\E[%i%d;%dR:u7=\E[6n:..u8=\E[?%[;0123456789]c:\
+	:u9=\E[c:tc=ecma+color:tc=klone+sgr:tc=ansi-m:
+
+ansi-generic|generic ansi standard terminal:\
+	:am:xo:\
+	:co#80:li#24:tc=vanilla:tc=ansi+csr:tc=ansi+cup:\
+	:tc=ansi+rca:tc=ansi+erase:tc=ansi+tabs:tc=ansi+local:\
+	:tc=ansi+idc:tc=ansi+idl:tc=ansi+rep:tc=ansi+sgrbold:\
+	:tc=ansi+arrows:
+
+ansi.sys-old|ANSI.SYS under PC-DOS 2.1:\
+	:am:bs:mi:ms:xo:\
+	:co#80:li#25:\
+	:RA=\E[?7l:SA=\E[?7h:ce=\E[k:cl=\E[2J:cm=\E[%i%d;%dH:\
+	:do=\E[B:ho=\E[H:is=\E[m\E[?7h:kd=^J:kh=^^:kl=^H:kr=^L:\
+	:ku=^K:le=^H:nd=\E[C:pk=\E[0;%+\:;"%s":rc=\E[u:sc=\E[s:\
+	:u6=\E[%i%d;%dR:u7=\E[6n:up=\E[A:tc=klone+color:\
+	:tc=klone+sgr:
+ansi.sys|ANSI.SYS 3.1 and later versions:\
+	:ce=\E[K:tc=ansi.sys-old:
+
+ansi.sysk|ansisysk|PC-DOS 3.1 ANSI.SYS with keypad redefined for vi:\
+	:is=U2 PC-DOS 3.1 ANSI.SYS with keypad redefined for vi 9-29-86\n\E[;75;8p:\
+	:ke=\E[;71;0;71p\E[;72;0;72p\E[;73;0;73p\E[;77;0;77p\E[;80;0;80p\E[;81;0;81p\E[;82;0;82p\E[;83;0;83p:\
+	:ks=\E[;71;30p\E[;72;11p\E[;73;27;21p\E[;77;12p\E[;80;10p\E[;81;27;4p\E[;82;27;27;105p\E[;83;127p:\
+	:tc=ansi.sys:
+nansi.sys|nansisys|PC-DOS Public Domain NANSI.SYS:\
+	:al=\E[1L:dc=\E[1P:dl=\E[1M:ei=:ic=\E[1@:im=:\
+	:is=U3 PC-DOS Public Domain NANSI.SYS 9-23-86\n:\
+	:tc=ansi.sys:
+nansi.sysk|nansisysk|PC-DOS Public Domain NANSI.SYS with keypad redefined for vi:\
+	:al=\E[1L:dc=\E[1P:dl=\E[1M:ei=:ic=\E[1@:im=:\
+	:is=U4 PC-DOS Public Domain NANSI.SYS with keypad redefined for vi 9-29-86\n\E[;75;8p:\
+	:tc=ansi.sysk:
+
+beterm|BeOS Terminal:\
+	:am:eo:mi:ms:xn:xo:\
+	:Co#8:NC#5:co#80:it#8:li#25:pa#64:\
+	:&7=^Z:@7=\E[4~:AB=\E[4%dm:AF=\E[3%dm:AL=\E[%dL:DC=\E[%dP:\
+	:DL=\E[%dM:DO=\E[%dB:F1=\E[21~:F2=\E[22~:IC=\E[%d@:\
+	:LE=\E[%dD:RI=\E[%dC:Sb=\E[%+(m:Sf=\E[%+^^m:UP=\E[%dA:\
+	:al=\E[L:bl=^G:cb=\E[1K:cd=\E[J:ce=\E[K:ch=\E[%i%dG:\
+	:cl=\E[H\E[J:cm=\E[%i%d;%dH:cr=^M:cs=\E[%i%d;%dr:\
+	:cv=\E[%i%dd:dc=\E[P:dl=\E[M:do=^J:ec=\E[%dX:ei=\E[4l:\
+	:ho=\E[H:ic=\E[@:im=\E[4h:k1=\E[11~:k2=\E[12~:k3=\E[13~:\
+	:k4=\E[14~:k5=\E[15~:k6=\E[16~:k7=\E[17~:k8=\E[18~:\
+	:k9=\E[19~:k;=\E[20~:kD=\E[3~:kI=\E[2~:kN=\E[6~:kP=\E[5~:\
+	:kb=^H:kd=\E[B:ke=\E[?4l:kh=\E[1~:kl=\E[D:kr=\E[C:\
+	:ks=\E[?4h:ku=\E[A:le=^H:md=\E[1m:me=\E[0;10m:mr=\E[7m:\
+	:nd=\E[C:nw=^M^J:op=\E[m:r1=\Ec:rc=\E8:sc=\E7:se=\E[m:sf=^J:\
+	:so=\E[7m:sr=\EM:st=\EH:ta=^I:u6=\E[%i%d;%dR:u7=\E[6n:\
+	:ue=\E[24m:up=\E[A:us=\E[4m:
+
+linux|linux console:\
+	:am:eo:mi:ms:ut:xn:xo:\
+	:NC#18:it#8:\
+	:&7=^Z:@7=\E[4~:AL=\E[%dL:DC=\E[%dP:DL=\E[%dM:F1=\E[23~:\
+	:F2=\E[24~:F3=\E[25~:F4=\E[26~:F5=\E[28~:F6=\E[29~:\
+	:F7=\E[31~:F8=\E[32~:F9=\E[33~:FA=\E[34~:IC=\E[%d@:\
+	:K2=\E[G:Km=\E[M:al=\E[L:bl=^G:cb=\E[1K:cd=\E[J:ce=\E[K:\
+	:ch=\E[%i%dG:cl=\E[H\E[J:cm=\E[%i%d;%dH:cr=^M:\
+	:cs=\E[%i%d;%dr:ct=\E[3g:cv=\E[%i%dd:dc=\E[P:dl=\E[M:\
+	:do=^J:ec=\E[%dX:ei=\E[4l:ho=\E[H:ic=\E[@:im=\E[4h:\
+	:k1=\E[[A:k2=\E[[B:k3=\E[[C:k4=\E[[D:k5=\E[[E:k6=\E[17~:\
+	:k7=\E[18~:k8=\E[19~:k9=\E[20~:k;=\E[21~:kB=\E[Z:kD=\E[3~:\
+	:kI=\E[2~:kN=\E[6~:kP=\E[5~:kb=\177:kd=\E[B:kh=\E[1~:\
+	:kl=\E[D:kr=\E[C:ku=\E[A:le=^H:mh=\E[2m:mr=\E[7m:nd=\E[C:\
+	:nw=^M^J:r1=\Ec\E]R:rc=\E8:sc=\E7:se=\E[27m:sf=^J:sr=\EM:\
+	:st=\EH:ta=^I:u6=\E[%i%d;%dR:u7=\E[6n:u8=\E[?6c:u9=\E[c:\
+	:ue=\E[24m:up=\E[A:us=\E[4m:vb=200\E[?5h\E[?5l:\
+	:ve=\E[?25h\E[?0c:vi=\E[?25l\E[?1c:vs=\E[?25h\E[?8c:\
+	:tc=klone+sgr:tc=ecma+color:
+linux-m|Linux console no color:\
+	:Co@:pa@:\
+	:AB@:AF@:Sb@:Sf@:tc=linux:
+linux-c-nc|linux console 1.3.x hack for ncurses only:\
+	:cc:\
+	:..Ic=\E]P%p1%x%p2%{255}%*%{1000}%/%02x%p3%{255}%*%{1000}%/%02x%p4%{255}%*%{1000}%/%02x:\
+	:oc=\E]R:tc=linux:
+linux-c|linux console 1.3.6+ with private palette for each virtual console:\
+	:cc:\
+	:Co#8:pa#64:\
+	:..Ic=\E]P%?%p1%{9}%>%t%p1%{10}%-%'a'%+%c%e%p1%d%;%p2%{255}%&%Pr%gr%{16}%/%Px%?%gx%{9}%>%t%gx%{10}%-%'A'%+%c%e%gx%d%;%gr%{15}%&%Px%?%gx%{9}%>%t%gx%{10}%-%'A'%+%c%e%gx%d%;%p3%{255}%&%Pr%gr%{16}%/%Px%?%gx%{9}%>%t%gx%{10}%-%'A'%+%c%e%gx%d%;%gr%{15}%&%Px%?%gx%{9}%>%t%gx%{10}%-%'A'%+%c%e%gx%d%;%p4%{255}%&%Pr%gr%{16}%/%Px%?%gx%{9}%>%t%gx%{10}%-%'A'%+%c%e%gx%d%;%gr%{15}%&%Px%?%gx%{9}%>%t%gx%{10}%-%'A'%+%c%e%gx%d%;:\
+	:oc=\E]R:tc=linux:
+
+linux-nic|linux with ich/ich1 suppressed for non-curses programs:\
+	:IC@:ei=:ic@:im=:tc=linux:
+
+linux-koi8|linux with koi8 alternate character set:\
+	:ac=+\020,\021-\030.^Y0\215`\004a\221f\234g\237h\220i\276j\205k\203l\202m\204n\212o~p\0q\0r\0s_t\206u\207v\211w\210x\201y\230z\231{\267|\274~\224:\
+	:tc=linux:tc=klone+koi8acs:
+
+linux-koi8r|linux with koi8-r alternate character set:\
+	:tc=linux:tc=klone+koi8acs:
+
+linux-lat|linux with latin1 or latin2 alternate character set:\
+	:ac=+\020,\021-\030.^Y0\333`\004a\013f\370g\361h\260i\316j\211k\214l\206m\203n\305o~p\304q\212r\304s_t\207u\215v\301w\302x\205y\363z\362{\343|\330}\234~\376:\
+	:tc=linux:
+
+mach|Mach Console:\
+	:am:km:\
+	:co#80:it#8:li#25:\
+	:@7=\E[Y:AL=\E[%dL:DL=\E[%dM:DO=\E[%dB:LE=\E[%dD:\
+	:RI=\E[%dC:UP=\E[%dA:al=\E[L:bl=^G:cd=\E[J:ce=\E[K:cl=\Ec:\
+	:cm=\E[%i%d;%dH:cr=^M:dl=\E[M:do=^J:ho=\E[H:k1=\EOP:\
+	:k2=\EOQ:k3=\EOR:k4=\EOS:k5=\EOT:k6=\EOU:k7=\EOV:k8=\EOW:\
+	:k9=\EOX:k;=\EOY:kD=\E[9:kH=\E[F:kI=\E[@:kN=\E[U:kP=\E[V:\
+	:kb=^H:kd=\E[B:kh=\E[H:kl=\E[D:kr=\E[C:ku=\E[A:le=^H:\
+	:mb=\E[5m:md=\E[1m:me=\E[0m:mr=\E[7m:nd=\E[C:se=\E[0m:\
+	:sf=^J:so=\E[7m:ta=^I:ue=\E[24m:up=\E[A:us=\E[4m:
+mach-bold|Mach Console with bold instead of underline:\
+	:ue=\E[0m:us=\E[1m:tc=mach:
+mach-color|Mach Console with ANSI color:\
+	:Co#8:pa#64:\
+	:AB=\E[4%dm:AF=\E[3%dm:mh=\E[2m:mk=\E[8m:op=\E[37;40m:\
+	:se=\E[27m:tc=mach:
+
+pmcons|pmconsole|PMAX console:\
+	:am:\
+	:co#128:li#57:\
+	:bl=^G:cl=^L:cr=^M:do=^J:k1=\EOP:k2=\EOQ:k3=\EOR:k4=\EOS:\
+	:kd=\E[B:kl=\E[D:kr=\E[C:ku=\E[A:le=^H:sf=^J:ta=^I:up=^K:
+
+scoansi|SCO Extended ANSI standard crt:\
+	:am:bs:eo:xo:\
+	:co#80:it#8:li#25:\
+	:AL=\E[%dL:DL=\E[%dM:SF=\E[%dS:SR=\E[%dT:ae=\E[10m:\
+	:al=\E[L:as=\E[12m:bl=^G:bt=\E[Z:cd=\E[m\E[J:ce=\E[m\E[K:\
+	:cl=\E[2J\E[H:cm=\E[%i%d;%dH:dc=\E[P:dl=\E[M:do=\E[B:ei=:\
+	:ho=\E[H:ic=\E[@:im=:k1=\E[M:k2=\E[N:k3=\E[O:k4=\E[P:\
+	:k5=\E[Q:k6=\E[R:k7=\E[S:k8=\E[T:k9=\E[U:kD=^_:kI=\E[L:\
+	:kN=\E[G:kP=\E[I:kb=^H:kd=\E[B:kh=\E[H:kl=\E[D:kr=\E[C:\
+	:ku=\E[A:le=\E[D:mb=\E[5m:md=\E[1m:me=\E[0;10m:mr=\E[7m:\
+	:nd=\E[C:se=\E[m:sf=\E[S:so=\E[7m:sr=\E[T:ta=^I:ue=\E[m:\
+	:up=\E[A:us=\E[4m:ve=\E[=10;12C:vi=\E[=14;12C:\
+	:vs=\E[=0;12C:
+
+att6386|at386|386at|AT&T WGS 6386 console:\
+	:am:bw:eo:xo:\
+	:co#80:it#8:li#25:\
+	:@7=\E[Y:AL=\E[%dL:DC=\E[%dP:DL=\E[%dM:DO=\E[%dB:F1=\EOZ:\
+	:F2=\EOA:IC=\E[%d@:LE=\E[%dD:RI=\E[%dC:SF=\E[%dS:\
+	:SR=\E[%dT:UP=\E[%dA:\
+	:ac=``a1fxgqh0jYk?lZm@nEooppqDrrsstCu4vAwBx3yyzz{{||}}~~:\
+	:ae=\E[10m:al=\E[1L:as=\E[12m:bl=^G:bt=\E[Z:cd=\E[J:\
+	:ce=\E[K:ch=\E[%i%dG:cl=\E[2J\E[H:cm=\E[%i%d;%dH:cr=^M:\
+	:ct=\E[2g:cv=\E[%i%dd:dc=\E[P:dl=\E[1M:do=\E[B:ec=\E[%dX:\
+	:ei=:ho=\E[H:ic=\E[1@:im=:is=\E[0;10;39m:k1=\EOP:k2=\EOQ:\
+	:k3=\EOR:k4=\EOS:k5=\EOT:k6=\EOU:k7=\EOV:k8=\EOW:k9=\EOX:\
+	:k;=\EOY:kB=^]:kD=\E[P:kI=\E[@:kM=\E0:kN=\E[U:kP=\E[V:kb=^H:\
+	:kd=\E[B:kh=\E[H:kl=\E[D:kr=\E[C:ku=\E[A:le=\E[D:mb=\E[5m:\
+	:md=\E[1m:me=\E[0;10m:mh=\E[2m:mk=\E[9m:mr=\E[7m:nd=\E[C:\
+	:nw=\r\E[S:rc=\E8:\
+	:..sa=\E[10m\E[0%?%p1%p3%|%t;7%;%?%p2%t;4%;%?%p4%t;5%;%?%p5%t;2%;%?%p6%t;1%;%?%p9%t;12%e;10%;%?%p7%t;9%;m:\
+	:sc=\E7:se=\E[m:sf=\E[S:so=\E[7m:sr=\E[T:st=\EH:ta=^I:\
+	:ue=\E[m:up=\E[A:us=\E[4m:ve=\E[=1C:vi=\E[=C:\
+	:tc=klone+color:
+pc6300plus|AT&T 6300 plus:\
+	:am:bs:xo:\
+	:co#80:li#24:\
+	:al=\E[1L:bl=^G:cd=\E[0J:ce=\E[0K:cl=\E[2J\E[H:\
+	:cm=\E[%i%2;%2H:cr=^M:ct=\E[3g:dc=\E[1P:dl=\E[1M:do=\E[B:\
+	:ei=:ho=\E[H:ic=\E[1@:im=:k1=\EOc:k2=\EOd:k3=\EOe:k4=\EOf:\
+	:k5=\EOg:k6=\EOh:k7=\EOi:k8=\EOj:k9=\EOk:k;=\EOu:kb=^H:\
+	:kd=\E[B:kl=\E[D:kr=\E[C:ku=\E[A:le=^H:mb=\E[5m:md=\E[1m:\
+	:me=\E[m:mh=\E[2m:mk=\E[9m:mr=\E[7m:nd=\E[C:nw=^M^J:\
+	:se=\E[m:sf=^J:so=\E[7m:st=\EH:ue=\E[m:up=\E[A:us=\E[4m:\
+	:ve=\E[=1C:vi=\E[=C:
+
+att7300|unixpc|pc7300|3b1|s4|AT&T UNIX PC Model 7300:\
+	:am:xo:\
+	:co#80:it#8:li#24:\
+	:AL=\E[%dL:DL=\E[%dM:DO=\E[%dB:LE=\E[%dD:RI=\E[%dC:\
+	:UP=\E[%dA:al=\E[L:bl=^G:bt=\E^I:cd=\E[0J:ce=\E[0K:\
+	:cl=\E[2J\E[H:cm=\E[%i%d;%dH:cr=^M:dc=\E[P:dl=\E[M:\
+	:do=\E[B:ei=:ho=\E[H:i1=\017\E[=1w:ic=\E[@:im=:k1=\EOc:\
+	:k2=\EOd:k3=\EOe:k4=\EOf:k5=\EOg:k6=\EOh:k7=\EOi:k8=\EOj:\
+	:kD=\ENf:kI=\ENj:kN=\E[U:kP=\E[V:kb=^H:kd=\E[B:kh=\E[H:\
+	:kl=\E[D:kr=\E[C:ku=\E[A:le=^H:mb=\E[9m:md=\E[1m:\
+	:me=\E[0;10m:mh=\E[2m:mr=\E[7m:nd=\E[C:nw=\EE:se=\E[m:\
+	:sf=^J:so=\E[7m:sr=\EM:ue=\E[m:up=\E[A:us=\E[4m:ve=\E[=0C:\
+	:vi=\E[=1C:
+
+iris-ansi|iris-ansi-net|IRIS emulating 40 line ANSI terminal (almost VT100):\
+	:am:\
+	:co#80:it#8:li#40:\
+	:!2=\E[218q:#2=\E[143q:#4=\E[158q:%9=\E[209q:%f=\E[210q:\
+	:%i=\E[167q:&7=\E[217q:*4=\E[P:*7=\E[147q:@7=\E[146q:\
+	:@8=^M:AL=\E[%dL:DL=\E[%dM:DO=\E[%dB:F1=\E[011q:\
+	:F2=\E[012q:LE=\E[%dD:RA=\E[?7l:RI=\E[%dC:SA=\E[?7h:\
+	:UP=\E[%dA:al=\E[L:bl=^G:cb=\E[1K:cd=\E[J:ce=\E[K:\
+	:cl=\E[H\E[2J:cm=\E[%i%d;%dH:cr=^M:ct=\E[3g:dl=\E[M:do=^J:\
+	:ho=\E[H:is=\E[?1l\E>\E[?7h\E[100g\E[0m\E7\E[r\E8:\
+	:k1=\E[001q:k2=\E[002q:k3=\E[003q:k4=\E[004q:k5=\E[005q:\
+	:k6=\E[006q:k7=\E[007q:k8=\E[008q:k9=\E[009q:k;=\E[010q:\
+	:kB=\E[Z:kD=\177:kI=\E[139q:kM=\E[146q:kN=\E[154q:\
+	:kP=\E[150q:kb=^H:kd=\E[B:kh=\E[H:kl=\E[D:kr=\E[C:ku=\E[A:\
+	:le=\E[D:md=\E[1m:me=\E[m:mr=\E[7m:nd=\E[C:nw=\EE:\
+	:pk=\EP101;%d.y%s\E\\:rc=\E8:sc=\E7:se=\E[m:sf=\ED:\
+	:so=\E[1;7m:sr=\EM:st=\EH:ta=^I:ue=\E[m:up=\E[A:us=\E[4m:\
+	:ve=\E[9/y\E[12/y\E[=6l:vs=\E[10/y\E[=1h\E[=2l\E[=6h:
+iris-ansi-ap|IRIS ANSI in application-keypad mode:\
+	:@8=\EOM:F1=\E[011q:F2=\E[012q:is=\E[?1l\E=\E[?7h:\
+	:k9=\E[009q:k;=\E[010q:tc=iris-ansi:
+
+iris-color|xwsh|IRIX ANSI with color:\
+	:NC#33:\
+	:DC=\E[%dP:IC=\E[%d@:ZH=\E[3m:ZR=\E[23m:cs=\E[%i%d;%dr:\
+	:ec=\E[%dX:ei=:im=:mh=\E[2m:r1=\Ec:\
+	:r2=\E>\E[?3l\E[?4l\E[?5l\E[?7h\E[?8h:rc=\E8:sc=\E7:\
+	:u6=\E[%i%d;%dR:u7=\E[6n:u8=\E[?1;2c:u9=\E[c:ue=\E[24m:\
+	:tc=klone+color:tc=iris-ansi-ap:
+
+pcix|PC/IX console:\
+	:am:bw:eo:\
+	:co#80:li#24:\
+	:cd=\E[J:ce=\E[K:cl=\Ec:cm=\E[%i%2;%2H:do=\E[B:ho=\E[H:\
+	:le=^H:me=\E[m:nd=\E[C:se=\E[m:so=\E[7m:ue=\E[m:up=\E[A:\
+	:us=\E[4m:
+
+ibmpcx|xenix|ibmx|IBM PC xenix console display:\
+	:am:bs:ms:\
+	:co#80:li#25:\
+	:@7=\E[d:al=\E[L:cd=\E[J:ce=\E[K:cl=^L:cm=\E[%d;%dH:\
+	:dc=\E[P:dl=\E[M:do=\E[B:ei=:ho=\E[H:ic=\E[@:im=:k1=\E[K:\
+	:k2=\E[L:k3=\E[M:k4=\E[N:kN=\E[e:kP=\E[Z:kb=^H:kd=\E[B:\
+	:kh=\E[Y:kl=\E[D:kr=\E[C:ku=\E[A:le=^H:nd=\E[C:up=\E[A:\
+	:tc=klone+acs:tc=klone+sgr:
+
+qnx|qnx4|qnx console:\
+	:km:mi:ms:xt:\
+	:co#80:it#4:li#25:\
+	:al=\EE:bl=^G:cd=\EJ:ce=\EK:cl=\EH\EJ:cm=\EY%+ %+ :cr=^M:\
+	:dc=\Ef:dl=\EF:do=^J:ei=:ho=\EH:ic=\Ee:im=:k1=\377\201:\
+	:k2=\377\202:k3=\377\203:k4=\377\204:k5=\377\205:\
+	:k6=\377\206:k7=\377\207:k8=\377\210:k9=\377\211:\
+	:kD=\377\254:kI=\377\253:kN=\377\252:kP=\377\242:\
+	:kd=\377\251:kh=\377\240:kl=\377\244:kr=\377\246:\
+	:ku=\377\241:le=^H:mb=\E{:md=\E<:me=\E}\E]\E>\E):mr=\E(:\
+	:nd=\EC:rp=\Eg%r%+ %.:se=\E):sf=^J:so=\E(:sr=\EI:ta=^I:\
+	:te=\Eh\ER:ti=\Ei:ue=\E]:up=\EA:us=\E[:ve=\Ey1:vi=\Ey0:\
+	:vs=\Ey2:
+
+qnxt|qnxt4|QNX4 terminal:\
+	:YB:tc=qnx4:
+
+qnxm|QNX4 with mouse events:\
+	:Yd#1:\
+	:ZC=\E/:ZD=\E":ZJ=\E/>2h:ZT=\E/>2l:ZZ=\E/>1l\E/>9h:\
+	:Za=\E/>7h:Zb=\E/>7l:Zd=\E/>6l:Zf=\E/>1h:Zg=\E/>1h:\
+	:Zh=\E/>1h\E/>9l:Zi=\E/>6h:i1=\E/0t:tc=qnx4:
+
+qnxw|QNX4 windows:\
+	:YD:tc=qnxm:
+
+qnxtmono|Monochrome QNX4 terminal or console:\
+	:Co@:pa@:\
+	:sp@:tc=qnx4:
+
+qnxt2|qnx 2.15 serial terminal:\
+	:am:\
+	:!3@:%h@:%j@:&7@:Sb@:Sf@:dc@:ei=:ic@:im=:rp@:se=\E>:so=\E<:te@:ti@:\
+	:ve@:vi@:vs@:tc=qnx4:
+
+qansi-g|QNX ANSI:\
+	:am:es:hs:xo:\
+	:co#80:it#8:li#25:ws#80:\
+	:AL=\E[%dL:DC=\E[%dP:DL=\E[%dM:DO=\E[%dB:IC=\E[%d@:\
+	:LE=\E[%dD:RI=\E[%dC:SF=\E[%dS:SR=\E[%dT:UP=\E[%dA:ae=^O:\
+	:al=\E[1L:as=^N:bl=^G:bt=\E[Z:cd=\E[J:ce=\E[K:cl=\E[2J\E[H:\
+	:cm=\E[%i%d;%dH:cr=^M:cs=\E[%i%d;%dr:ct=\E[2g:dc=\E[P:\
+	:dl=\E[1M:do=\E[B:ds=\E[r:ec=\E[%dX:ei=:fs=\E[?6h\E8:\
+	:ho=\E[H:i2=\E(B\E)0:ic=\E[1@:im=:\
+	:is=\E>\E[?1l\E[?7h\E[0;10;39;49m:k1=\EOP:k2=\EOQ:\
+	:k3=\EOR:k4=\EOS:k5=\EOT:k6=\EOU:k7=\EOV:k8=\EOW:k9=\EOX:\
+	:kD=\E[P:kI=\E[@:kN=\E[U:kP=\E[V:kb=^H:kd=\E[B:kh=\E[H:\
+	:kl=\E[D:kr=\E[C:ku=\E[A:le=\E[D:ll=\E[99H:mb=\E[5m:\
+	:md=\E[1m:me=\E[m\017:mh=\E[2m:mr=\E[7m:nd=\E[C:nw=\EE:\
+	:se=\E[27m:sf=\E[S:so=\E[7m:sr=\E[T:st=\EH:ta=^I:\
+	:ts=\E7\E1;24r\E[?6l\E[25;%i%dH:ue=\E[24m:up=\E[A:\
+	:us=\E[4m:vb=\E[?5h\E[?5l:ve=\E[?25h\E[?12l:vi=\E[?25l:\
+	:vs=\E[?12;25h:
+
+qansi|QNX ansi with console writes:\
+	:YA:YC:tc=qansi-g:
+
+qansi-t|QNX ansi without console writes:\
+	:YB:tc=qansi:
+
+qansi-m|QNX ansi with mouse:\
+	:Yd#1:\
+	:ZC=\E[:ZD=\E]:ZJ=\E[>2h:ZT=\E[>2l:ZZ=\E[>1l\E[>9h:\
+	:Za=\E[>7h:Zb=\E[>7l:Zd=\E[>6l:Zf=\E[>1h:Zg=\E[>1h:\
+	:Zh=\E[>1h\E[>9l:Zi=\E[>6h:i1=\E[0t:tc=qansi:
+
+qansi-w|QNX ansi for windows:\
+	:YD:tc=qansi-m:
+
+pcvtXX|pcvt vt200 emulator (DEC VT220):\
+	:am:km:mi:ms:xn:\
+	:it#8:vt#3:\
+	:AL=\E[%dL:DC=\E[%dP:DL=\E[%dM:DO=\E[%dB:IC=\E[%d@:\
+	:LE=\E[%dD:RA=\E[?7l:RI=\E[%dC:SA=\E[?7h:SF=\E[%dS:\
+	:SR=\E[%dT:UP=\E[%dA:\
+	:ac=++,,--..00``aaffgghhiijjkkllmmnnooppqqrrssttuuvvwwxxyyzz~~:\
+	:ae=\E(B:al=\E[L:as=\E(0:bl=^G:cb=\E[1K:cd=\E[J:ce=\E[K:\
+	:cl=\E[H\E[J:cm=\E[%i%d;%dH:cr=^M:cs=\E[%i%d;%dr:\
+	:ct=\E[3g:dc=\E[P:dl=\E[M:do=\E[B:ei=\E[4l:ho=\E[H:\
+	:i1=\E>\E[?3l\E[?4l\E[?5l\E[?7h\E[?8h:im=\E[4h:\
+	:k1=\E[17~:k2=\E[18~:k3=\E[19~:k4=\E[20~:k5=\E[21~:\
+	:k6=\E[23~:k7=\E[24~:k8=\E[25~:kD=\E[3~:kH=\E[4~:kI=\E[2~:\
+	:kN=\E[6~:kP=\E[5~:kb=\177:kd=\EOB:ke=\E[?1l\E>:kh=\E[1~:\
+	:kl=\EOD:kr=\EOC:ks=\E[?1h\E=:ku=\EOA:le=^H:mb=\E[5m:\
+	:md=\E[1m:me=\E[m:mr=\E[7m:nd=\E[C:nw=\EE:\
+	:r1=\Ec\E>\E[?3l\E[?4l\E[?5l\E[?7h\E[?8h:rc=\E8:\
+	:rf=/usr/share/tabset/vt100:sc=\E7:se=\E[27m:sf=\ED:\
+	:so=\E[7m:sr=\EM:st=\EH:ta=^I:ue=\E[24m:up=\E[A:us=\E[4m:\
+	:ve=\E[?25h:vi=\E[?25l:
+
+pcvt25|dec vt220 emulation with 25 lines:\
+	:co#80:li#25:\
+	:is=\E[1;25r\E[25;1H:tc=pcvtXX:
+pcvt28|dec vt220 emulation with 28 lines:\
+	:co#80:li#28:\
+	:is=\E[1;28r\E[28;1H:tc=pcvtXX:
+pcvt35|dec vt220 emulation with 35 lines:\
+	:co#80:li#35:\
+	:is=\E[1;35r\E[35;1H:tc=pcvtXX:
+pcvt40|dec vt220 emulation with 40 lines:\
+	:co#80:li#40:\
+	:is=\E[1;40r\E[40;1H:tc=pcvtXX:
+pcvt43|dec vt220 emulation with 43 lines:\
+	:co#80:li#43:\
+	:is=\E[1;43r\E[43;1H:tc=pcvtXX:
+pcvt50|dec vt220 emulation with 50 lines:\
+	:co#80:li#50:\
+	:is=\E[1;50r\E[50;1H:tc=pcvtXX:
+
+pcvt25w|dec vt220 emulation with 25 lines and 132 cols:\
+	:co#132:li#25:\
+	:is=\E[1;25r\E[25;1H:tc=pcvtXX:
+pcvt28w|dec vt220 emulation with 28 lines and 132 cols:\
+	:co#132:li#28:\
+	:is=\E[1;28r\E[28;1H:tc=pcvtXX:
+pcvt35w|dec vt220 emulation with 35 lines and 132 cols:\
+	:co#132:li#35:\
+	:is=\E[1;35r\E[35;1H:tc=pcvtXX:
+pcvt40w|dec vt220 emulation with 40 lines and 132 cols:\
+	:co#132:li#40:\
+	:is=\E[1;40r\E[40;1H:tc=pcvtXX:
+pcvt43w|dec vt220 emulation with 43 lines and 132 cols:\
+	:co#132:li#43:\
+	:is=\E[1;43r\E[43;1H:tc=pcvtXX:
+pcvt50w|dec vt220 emulation with 50 lines and 132 cols:\
+	:co#132:li#50:\
+	:is=\E[1;50r\E[50;1H:tc=pcvtXX:
+
+arm100|arm100-am|Arm(RiscPC) ncurses compatible (for 640x480):\
+	:am:ms:ut:xn:xo:\
+	:co#80:it#8:li#30:\
+	:@8=\E[M:DO=\E[%dB:K1=\E[q:K2=\E[r:K3=\E[s:K4=\E[p:K5=\E[n:\
+	:LE=\E[%dD:RA=\E[?7l:RI=\E[%dC:SA=\E[?7h:UP=\E[%dA:\
+	:ac=``aaffggjjkkllmmnnooppqqrrssttuuvvwwxxyyzz{{||}}~~:\
+	:ae=^O:as=^N:bl=^G:cb=\E[1K:cd=\E[J:ce=\E[K:cl=\E[H\E[J:\
+	:cm=\E[%i%d;%dH:cr=^M:cs=\E[%i%d;%dr:ct=\E[3g:do=^J:\
+	:eA=\E(B\E)0:ho=\E[H:k0=\E[y:k1=\E[P:k2=\E[Q:k3=\E[R:\
+	:k4=\E[S:k5=\E[t:k6=\E[u:k7=\E[v:k8=\E[l:k9=\E[w:k;=\E[x:\
+	:kb=^H:kd=\E[B:ke=\E[?1l\E>:kl=\E[D:kr=\E[C:ks=\E[?1h\E=:\
+	:ku=\E[A:le=^H:mb=\E[5m:md=\E[1m:me=\E[m\017:mk=\E[8m:\
+	:mr=\E[7m:nd=\E[C:rc=\E8:\
+	:rs=\E>\E[?3l\E[?4l\E[?5l\E[?7h\E[?8h:\
+	:..sa=\E[0%?%p1%p6%|%t;1%;%?%p2%t;4%;%?%p1%p3%|%t;7%;%?%p4%t;5%;%?%p7%t;8%;m%?%p9%t\016%e\017%;$<2>:\
+	:sc=\E7:se=\E[m:sf=^J:so=\E[7m:sr=\EM:st=\EH:ta=^I:ue=\E[m:\
+	:up=\E[A:us=\E[4m:tc=ecma+sgr:tc=klone+color:
+
+arm100-w|arm100-wam|Arm(RiscPC) ncurses compatible (for 1024x768):\
+	:co#132:li#50:tc=arm100:
+
+x68k|x68k-ite|NetBSD/x68k ITE:\
+	:co#96:li#32:\
+	:%1=\E[28~:kC=\E[9~:tc=vt220:
+
+
+wsvt25|NetBSD wscons in 25 line DEC VT220 mode:\
+	:co#80:li#25:tc=vt220:
+
+wsvt25m|NetBSD wscons in 25 line DEC VT220 mode with Meta:\
+	:km:\
+	:co#80:li#25:tc=vt220:
+
+mgterm:\
+	:NP:am:bs:bw:eo:km:ms:pt:ut:\
+	:Co#8:co#80:it#8:li#18:pa#64:\
+	:@7=\E[F:AL=\E[%dL:DC=\E[%dP:DL=\E[%dM:DO=\E[%dB:F1=\E[W:\
+	:F2=\E[X:IC=\E[%d@:K2=\E[E:LE=\E[%dD:RI=\E[%dC:SF=\E[%dS:\
+	:SR=\E[%dT:Sb=\E[4%dm:Sf=\E[3%dm:UP=\E[%dA:al=\E[L:bl=^G:\
+	:bt=\E[Z:cb=\E[1K:cd=\E[J:ce=\E[K:ch=\E[%i%d`:cl=\E[H\E[J:\
+	:cm=\E[%i%d;%dH:cr=^M:cs=\E[%i%d;%dr:cv=\E[%i%dd:dc=\E[P:\
+	:dl=\E[M:do=\E[B:ec=\E[%dX:ei=:ho=\E[H:ic=\E[@:im=:k1=\E[M:\
+	:k2=\E[N:k3=\E[O:k4=\E[P:k5=\E[Q:k6=\E[R:k7=\E[S:k8=\E[T:\
+	:k9=\E[U:k;=\E[V:kB=\E[Z:kD=\177:kI=\E[L:kN=\E[G:kP=\E[I:\
+	:kb=^H:kd=\E[B:kh=\E[H:kl=\E[D:kr=\E[C:ku=\E[A:le=^H:\
+	:mb=\E[5m:md=\E[1m:me=\E[m:mh=\E[30;1m:mr=\E[7m:nd=\E[C:\
+	:nw=\E[E:op=\E[x:rc=\E8:rs=\E[x\E[m\Ec:sc=\E7:se=\E[m:\
+	:sf=\E[S:so=\E[7m:sr=\E[T:ta=^I:up=\E[A:
+
+cons25w|ansiw|ansi80x25-raw|freebsd console (25-line raw mode):\
+	:NP:am:bw:eo:ms:ut:\
+	:Co#8:NC#21:co#80:it#8:li#25:pa#64:\
+	:@7=\E[F:AB=\E[4%dm:AF=\E[3%dm:AL=\E[%dL:DC=\E[%dP:\
+	:DL=\E[%dM:DO=\E[%dB:F1=\E[W:F2=\E[X:IC=\E[%d@:K2=\E[E:\
+	:LE=\E[%dD:RI=\E[%dC:SF=\E[%dS:SR=\E[%dT:UP=\E[%dA:\
+	:al=\E[L:bl=^G:bt=\E[Z:cd=\E[J:ce=\E[K:ch=\E[%i%d`:\
+	:cl=\E[H\E[J:cm=\E[%i%d;%dH:cr=^M:cv=\E[%i%dd:dc=\E[P:\
+	:dl=\E[M:do=\E[B:ei=:ho=\E[H:ic=\E[@:im=:k1=\E[M:k2=\E[N:\
+	:k3=\E[O:k4=\E[P:k5=\E[Q:k6=\E[R:k7=\E[S:k8=\E[T:k9=\E[U:\
+	:k;=\E[V:kB=\E[Z:kD=\177:kI=\E[L:kN=\E[G:kP=\E[I:kb=^H:\
+	:kd=\E[B:kh=\E[H:kl=\E[D:kr=\E[C:ku=\E[A:le=^H:mb=\E[5m:\
+	:md=\E[1m:me=\E[m:mh=\E[30;1m:mr=\E[7m:nd=\E[C:nw=\E[E:\
+	:op=\E[x:rs=\E[x\E[m\Ec:se=\E[m:sf=\E[S:so=\E[7m:sr=\E[T:\
+	:ta=^I:up=\E[A:ve=\E[=0C:vs=\E[=1C:
+cons25|ansis|ansi80x25|freebsd console (25-line ansi mode):\
+	:ac=-\030.^Y0\333`\004a\260f\370g\361h\261i\025j\331k\277l\332m\300n\305q\304t\303u\264v\301w\302x\263y\363z\362~\371:\
+	:tc=cons25w:
+cons25-m|ansis-mono|ansi80x25-mono|freebsd console (25-line mono ansi mode):\
+	:Co@:pa@:\
+	:AB@:AF@:md@:mh@:op@:ue=\E[m:us=\E[4m:tc=cons25:
+cons30|ansi80x30|freebsd console (30-line ansi mode):\
+	:li#30:tc=cons25:
+cons30-m|ansi80x30-mono|freebsd console (30-line mono ansi mode):\
+	:li#30:tc=cons25-m:
+cons43|ansi80x43|freebsd console (43-line ansi mode):\
+	:li#43:tc=cons25:
+cons43-m|ansi80x43-mono|freebsd console (43-line mono ansi mode):\
+	:li#43:tc=cons25-m:
+cons50|ansil|ansi80x50|freebsd console (50-line ansi mode):\
+	:li#50:tc=cons25:
+cons50-m|ansil-mono|ansi80x50-mono|freebsd console (50-line mono ansi mode):\
+	:li#50:tc=cons25-m:
+cons60|ansi80x60|freebsd console (60-line ansi mode):\
+	:li#60:tc=cons25:
+cons60-m|ansi80x60-mono|freebsd console (60-line mono ansi mode):\
+	:li#60:tc=cons25-m:
+cons25r|pc3r|ibmpc3r|cons25-koi8-r|freebsd console w/koi8-r cyrillic:\
+	:ac=-\030.^Y0\215`\004a\220f\234h\221i\025j\205k\203l\202m\204n\212q\0t\206u\207v\211w\210x\201y\230z\231~\225:\
+	:tc=cons25w:
+cons25r-m|pc3r-m|ibmpc3r-mono|cons25-koi8r-m|freebsd console w/koi8-r cyrillic (mono):\
+	:Co@:pa@:\
+	:AB@:AF@:op@:ue=\E[m:us=\E[4m:tc=cons25r:
+cons50r|cons50-koi8r|freebsd console w/koi8-r cyrillic (50 lines):\
+	:li#50:tc=cons25r:
+cons50r-m|cons50-koi8r-m|freebsd console w/koi8-r cyrillic (50-line mono):\
+	:li#50:tc=cons25r-m:
+cons60r|cons60-koi8r|freebsd console w/koi8-r cyrillic (60 lines):\
+	:li#60:tc=cons25r:
+cons60r-m|cons60-koi8r-m|freebsd console w/koi8-r cyrillic (60-line mono):\
+	:li#60:tc=cons25r-m:
+cons25l1|cons25-iso8859|freebsd console w/iso 8859-1 chars:\
+	:ac=+\253,\273-\030.\031`\201a\202f\207g\210i\247j\213k\214l\215m\216n\217o\220p\221q\222r\223s\224t\225u\226v\227w\230x\231y\232z\233~\237:\
+	:tc=cons25w:
+cons25l1-m|cons25-iso-m|freebsd console w/iso 8859-1 chars (mono):\
+	:Co@:pa@:\
+	:AB@:AF@:md@:mh@:op@:ue=\E[m:us=\E[4m:tc=cons25l1:
+cons50l1|cons50-iso8859|freebsd console w/iso 8859-1 chars (50 lines):\
+	:li#50:tc=cons25l1:
+cons50l1-m|cons50-iso-m|freebsd console w/iso 8859-1 chars (50-line mono):\
+	:li#50:tc=cons25l1-m:
+cons60l1|cons60-iso|freebsd console w/iso 8859-1 chars (60 lines):\
+	:li#60:tc=cons25l1:
+cons60l1-m|cons60-iso-m|freebsd console w/iso 8859-1 chars (60-line mono):\
+	:li#60:tc=cons25l1-m:
+
+
+vt52|dec vt52:\
+	:bs:\
+	:co#80:it#8:li#24:\
+	:ac=``aaffggjjkkllmmnnooppqqrrssttuuvvwwxxyyzz{{||}}~~:\
+	:ae=\EG:as=\EF:bl=^G:cd=\EJ:ce=\EK:cl=\EH\EJ:cm=\EY%+ %+ :\
+	:cr=^M:do=\EB:ho=\EH:kb=^H:kd=\EB:kl=\ED:kr=\EC:ku=\EA:\
+	:le=\ED:nd=\EC:nw=^M^J:sf=^J:sr=\EI:ta=^I:up=\EA:
+
+vt100|vt100-am|dec vt100 (w/advanced video):\
+	:am:bs:ms:xn:xo:\
+	:co#80:it#8:li#24:vt#3:\
+	:@8=\EOM:DO=\E[%dB:K1=\EOq:K2=\EOr:K3=\EOs:K4=\EOp:K5=\EOn:\
+	:LE=\E[%dD:RA=\E[?7l:RI=\E[%dC:SA=\E[?7h:UP=\E[%dA:\
+	:ac=``aaffggjjkkllmmnnooppqqrrssttuuvvwwxxyyzz{{||}}~~:\
+	:ae=^O:as=^N:bl=^G:cb=\E[1K:cd=\E[J:ce=\E[K:cl=\E[H\E[J:\
+	:cm=\E[%i%d;%dH:cr=^M:cs=\E[%i%d;%dr:ct=\E[3g:do=^J:\
+	:eA=\E(B\E)0:ho=\E[H:k0=\EOy:k1=\EOP:k2=\EOQ:k3=\EOR:\
+	:k4=\EOS:k5=\EOt:k6=\EOu:k7=\EOv:k8=\EOl:k9=\EOw:k;=\EOx:\
+	:kb=^H:kd=\EOB:ke=\E[?1l\E>:kl=\EOD:kr=\EOC:ks=\E[?1h\E=:\
+	:ku=\EOA:le=^H:mb=\E[5m:md=\E[1m:me=\E[m\017:mr=\E[7m:\
+	:nd=\E[C:rc=\E8:rs=\E>\E[?3l\E[?4l\E[?5l\E[?7h\E[?8h:\
+	:..sa=\E[0%?%p1%p6%|%t;1%;%?%p2%t;4%;%?%p1%p3%|%t;7%;%?%p4%t;5%;m%?%p9%t\016%e\017%;$<2>:\
+	:sc=\E7:se=\E[m:sf=^J:so=\E[7m:sr=\EM:st=\EH:ta=^I:ue=\E[m:\
+	:up=\E[A:us=\E[4m:
+vt100nam|vt100-nam|vt100 no automargins:\
+	:am@:xn@:tc=vt100-am:
+vt100-vb|dec vt100 (w/advanced video) & no beep:\
+	:bl@:vb=\E[?5h\E[?5l:tc=vt100:
+
+vt100-w|vt100-w-am|dec vt100 132 cols (w/advanced video):\
+	:co#132:li#24:\
+	:rs=\E>\E[?3h\E[?4l\E[?5l\E[?8h:tc=vt100-am:
+vt100-w-nam|vt100-nam-w|dec vt100 132 cols (w/advanced video no automargin):\
+	:co#132:li#14:vt@:\
+	:rs=\E>\E[?3h\E[?4l\E[?5l\E[?8h:tc=vt100-nam:
+
+vt100-nav|vt100 without advanced video option:\
+	:sg#1:\
+	:mb@:md@:me@:mr@:sa@:se=\E[m:so=\E[7m:ue@:us@:tc=vt100:
+vt100-nav-w|vt100-w-nav|dec vt100 132 cols 14 lines (no advanced video option):\
+	:co#132:li#14:tc=vt100-nav:
+
+vt100-s|vt100-s-top|vt100-top-s|vt100 for use with top sysline:\
+	:es:hs:\
+	:li#23:\
+	:cl=\E[2;1H\E[J:cm=\E[%i%+^A;%dH:cs=\E[%i%i%d;%dr:\
+	:ds=\E7\E[1;24r\E8:fs=\E8:ho=\E[2;1H:is=\E7\E[2;24r\E8:\
+	:ts=\E7\E[1;%dH\E[1K:tc=vt100-am:
+
+vt100-s-bot|vt100-bot-s|vt100 for use with bottom sysline:\
+	:es:hs:\
+	:li#23:\
+	:ds=\E7\E[1;24r\E8:fs=\E8:is=\E[1;23r\E[23;1H:\
+	:ts=\E7\E[24;%dH\E[1K:tc=vt100-am:
+
+vt102|dec vt102:\
+	:mi:\
+	:al=\E[L:dc=\E[P:dl=\E[M:ei=\E[4l:im=\E[4h:tc=vt100:
+vt102-w|dec vt102 in wide mode:\
+	:co#132:\
+	:r3=\E[?3h:tc=vt102:
+
+vt102-nsgr|vt102 no sgr (use if you see snowflakes after highlight changes):\
+	:me=\E[m:sa@:tc=vt102:
+
+vt125|vt125 graphics terminal:\
+	:cl=\E[H\E[2J\EPpS(E)\E\\:tc=vt100:
+
+
+vt220|vt200|dec vt220:\
+	:5i:am:bs:mi:ms:xn:xo:\
+	:co#80:it#8:li#24:vt#3:\
+	:%0=\E[29~:%1=\E[28~:*6=\E[4~:@0=\E[1~:AL=\E[%dL:\
+	:DC=\E[%dP:DL=\E[%dM:DO=\E[%dB:F1=\E[23~:F2=\E[24~:\
+	:F3=\E[25~:F4=\E[26~:F7=\E[31~:F8=\E[32~:F9=\E[33~:\
+	:FA=\E[34~:IC=\E[%d@:LE=\E[%dD:RA=\E[?7l:RI=\E[%dC:\
+	:SA=\E[?7h:UP=\E[%dA:ae=\E(B:al=\E[L:as=\E(0:bl=^G:\
+	:cb=\E[1K:cd=\E[J:ce=\E[K:cl=\E[H\E[J:cm=\E[%i%d;%dH:\
+	:cr=^M:cs=\E[%i%d;%dr:ct=\E[3g:dc=\E[P:dl=\E[M:do=^J:\
+	:eA=\E)0:ec=\E[%dX:ei=\E[4l:ho=\E[H:\
+	:if=/usr/share/tabset/vt100:im=\E[4h:\
+	:is=\E[?7h\E[>\E[?1h\E F\E[?4l:k1=\EOP:k2=\EOQ:k3=\EOR:\
+	:k4=\EOS:k6=\E[17~:k7=\E[18~:k8=\E[19~:k9=\E[20~:\
+	:k;=\E[21~:kI=\E[2~:kN=\E[6~:kP=\E[5~:kb=^H:kd=\E[B:\
+	:kh=\E[H:kl=\E[D:kr=\E[C:ku=\E[A:l1=pf1:l2=pf2:l3=pf3:\
+	:l4=pf4:le=^H:mb=\E[5m:md=\E[1m:me=\E[m:mr=\E[7m:nd=\E[C:\
+	:nw=\EE:pf=\E[4i:po=\E[5i:ps=\E[i:r1=\E[?3l:rc=\E8:sc=\E7:\
+	:se=\E[27m:sf=\ED:so=\E[7m:sr=\EM:st=\EH:ta=^I:ue=\E[24m:\
+	:up=\E[A:us=\E[4m:vb=\E[?5h\E[?5l:
+vt220-w|vt200-w|DEC vt220 in wide mode:\
+	:co#132:\
+	:r3=\E[?3h:tc=vt220:
+vt220-8bit|vt220-8|vt200-8bit|vt200-8|dec vt220/200 in 8-bit mode:\
+	:am:bs:mi:ms:xn:xo:\
+	:co#80:it#8:li#24:vt#3:\
+	:AL=\233%dL:DC=\233%dP:DL=\233%dM:DO=\233%dB:IC=\233%d@:\
+	:LE=\233%dD:RI=\233%dC:UP=\233%dA:ae=^O:al=\233L:as=^N:\
+	:bl=^G:cd=\233J:ce=\233K:cl=\233H\233J:cm=\233%i%d;%dH:\
+	:cr=^M:cs=\233%i%d;%dr:ct=\2333g:dc=\233P:dl=\233M:do=^J:\
+	:ec=\233%dX:ei=\2334l:ho=\233H:\
+	:if=/usr/share/tabset/vt100:im=\2334h:\
+	:is=\233?7h\233>\233?1h\E F\233?4l:k1=\EOP:k2=\EOQ:\
+	:k3=\EOR:k4=\EOS:k6=\23317~:k7=\23318~:k8=\23319~:\
+	:k9=\23320~:kI=\2332~:kN=\2336~:kP=\2335~:kb=^H:kd=\233B:\
+	:kh=\233H:kl=\233D:kr=\233C:ku=\233A:le=^H:mb=\2335m:\
+	:md=\2331m:me=\233m:mr=\2337m:nd=\233C:nw=\EE:rc=\E8:\
+	:sc=\E7:se=\23327m:sf=\ED:so=\2337m:sr=\EM:st=\EH:ta=^I:\
+	:ue=\23324m:up=\233A:us=\2334m:vb=\233?5h\233?5l:
+
+vt220d|DEC VT220 in vt100 mode with DEC function key labeling:\
+	:F1=\E[23~:F2=\E[24~:F3=\E[25~:F4=\E[26~:F5=\E[28~:\
+	:F6=\E[29~:F7=\E[31~:F8=\E[32~:F9=\E[33~:FA=\E[34~:k5@:\
+	:k6=\E[17~:k7=\E[18~:k8=\E[19~:k9=\E[20~:k;=\E[21~:\
+	:tc=vt220-old:
+
+vt220-nam|v200-nam|VT220 in vt100 mode with no auto margins:\
+	:am@:\
+	:rs=\E>\E[?3l\E[?4l\E[?5l\E[?7l\E[?8h:tc=vt220:
+
+vt200-js|vt220-js|dec vt200 series with jump scroll:\
+	:am:\
+	:co#80:\
+	:al=\E[L:bl=^G:cd=\E[J:ce=\E[K:cl=\E[H\E[J:cm=\E[%i%d;%dH:\
+	:cr=^M:cs=\E[%i%d;%dr:dc=\E[P:dl=\E[M:dm=:do=^J:ed=:\
+	:ei=\E[4l:ho=\E[H:im=\E[4h:\
+	:is=\E[61"p\E[H\E[?3l\E[?4l\E[?1l\E[?5l\E[?6l\E[?7h\E[?8h\E[?25h\E>\E[m:\
+	:k1=\EOP:k2=\EOQ:k3=\EOR:k4=\EOS:kb=^H:kd=\EOB:\
+	:ke=\E[?1l\E>:kl=\EOD:kr=\EOC:ks=\E[?1h\E=:ku=\EOA:le=^H:\
+	:nw=^M\ED:r1=\E>\E[?3l\E[?4l\E[?5l\E[?7h\E[?8h:rc=\E8:\
+	:rf=/usr/lib/tabset/vt100:sc=\E7:se=5\E[27m:sf=\ED:\
+	:so=5\E[7m:sr=\EM:ta=^I:ue=\E[24m:up=\E[A:us=\E[4m:
+ 
+vt320nam|v320n|DEC VT320 in vt100 emul. mode with NO AUTO WRAP mode:\
+	:am@:\
+	:rs=\E>\E[?3l\E[?4l\E[?5l\E[?7l\E[?8h:tc=vt220:
+
+vt320|vt300|dec vt320 7 bit terminal:\
+	:am:es:hs:mi:ms:xn:\
+	:co#80:li#24:ws#80:\
+	:AL=\E[%dL:DC=\E[%dP:DL=\E[%dM:DO=\E[%dB:IC=\E[%d@:\
+	:K1=\EOw:K2=\EOu:K3=\EOy:K4=\EOq:K5=\EOs:LE=\E[%dD:\
+	:RI=\E[%dC:UP=\E[%dA:ae=\E(B:al=\E[L:as=\E(0:bl=^G:cd=\E[J:\
+	:ce=\E[K:cl=\E[H\E[2J:cm=\E[%i%d;%dH:cr=^M:\
+	:cs=\E[%i%d;%dr:ct=\E[3g:dc=\E[P:dl=\E[M:do=^J:ec=\E[%dX:\
+	:ei=\E[4l:fs=\E[0$}:ho=\E[H:im=\E[4h:\
+	:is=\E>\E[?3l\E[?4l\E[5?l\E[?7h\E[?8h\E[1;24r\E[24;1H:\
+	:k1=\EOP:k2=\EOQ:k3=\EOR:k4=\EOS:k6=\E[17~:k7=\E[18~:\
+	:k8=\E[19~:k9=\E[20~:kD=\E[3~:kI=\E[2~:kN=\E[6~:kP=\E[5~:\
+	:kb=\177:kd=\EOB:ke=\E[?1l\E>:kh=\E[1~:kl=\EOD:kr=\EOC:\
+	:ks=\E[?1h\E=:ku=\EOA:le=^H:mb=\E[5m:md=\E[1m:me=\E[m:\
+	:mr=\E[7m:nd=\E[C:nw=\EE:rc=\E8:\
+	:rs=\E>\E[?3l\E[?4l\E[5?l\E[?7h\E[?8h\E[1;24r\E[24;1H:\
+	:sc=\E7:se=\E[m:sf=\ED:so=\E[7m:sr=\EM:st=\EH:ta=^I:\
+	:ts=\E[1$}\E[H\E[K:ue=\E[m:up=\E[A:us=\E[4m:ve=\E[?25h:\
+	:vi=\E[?25l:
+vt320-nam|vt300-nam|dec vt320 7 bit terminal with no am to make SAS happy:\
+	:am@:\
+	:is=\E>\E[?3l\E[?4l\E[5?l\E[?7l\E[?8h\E[1;24r\E[24;1H:\
+	:rs=\E>\E[?3l\E[?4l\E[5?l\E[?7l\E[?8h\E[1;24r\E[24;1H:\
+	:tc=vt320:
+vt320-w|vt300-w|dec vt320 wide 7 bit terminal:\
+	:co#132:ws#132:\
+	:is=\E>\E[?3h\E[?4l\E[5?l\E[?7h\E[?8h\E[1;24r\E[24;1H:\
+	:rs=\E>\E[?3h\E[?4l\E[5?l\E[?7h\E[?8h\E[1;24r\E[24;1H:\
+	:tc=vt320:
+vt320-w-nam|vt300-w-nam|dec vt320 wide 7 bit terminal with no am:\
+	:am@:\
+	:is=\E>\E[?3h\E[?4l\E[5?l\E[?7l\E[?8h\E[1;24r\E[24;1H:\
+	:rs=\E>\E[?3h\E[?4l\E[5?l\E[?7l\E[?8h\E[1;24r\E[24;1H:\
+	:tc=vt320-w:
+
+vt340|dec-vt340|vt330|dec-vt330|dec vt340 graphics terminal with 24 line page:\
+	:am:es:hs:mi:ms:xn:xo:\
+	:co#80:it#8:li#24:vt#3:\
+	:AL=\E[%dL:DC=\E[%dP:DL=\E[%dM:DO=\E[%dB:IC=\E[%d@:\
+	:LE=\E[%dD:RA=\E[?7l:RI=\E[%dC:SA=\E[?7h:UP=\E[%dA:\
+	:ac=``aaffggjjkkllmmnnooppqqrrssttuuvvwwxxyyzz{{||}}~~:\
+	:ae=^O:al=\E[L:as=^N:cd=\E[J:ce=\E[K:cl=\E[H\E[J:\
+	:cm=\E[%i%d;%dH:cr=^M:cs=\E[%i%d;%dr:ct=\E[3g:dc=\E[P:\
+	:dl=\E[M:do=^J:ds=\E[2$~\r\E[1$}\E[K\E[$}:ei=\E[4l:\
+	:fs=\E[$}:ho=\E[H:im=\E[4h:\
+	:is=\E<\E F\E>\E[?1h\E[?3l\E[?4l\E[?5l\E[?7h\E[?8h\E[1;24r\E[24;1H:\
+	:k1=\EOP:k2=\EOQ:k3=\EOR:k4=\EOS:k6=\E[17~:k7=\E[18~:\
+	:k8=\E[19~:k9=\E[20~:kb=^H:kd=\EOB:ke=\E[?1l\E>:kl=\EOD:\
+	:kr=\EOC:ks=\E[?1h\E=:ku=\EOA:l1=pf1:l2=pf2:l3=pf3:l4=pf4:\
+	:le=^H:mb=\E[5m:md=\E[1m:me=\E[m:mr=\E[7m:nd=\E[C:nw=^M\ED:\
+	:r1=\E[?3l:rc=\E8:rf=/usr/share/tabset/vt300:sc=\E7:\
+	:se=\E[27m:sf=\ED:so=\E[7m:sr=\EM:st=\EH:ta=^I:\
+	:ts=\E[2$~\E[1$}\E[1;%dH:ue=\E[24m:up=\E[A:us=\E[4m:\
+	:vb=200\E[?5h\E[?5l:ve=\E[?25h:vi=\E[?25l:vs=\E[?25h:
+
+vt400|vt400-24|dec-vt400|dec vt400 24x80 column autowrap:\
+	:am:es:hs:mi:ms:xn:xo:\
+	:co#80:it#8:li#24:vt#3:\
+	:AL=\E[%dL:DC=\E[%dP:DL=\E[%dM:DO=\E[%dB:IC=\E[%d@:\
+	:LE=\E[%dD:RA=\E[?7l:RI=\E[%dC:SA=\E[?7h:UP=\E[%dA:\
+	:ac=``aaffggjjkkllmmnnooppqqrrssttuuvvwwxxyyzz{{||}}~~:\
+	:ae=^O:al=\E[L:as=^N:cd=10\E[J:ce=4\E[K:cl=10\E[H\E[J:\
+	:cm=\E[%i%d;%dH:cr=^M:cs=\E[%i%d;%dr:ct=\E[3g:dc=\E[P:\
+	:dl=\E[M:do=^J:ds=\E[2$~\r\E[1$}\E[K\E[$}:ei=\E[4l:\
+	:fs=\E[$}:ho=\E[H:ic=\E[@:im=\E[4h:\
+	:is=\E<\E F\E>\E[?1h\E[?3l\E[?4l\E[?5l\E[?7h\E[?8h\E[1;24r\E[24;1H:\
+	:k1=\EOP:k2=\EOQ:k3=\EOR:k4=\EOS:k6=\E[17~:k7=\E[18~:\
+	:k8=\E[19~:k9=\E[20~:kb=^H:kd=\EOB:ke=\E[?1l\E>:kl=\EOD:\
+	:kr=\EOC:ks=\E[?1h\E=:ku=\EOA:l1=pf1:l2=pf2:l3=pf3:l4=pf4:\
+	:le=^H:mb=\E[5m:md=\E[1m:me=\E[m:mr=\E[7m:nd=\E[C:nw=^M\ED:\
+	:r1=\E<\E[?3l\E[!p\E[?7h:rc=\E8:\
+	:rf=/usr/share/tabset/vt300:sc=\E7:se=\E[27m:sf=\ED:\
+	:so=\E[7m:sr=\EM:st=\EH:ta=^I:ts=\E[2$~\E[1$}\E[1;%dH:\
+	:ue=\E[24m:up=\E[A:us=\E[4m:vb=200\E[?5h\E[?5l:\
+	:ve=\E[?25h:vi=\E[?25l:vs=\E[?25h:
+
+vt420|DEC VT420:\
+	:am:mi:xn:xo:\
+	:co#80:li#24:vt#3:\
+	:*6=\E[4~:@0=\E[1~:RA=\E[?7l:\
+	:S5=\E[?0;0r\E>\E[?3l\E[?4l\E[?5l\E[?7h\E[?8h:\
+	:SA=\E[?7h:\
+	:ac=``aaffggjjkkllmmnnooppqqrrssttuuvvwwxxyyzz{{||}}~~:\
+	:ae=\E(B:al=\E[L:as=\E(0:bl=^G:cd=\E[J:ce=\E[K:\
+	:cl=\E[H\E[2J:cm=\E[%i%d;%dH:cr=^M:cs=\E[%i%d;%dr:\
+	:dc=\E[P:dl=\E[M:do=\E[B:ei=\E[4l:ho=\E[H:\
+	:i2=\E[?67h\E[64;1"p:if=/usr/share/tabset/vt300:\
+	:im=\E[4h:is=\E[1;24r\E[24;1H:k1=\EOP:k2=\EOQ:k3=\EOR:\
+	:k4=\EOS:k5=\E[17~:k6=\E[18~:k7=\E[19~:k8=\E[20~:\
+	:k9=\E[21~:k;=\E[29~:kD=\E[3~:kI=\E[2~:kN=\E[6~:kP=\E[5~:\
+	:kb=^H:kd=\E[B:ke=\E>:kl=\E[D:kr=\E[C:ks=\E=:ku=\E[A:le=^H:\
+	:mb=\E[5m:md=\E[1m:me=\E[m:mr=\E[7m:nd=\E[C:\
+	:r3=\E[?67h\E[64;1"p:rc=\E8:rf=/usr/share/tabset/vt300:\
+	:..sa=\E[0%?%p6%t;1%;%?%p2%t;4%;%?%p4%t;5%;%?%p1%p3%|%t;7%;m%?%p9%t\E(0%e\E(B%;$<2>:\
+	:sc=\E7:se=\E[m:sf=\ED:so=\E[7m:sr=\EM:ta=^I:ue=\E[m:\
+	:up=\E[A:us=\E[4m:
+
+vt420pc|DEC VT420 w/PC keyboard:\
+	:@7=\E[4~:F1=\E[23~:F2=\E[24~:F3=\E[11;2~:F4=\E[12;2~:\
+	:F5=\E[13;2~:F6=\E[14;2~:F7=\E[15;2~:F8=\E[17;2~:\
+	:F9=\E[18;2~:FA=\E[19;2~:FB=\E[20;2~:FC=\E[21;2~:\
+	:FD=\E[23;2~:FE=\E[24;2~:FF=\E[23~:FG=\E[24~:FH=\E[25~:\
+	:FI=\E[26~:FJ=\E[28~:FK=\E[29~:FL=\E[31~:FM=\E[32~:\
+	:FN=\E[33~:FO=\E[34~:FP=\E[35~:FQ=\E[36~:FR=\E[23;2~:\
+	:FS=\E[24;2~:FT=\E[25;2~:FU=\E[26;2~:FV=\E[28;2~:\
+	:FW=\E[29;2~:FX=\E[31;2~:FY=\E[32;2~:FZ=\E[33;2~:\
+	:Fa=\E[34;2~:Fb=\E[35;2~:Fc=\E[36;2~:\
+	:S6=USR_TERM\:vt420pcdos\::k1=\E[11~:k2=\E[12~:\
+	:k3=\E[13~:k4=\E[14~:k5=\E[15~:k6=\E[17~:k7=\E[18~:\
+	:k8=\E[19~:k9=\E[20~:k;=\E[21~:kD=\177:kh=\E[H:\
+	:..px=\EP1;1|%?%{16}%p1%>%t%{0}%e%{21}%p1%>%t%{1}%e%{25}%p1%>%t%{2}%e%{27}%p1%>%t%{3}%e%{30}%p1%>%t%{4}%e%{5}%;%p1%+%d/%p2%s\E\\:\
+	:tc=vt420:
+
+vt420pcdos|DEC VT420 w/PC for DOS Merge:\
+	:li#25:\
+	:..S1=%?%p1%{19}%=%t\E\023\021%e%p1%{32}%<%t\E%p1%c%e%p1%{127}%=%t\E\177%e%p1%c%;:\
+	:S4=\E[?1;2r\E[34h:\
+	:S5=\E[?0;0r\E>\E[?3l\E[?4l\E[?5l\E[?7h\E[?8h:S6@:\
+	:me=\E[m:sa@:tc=vt420pc:
+
+vt420f|DEC VT420 with VT kbd; VT400 mode; F1-F5 used as Fkeys:\
+	:F1=\E[23~:F2=\E[24~:F3=\E[25~:F4=\E[26~:F5=\E[28~:\
+	:F6=\E[29~:F7=\E[31~:F8=\E[32~:F9=\E[33~:FA=\E[34~:\
+	:k1=\E[11~:k2=\E[12~:k3=\E[13~:k4=\E[14~:k5=\E[15~:\
+	:k6=\E[17~:k7=\E[18~:k8=\E[19~:k9=\E[20~:k;=\E[21~:\
+	:kD=\177:kh=\E[H:l1=\EOP:l2=\EOQ:l3=\EOR:l4=\EOS:tc=vt420:
+
+vt510|DEC VT510:\
+	:tc=vt420:
+vt510pc|DEC VT510 w/PC keyboard:\
+	:tc=vt420pc:
+vt510pcdos|DEC VT510 w/PC for DOS Merge:\
+	:tc=vt420pcdos:
+
+vt520|DEC VT520:\
+	:am:mi:xn:xo:\
+	:co#80:li#24:vt#3:\
+	:*6=\E[4~:@0=\E[1~:RA=\E[?7l:\
+	:S5=\E[?0;0r\E>\E[?3l\E[?4l\E[?5l\E[?7h\E[?8h:\
+	:SA=\E[?7h:\
+	:ac=``aaffggjjkkllmmnnooppqqrrssttuuvvwwxxyyzz{{||}}~~:\
+	:ae=\E(B:al=\E[L:as=\E(0:bl=^G:cd=\E[J:ce=\E[K:\
+	:cl=\E[H\E[2J:cm=\E[%i%d;%dH:cr=^M:cs=\E[%i%d;%dr:\
+	:dc=\E[P:dl=\E[M:do=\E[B:ei=\E[4l:ho=\E[H:\
+	:i2=\E[?67h\E[64;1"p:if=/usr/share/tabset/vt300:\
+	:im=\E[4h:is=\E[1;24r\E[24;1H:k1=\EOP:k2=\EOQ:k3=\EOR:\
+	:k4=\EOS:k5=\E[17~:k6=\E[18~:k7=\E[19~:k8=\E[20~:\
+	:k9=\E[21~:k;=\E[29~:kD=\E[3~:kI=\E[2~:kN=\E[6~:kP=\E[5~:\
+	:kb=^H:kd=\E[B:kl=\E[D:kr=\E[C:ku=\E[A:le=^H:mb=\E[5m:\
+	:md=\E[1m:me=\E[m:mr=\E[7m:nd=\E[C:\
+	:..px=\EP1;1|%?%{16}%p1%>%t%{0}%e%{21}%p1%>%t%{1}%e%{25}%p1%>%t%{2}%e%{27}%p1%>%t%{3}%e%{30}%p1%>%t%{4}%e%{5}%;%p1%+%d/%p2%s\E\\:\
+	:r3=\E[?67h\E[64;1"p:rc=\E8:rf=/usr/share/tabset/vt300:\
+	:..sa=\E[0%?%p6%t;1%;%?%p2%t;4%;%?%p4%t;5%;%?%p1%p3%|%t;7%;m%?%p9%t\E(0%e\E(B%;$<2>:\
+	:sc=\E7:se=\E[m:sf=\ED:so=\E[7m:sr=\EM:ta=^I:ue=\E[m:\
+	:up=\E[A:us=\E[4m:
+
+vt525|DEC VT525:\
+	:am:mi:xn:xo:\
+	:co#80:li#24:vt#3:\
+	:*6=\E[4~:@0=\E[1~:RA=\E[?7l:\
+	:S5=\E[?0;0r\E>\E[?3l\E[?4l\E[?5l\E[?7h\E[?8h:\
+	:SA=\E[?7h:\
+	:ac=``aaffggjjkkllmmnnooppqqrrssttuuvvwwxxyyzz{{||}}~~:\
+	:ae=\E(B:al=\E[L:as=\E(0:bl=^G:cd=\E[J:ce=\E[K:\
+	:cl=\E[H\E[2J:cm=\E[%i%d;%dH:cr=^M:cs=\E[%i%d;%dr:\
+	:dc=\E[P:dl=\E[M:do=\E[B:ei=\E[4l:ho=\E[H:\
+	:i2=\E[?67h\E[64;1"p:if=/usr/share/tabset/vt300:\
+	:im=\E[4h:is=\E[1;24r\E[24;1H:k1=\EOP:k2=\EOQ:k3=\EOR:\
+	:k4=\EOS:k5=\E[17~:k6=\E[18~:k7=\E[19~:k8=\E[20~:\
+	:k9=\E[21~:k;=\E[29~:kD=\E[3~:kI=\E[2~:kN=\E[6~:kP=\E[5~:\
+	:kb=^H:kd=\E[B:kl=\E[D:kr=\E[C:ku=\E[A:le=^H:mb=\E[5m:\
+	:md=\E[1m:me=\E[m:mr=\E[7m:nd=\E[C:\
+	:..px=\EP1;1|%?%{16}%p1%>%t%{0}%e%{21}%p1%>%t%{1}%e%{25}%p1%>%t%{2}%e%{27}%p1%>%t%{3}%e%{30}%p1%>%t%{4}%e%{5}%;%p1%+%d/%p2%s\E\\:\
+	:r3=\E[?67h\E[64;1"p:rc=\E8:rf=/usr/share/tabset/vt300:\
+	:..sa=\E[0%?%p6%t;1%;%?%p2%t;4%;%?%p4%t;5%;%?%p1%p3%|%t;7%;m%?%p9%t\E(0%e\E(B%;$<2>:\
+	:sc=\E7:se=\E[m:sf=\ED:so=\E[7m:sr=\EM:ta=^I:ue=\E[m:\
+	:up=\E[A:us=\E[4m:
+
+dec-vt100|EWAN telnet's vt100 emulation:\
+	:tc=vt100:
+
+dec-vt220|DOS tnvt200 terminal emulator:\
+	:am@:tc=vt220:
+
+z340|zstem vt340 terminal emulator 132col 42line:\
+	:li#42:\
+	:is=\E>\E[?3h\E[?4l\E[?5l\E[?7h\E[?8h\E[1;42r\E[42;1H:\
+	:rs=\E>\E[?3h\E[?4l\E[?5l\E[?7h\E[?8h\E[1;42r\E[42;1H:\
+	:tc=vt320-w:
+z340-nam|zstem vt340 terminal emulator 132col 42line (no automatic margins):\
+	:am@:\
+	:is=\E>\E[?3h\E[?4l\E[?5l\E[?7l\E[?8h\E[1;42r\E[42;1H:\
+	:rs=\E>\E[?3h\E[?4l\E[?5l\E[?7l\E[?8h\E[1;42r\E[42;1H:\
+	:tc=z340:
+
+crt|crt-vt220|CRT 2.3 emulating VT220:\
+	:ms:ut:\
+	:NC@:\
+	:st=\EH:u6=\E[%i%d;%dR:u7=\E[6n:u8=\E[?1;2c:u9=\E[c:\
+	:tc=vt220:tc=ecma+color:
+
+ms-vt100|MS telnet imitating dec vt100:\
+	:li#25:\
+	:ac=+\020,\021-\030.^Y0\333`\004a\261f\370g\361h\260i\316j\331k\277l\332m\300n\305o~p\304q\304r\304s_t\303u\264v\301w\302x\263y\363z\362{\343|\330}\234~\376:\
+	:ct@:u6=\E[%i%d;%dR:u7=\E[6n:u8=\E[?6c:u9=\E[c:tc=vt100:
+
+xterm-xfree86|xterm-new|xterm terminal emulator (XFree86):\
+	:am:km:mi:ms:xn:\
+	:co#80:it#8:li#24:\
+	:AL=\E[%dL:DC=\E[%dP:DL=\E[%dM:DO=\E[%dB:IC=\E[%d@:\
+	:K1=\EOw:K2=\EOy:K3=\EOu:K4=\EOq:K5=\EOs:LE=\E[%dD:\
+	:RI=\E[%dC:UP=\E[%dA:ae=^O:al=\E[L:as=^N:bl=^G:bt=\E[Z:\
+	:cd=\E[J:ce=\E[K:cl=\E[H\E[2J:cm=\E[%i%d;%dH:cr=^M:\
+	:cs=\E[%i%d;%dr:ct=\E[3g:dc=\E[P:dl=\E[M:do=^J:ec=\E[%dX:\
+	:ei=\E[4l:ho=\E[H:im=\E[4h:is=\E[!p\E[?3;4l\E[4l\E>:\
+	:k1=\EOP:k2=\EOQ:k3=\EOR:k4=\EOS:k5=\E[15~:k6=\E[17~:\
+	:k7=\E[18~:k8=\E[19~:k9=\E[20~:kD=\177:kI=\E[2~:kN=\E[6~:\
+	:kP=\E[5~:kb=^H:kd=\EOB:ke=\E[?1l\E>:kh=\E[1~:kl=\EOD:\
+	:kr=\EOC:ks=\E[?1h\E=:ku=\EOA:le=^H:mb=\E[5m:md=\E[1m:\
+	:me=\E[m\017:mr=\E[7m:nd=\E[C:rc=\E8:sc=\E7:se=\E[27m:\
+	:sf=^J:so=\E[7m:sr=\EM:st=\EH:ta=^I:te=\E[?1047l\E[?1048l:\
+	:ti=\E[?1048h\E[?1047h:ue=\E[24m:up=\E[A:us=\E[4m:\
+	:vb=\E[?5h\E[?5l:ve=\E[?25h:vi=\E[?25l:vs=\E[?25h:
+xterm-redhat|Red Hat xterm (backspace and delete changed):\
+	:kD=\E[3~:kb=\177:tc=xterm-xfree86:
+  
+xterm-vt220|XFree86 xterm emulating vt220:\
+	:@7=\E[4~:kD=\E[3~:kh=\E[1~:tc=xterm-xfree86:
+
+xterm-24|xterms|vs100|xterm terminal emulator (X Window System):\
+	:li#24:tc=xterm:
+xterm-65|xterm with tall window 65x80 (X Window System):\
+	:li#65:tc=xterm:
+xterm-bold|xterm with bold instead of underline (X Window System):\
+	:so=\E[7m:us=\E[1m:tc=xterm:
+xterm-mono|monochrome xterm (X Window System):\
+	:Co@:NC@:pa@:\
+	:AB@:AF@:Sb@:Sf@:op@:sa@:tc=xterm:
+xterm-color|generic "ANSI" color xterm (X Window System):\
+	:Co#8:NC@:pa#64:\
+	:AB=\E[4%dm:AF=\E[3%dm:op=\E[m:tc=xterm-r6:
+
+xterm-boldso|xterm with bold for standout (X Window System):\
+	:se=\E[m:so=\E[1m:tc=xterm:
+xterm-ic|xterm-vi|xterm with insert character instead of insert mode:\
+	:mi@:\
+	:IC=\E[%d@:ei@:ic=\E[@:im@:tc=xterm:
+xterm-r6|xterm-old|xterm X11R6 version:\
+	:am:km:mi:ms:xn:\
+	:co#80:it#8:li#24:\
+	:@7=\E[4~:AL=\E[%dL:DC=\E[%dP:DL=\E[%dM:DO=\E[%dB:\
+	:F1=\E[23~:F2=\E[24~:F3=\E[25~:F4=\E[26~:F5=\E[28~:\
+	:F6=\E[29~:F7=\E[31~:F8=\E[32~:F9=\E[33~:FA=\E[34~:\
+	:Km=\E[M:LE=\E[%dD:RI=\E[%dC:UP=\E[%dA:ae=^O:al=\E[L:as=^N:\
+	:bl=^G:cd=\E[J:ce=\E[K:cl=\E[H\E[2J:cm=\E[%i%d;%dH:cr=^M:\
+	:cs=\E[%i%d;%dr:ct=\E[3g:dc=\E[P:dl=\E[M:do=^J:eA=\E)0:\
+	:ei=\E[4l:ho=\E[H:im=\E[4h:\
+	:is=\E7\E[r\E[m\E[?7h\E[?1;3;4;6l\E[4l\E8\E>:k1=\EOP:\
+	:k2=\EOQ:k3=\EOR:k4=\EOS:k5=\E[15~:k6=\E[17~:k7=\E[18~:\
+	:k8=\E[19~:k9=\E[20~:k;=\E[21~:kD=\177:kI=\E[2~:kN=\E[6~:\
+	:kP=\E[5~:kb=^H:kd=\EOB:ke=\E[?1l\E>:kh=\E[1~:kl=\EOD:\
+	:kr=\EOC:ks=\E[?1h\E=:ku=\EOA:le=^H:mb@:md=\E[1m:me=\E[m:\
+	:ml=\El:mr=\E[7m:mu=\Em:nd=\E[C:rc=\E8:\
+	:rs=\E7\E[r\E[m\E[?7h\E[?1;3;4;6l\E[4l\E8\E>:sc=\E7:\
+	:se=\E[m:sf=^J:so=\E[7m:sr=\EM:ta=^I:te=\E[2J\E[?47l\E8:\
+	:ti=\E7\E[?47h:u6=\E[%i%d;%dR:u7=\E[6n:u8=\E[?1;2c:\
+	:u9=\E[c:ue=\E[m:up=\E[A:us=\E[4m:
+xterm-r5|xterm R5 version:\
+	:am:km:ms:xn:\
+	:co#80:it#8:li#24:\
+	:@7=\E[4~:AL=\E[%dL:DC=\E[%dP:DL=\E[%dM:DO=\E[%dB:\
+	:F1=\E[23~:F2=\E[24~:IC=\E[%d@:LE=\E[%dD:RI=\E[%dC:\
+	:UP=\E[%dA:al=\E[L:bl=^G:cd=\E[J:ce=\E[K:cl=\E[H\E[2J:\
+	:cm=\E[%i%d;%dH:cr=^M:cs=\E[%i%d;%dr:ct=\E[3g:dc=\E[P:\
+	:dl=\E[M:do=^J:ei=\E[4l:ho=\E[H:ic=\E[@:im=\E[4h:k0=\EOq:\
+	:k1=\E[11~:k2=\E[12~:k3=\E[13~:k4=\E[14~:k5=\E[15~:\
+	:k6=\E[17~:k7=\E[18~:k8=\E[19~:k9=\E[20~:k;=\E[21~:\
+	:kA=\E[30~:kD=\177:kE=\E[8~:kI=\E[2~:kL=\E[31~:kN=\E[6~:\
+	:kP=\E[5~:kb=^H:kd=\EOB:ke=\E[?1l\E>:kh=\E[1~:kl=\EOD:\
+	:kr=\EOC:ks=\E[?1h\E=:ku=\EOA:le=^H:mb@:md=\E[1m:me=\E[m:\
+	:mr=\E[7m:nd=\E[C:rc=\E8:\
+	:rs=\E>\E[?1;3;4;5;6l\E[4l\E[?7h\E[m\E[r\E[2J\E[H:\
+	:..sa=\E[%?%p1%t;7%;%?%p2%t;4%;%?%p3%t;7%;%?%p4%t;5%;%?%p6%t;1%;m:\
+	:sc=\E7:se=\E[m:sf=^J:so=\E[7m:sr=\EM:st=\EH:ta=^I:ue=\E[m:\
+	:up=\E[A:us=\E[4m:
+xterm|X11 terminal emulator:\
+	:tc=xterm-redhat:
+#     use=xterm-xfree86,
+#     use=xterm-r6,
+kterm|kterm kanji terminal emulator (X window system):\
+	:es:hs:\
+	:Km=\E[M:\
+	:ac=++,,--..00II``aaffgghhjjkkllmmnnooppqqrrssttuuvvwwxxyyzz{{||}}~~:\
+	:ae=\E(B:as=\E(0:cs=\E[%i%d;%dr:ds=\E[?H:eA=:fs=\E[?F:\
+	:rc=\E8:sc=\E7:ts=\E[?E\E[?%i%dT:tc=xterm-r6:\
+	:tc=ecma+color:
+kterm-color|kterm-co|kterm with ANSI colors:\
+	:NC@:tc=kterm:tc=ecma+color:
+xterm-nic|xterm with ich/ich1 suppressed for non-curses programs:\
+	:IC@:ei=:ic@:im=:tc=xterm:
+# From: Mark Sheppard <kimble@mistral.co.uk>, 4 May 1996 
+xterm1|xterm terminal emulator ignoring the alternate screen buffer:\
+	:te@:ti@:tc=xterm:
+
+color_xterm|cx|cx100|color_xterm color terminal emulator for X:\
+	:am:bs:km:mi:ms:xn:\
+	:NC@:co#80:it#8:li#65:\
+	:@7=\E[8~:@8=\EOM:AL=\E[%dL:DC=\E[%dP:DL=\E[%dM:DO=\E[%dB:\
+	:F1=\E[23~:F2=\E[24~:IC=\E[%d@:K1=\EOw:K2=\EOu:K3=\EOy:\
+	:K4=\EOq:K5=\EOs:Km=\E[M:LE=\E[%dD:RA=\E[?7l:RI=\E[%dC:\
+	:SA=\E[?7h:UP=\E[%dA:\
+	:ac=``aaffggjjkkllmmnnooppqqrrssttuuvvwwxxyyzz{{||}}~~:\
+	:ae=^O:al=\E[L:as=^N:bl=^G:cb=\E[1K:cd=\E[J:ce=\E[K:\
+	:cl=\E[H\E[2J:cm=\E[%i%d;%dH:cr=^M:cs=\E[%i%d;%dr:\
+	:dc=\E[P:dl=\E[M:do=^J:eA=\E(B\E)0:ei=\E[4l:ho=\E[H:\
+	:i1=\E[r\E[m\E[?7h\E[?4;6l\E[4l:im=\E[4h:k1=\E[11~:\
+	:k2=\E[12~:k3=\E[13~:k4=\E[14~:k5=\E[15~:k6=\E[17~:\
+	:k7=\E[18~:k8=\E[19~:k9=\E[20~:k;=\E[21~:kI=\E[2~:\
+	:kN=\E[6~:kP=\E[5~:kb=^H:kd=\EOB:kh=\E[7~:kl=\EOD:kr=\EOC:\
+	:ku=\EOA:le=^H:md=\E[1m:me=\E[m:mr=\E[7m:nd=\E[C:\
+	:r1=\E(B\017\E[r\E[m\E[2J\E[H\E[?7h\E[?1;3;4;6l\E[4l\E<:\
+	:rc=\E8:sc=\E7:se=\E[27m:sf=^J:so=\E[7m:sr=\EM:ta=^I:\
+	:te=\E>\E[?41;1r:ti=\E[?1;41s\E[?1;41h\E=:ue=\E[24m:\
+	:up=\E[A:us=\E[4m:tc=ecma+color:
+
+gnome|Gnome terminal:\
+	:ut:\
+	:k1=\EOP:k2=\EOQ:k3=\EOR:k4=\EOS:kD=\177:tc=xterm-color:
+
+kvt|KDE terminal:\
+	:km@:ut:\
+	:@7=\E[F:kD=\177:kh=\E[H:tc=xterm-color:
+
+rxvt-basic|rxvt terminal base (X Window System):\
+	:am:bs:eo:km:mi:ms:xn:xo:\
+	:co#80:it#8:li#24:\
+	:AL=\E[%dL:DC=\E[%dP:DL=\E[%dM:DO=\E[%dB:IC=\E[%d@:\
+	:K1=\EOw:K2=\EOu:K3=\EOy:K4=\EOq:K5=\EOs:LE=\E[%dD:\
+	:RI=\E[%dC:UP=\E[%dA:ae=^O:al=\E[L:as=^N:bl=^G:cd=\E[J:\
+	:ce=\E[K:cl=\E[H\E[2J:cm=\E[%i%d;%dH:cr=^M:\
+	:cs=\E[%i%d;%dr:ct=\E[3g:dc=\E[P:dl=\E[M:do=^J:ei=\E[4l:\
+	:ho=\E[H:i1=\E[?47l\E=\E[?1l:ic=\E[@:im=\E[4h:\
+	:is=\E[r\E[m\E[2J\E[H\E[?7h\E[?1;3;4;6l\E[4l:\
+	:k1=\E[11~:k2=\E[12~:k3=\E[13~:k4=\E[14~:k5=\E[15~:\
+	:k6=\E[17~:k7=\E[18~:k8=\E[19~:k9=\E[20~:kD=\E[3~:\
+	:kI=\E[2~:kN=\E[6~:kP=\E[5~:kb=\177:kd=\E[B:ke=\E>:\
+	:kh=\E[7~:kl=\E[D:kr=\E[C:ks=\E=:ku=\E[A:le=^H:mb=\E[5m:\
+	:md=\E[1m:me=\E[0m\017:mr=\E[7m:nd=\E[C:rc=\E8:sc=\E7:\
+	:se=\E[27m:sf=^J:so=\E[7m:sr=\EM:st=\EH:ta=^I:\
+	:te=\E[2J\E[?47l\E8:ti=\E7\E[?47h:ue=\E[24m:up=\E[A:\
+	:us=\E[4m:vb=\E[?5h\E[?5l:ve=\E[?25h:vi=\E[?25l:
+rxvt|rxvt terminal emulator (X Window System):\
+	:NC@:\
+	:me=\E[m\017:tc=rxvt-basic:tc=ecma+color:
+
+
+hpterm|X-hpterm|hp X11 terminal emulator:\
+	:am:da:db:mi:xs:\
+	:Nl#8:co#80:lh#2:li#24:lm#0:lw#8:pb#9600:sg#0:ug#0:\
+	:LF=\E&j@:LO=\E&jB:ac=:ae=^O:al=\EL:as=^N:bl=^G:bt=\Ei:\
+	:cd=\EJ:ce=\EK:ch=\E&a%dC:cl=\E&a0y0C\EJ:cm=\E&a%dy%dC:\
+	:cr=^M:ct=\E3:cv=\E&a%dY:dc=\EP:dl=\EM:do=\EB:ei=\ER:im=\EQ:\
+	:k1=\Ep:k2=\Eq:k3=\Er:k4=\Es:k5=\Et:k6=\Eu:k7=\Ev:k8=\Ew:\
+	:kA=\EL:kC=\EJ:kD=\EP:kE=\EK:kF=\ES:kH=\EF:kI=\EQ:kL=\EM:\
+	:kM=\ER:kN=\EU:kP=\EV:kR=\ET:kS=\EJ:kT=\E1:ka=\E3:kb=^H:\
+	:kd=\EB:ke=\E&s0A:kh=\Eh:kl=\ED:kr=\EC:ks=\E&s1A:kt=\E2:\
+	:ku=\EA:le=^H:md=\E&dB:me=\E&d@:mh=\E&dH:ml=\El:mr=\E&dB:\
+	:mu=\Em:nd=\EC:..pk=\E&f%p1%dk%p2%l%dL%p2%s:\
+	:..pl=\E&f1a%p1%dk%p2%l%dL%p2%s:\
+	:..pn=\E&f%p1%dk%p2%l%dd0L%p2%s:\
+	:..px=\E&f2a%p1%dk%p2%l%dL%p2%s:\
+	:..sa=\E&d%?%p7%t%{115}%c%;%p1%p3%|%p6%|%{2}%*%p2%{4}%*%+%p4%+%p5%{8}%*%+%{64}%+%c%?%p9%t%'\016'%c%e%'\017'%c%;:\
+	:se=\E&d@:sf=^J:so=\E&dJ:sr=\ET:st=\E1:ta=^I:ue=\E&d@:\
+	:up=\EA:us=\E&dD:
+
+xterm-sun|xterm with sunFunctionKeys true:\
+	:%1=\E[196z:&8=\E[195z:@0=\E[200z:@5=\E[197z:@7=\E[220z:\
+	:F1=\E[192z:F2=\E[193z:F3=\E[194z:F4=\E[195z:F5=\E[196z:\
+	:F7=\E[198z:F8=\E[199z:F9=\E[200z:FA=\E[201z:FL=\E[208z:\
+	:FM=\E[209z:FN=\E[210z:FO=\E[211z:FP=\E[212z:FQ=\E[213z:\
+	:FS=\E[215z:FU=\E[217z:FW=\E[219z:FY=\E[221z:K2=\E[218z:\
+	:k1=\E[224z:k2=\E[225z:k3=\E[226z:k4=\E[227z:k5=\E[228z:\
+	:k6=\E[229z:k7=\E[230z:k8=\E[231z:k9=\E[232z:k;=\E[233z:\
+	:kI=\E[2z:kN=\E[222z:kP=\E[216z:kh=\E[214z:tc=xterm:
+xterms-sun|small (80x24) xterm with sunFunctionKeys true:\
+	:co#80:li#24:tc=xterm-sun:
+
+emu|emu native mode:\
+	:mi:ms:xo:\
+	:Co#15:co#80:it#8:li#24:pa#64:vt#200:\
+	:*6=\Esel:@0=\Efind:@8=^M:AB=\Es%i%d;:AF=\Er%i%d;:\
+	:AL=\EQ%d;:DC=\EI%d;:DL=\ER%d;:DO=\Ep%d;:F1=\EF11:\
+	:F2=\EF12:F3=\EF13:F4=\EF14:F5=\EF15:F6=\EF16:F7=\EF17:\
+	:F8=\EF18:F9=\EF19:FA=\EF20:LE=\Eq-%d;:RI=\Eq%d;:\
+	:UP=\Ep-%d;:\
+	:ac=61a\202f\260g2j\213k\214l\215m\216n\217o\220q\222s\224t\225u\226v\227w\230x\231~\244:\
+	:ae=\0:al=\EQ1;:as=\0:bl=^G:cb=\EL:cd=\EN:ce=\EK:\
+	:cl=\EP\EE0;0;:cm=\EE%d;%d;:cr=^M:cs=\Ek%d;%d;:ct=\Ej:\
+	:dc=\EI1;:dl=\ER1;:do=\EB:eA=\0:ec=\Ej%d;:ei=\EX:\
+	:ho=\EE0;0;:im=\EY:is=\ES\Er0;\Es0;:k0=\EF00:k1=\EF01:\
+	:k2=\EF02:k3=\EF03:k4=\EF04:k5=\EF05:k6=\EF06:k7=\EF07:\
+	:k8=\EF08:k9=\EF09:k;=\EF10:kD=\177:kI=\Eins:kN=\Enext:\
+	:kP=\Eprior:kb=^H:kd=\EB:kl=\EC:kr=\ED:ku=\EA:le=^H:\
+	:mb=\ES\EW:md=\ES\EU:me=\ES:mr=\ES\ET:nd=\ED:\
+	:oc=\Es0;\Er0;:rs=\ES\Es0;\Er0;:se=\ES:sf=\EG:so=\ES\ET:\
+	:sr=\EF:st=\Eh:ta=^I:ue=\ES:up=\EA:us=\ES\EV:ve=\Ea:vi=\EZ:
+
+pty|4bsd pseudo teletype:\
+	:cm=\EG%+ %+ :se=\Eb$:so=\Ea$:ue=\Eb!:us=\Ea!:tc=cbunix:
+
+screen|VT 100/ANSI X3.64 virtual terminal:\
+	:am:bs:km:mi:ms:pt:xn:\
+	:Co#8:co#80:it#8:li#24:pa#64:\
+	:@7=\E[4~:AL=\E[%dL:DC=\E[%dP:DL=\E[%dM:DO=\E[%dB:\
+	:F1=\E[23~:F2=\E[24~:IC=\E[%d@:Km=\E[M:LE=\E[%dD:\
+	:RI=\E[%dC:UP=\E[%dA:\
+	:ac=++,,--..00``aaffgghhiijjkkllmmnnooppqqrrssttuuvvwwxxyyzz{{||}}~~:\
+	:ae=^O:al=\E[L:as=^N:bl=^G:bt=\E[Z:cb=\E[1K:cd=\E[J:ce=\E[K:\
+	:cl=\E[H\E[J:cm=\E[%i%d;%dH:cr=^M:cs=\E[%i%d;%dr:\
+	:ct=\E[3g:dc=\E[P:dl=\E[M:do=^J:eA=\E(B\E)0:ei=\E[4l:\
+	:ho=\E[H:im=\E[4h:is=\E)0:k1=\EOP:k2=\EOQ:k3=\EOR:k4=\EOS:\
+	:k5=\E[15~:k6=\E[17~:k7=\E[18~:k8=\E[19~:k9=\E[20~:\
+	:k;=\E[21~:kD=\E[3~:kI=\E[2~:kN=\E[6~:kP=\E[5~:kb=^H:\
+	:kd=\EOB:ke=\E[?1l\E>:kh=\E[1~:kl=\EOD:kr=\EOC:\
+	:ks=\E[?1h\E=:ku=\EOA:le=^H:mb=\E[5m:md=\E[1m:me=\E[m:\
+	:mr=\E[7m:nd=\E[C:nw=\EE:rc=\E8:rs=\Ec:sc=\E7:se=\E[23m:\
+	:sf=^J:so=\E[3m:sr=\EM:st=\EH:ta=^I:ue=\E[24m:up=\EM:\
+	:us=\E[4m:vb=\Eg:ve=\E[34h\E[?25h:vi=\E[?25l:vs=\E[34l:\
+	:tc=ecma+color:
+
+screen.xterm-xfree86|screen customized for XFree86 xterm:\
+	:bw:ut@:\
+	:#3@:%c@:%e@:@7=\E[4~:kh=\E[1~:mk@:ml@:mu@:\
+	:..sa=\E[0%?%p6%t;1%;%?%p2%t;4%;%?%p1%p3%|%t;7%;%?%p4%t;5%;m%?%p9%t\016%e\017%;:\
+	:tc=xterm-xfree86:
+screen.xterm-r6|screen customized for X11R6 xterm:\
+	:bw:tc=xterm-r6:
+screen.teraterm|disable ncv in teraterm:\
+	:NC#127:tc=screen:
+
+screen-w|VT 100/ANSI X3.64 virtual terminal with 132 cols:\
+	:co#132:tc=screen:
+
+screen2|old VT 100/ANSI X3.64 virtual terminal:\
+	:co#80:it#8:li#24:\
+	:AL=\E[%dL:DC=\E[%dP:DL=\E[%dM:DO=\E[%dB:IC=\E[%d@:\
+	:LE=\E[%dD:RI=\E[%dC:UP=\E[%dA:al=\E[L:bt=\E[Z:cd=\E[J:\
+	:ce=\E[K:cl=\E[2J\E[H:cm=\E[%i%d;%dH:cr=^M:ct=\E[3g:\
+	:dc=\E[P:dl=\E[M:do=\E[B:ei=\E[4l:ic=:im=\E[4h:k0=\E~:\
+	:k1=\ES:k2=\ET:k3=\EU:k4=\EV:k5=\EW:k6=\EP:k7=\EQ:k8=\ER:\
+	:k9=\E0I:kb=^H:kd=\EB:kh=\EH:kl=\ED:kr=\EC:ku=\EA:le=^H:\
+	:me=\E[m:nd=\E[C:nw=^M^J:r1=\Ec:rc=\E8:sc=\E7:se=\E[23m:\
+	:sf=^J:so=\E[3m:sr=\EM:st=\EH:ta=^I:ue=\E[24m:up=\E[A:\
+	:us=\E[4m:
+screen3|older VT 100/ANSI X3.64 virtual terminal:\
+	:km:mi:ms:\
+	:co#80:it#8:li#24:\
+	:AL=\E[%dL:DC=\E[%dP:DL=\E[%dM:DO=\E[%dB:IC=\E[%d@:\
+	:LE=\E[%dD:RI=\E[%dC:UP=\E[%dA:al=\E[L:bl=^G:bt=\E[Z:\
+	:cd=\E[J:ce=\E[K:cl=\E[H\E[J:cm=\E[%i%d;%dH:cr=^M:\
+	:cs=\E[%i%d;%dr:ct=\E[3g:dc=\E[P:dl=\E[M:do=^J:ei=\E[4l:\
+	:ho=\E[H:im=\E[4h:is=\E)0:k1=\EOP:k2=\EOQ:k3=\EOR:k4=\EOS:\
+	:kb=^H:kd=\EOB:ke=\E>:kl=\EOD:kr=\EOC:ks=\E=:ku=\EOA:le=^H:\
+	:mb=\E[5m:md=\E[1m:me=\E[m:mr=\E[7m:nd=\E[C:nw=\EE:r1=\Ec:\
+	:rc=\E8:sc=\E7:se=\E[23m:sf=^J:so=\E[3m:sr=\EM:st=\EH:ta=^I:\
+	:ue=\E[24m:up=\EM:us=\E[4m:
+
+pilot|tgtelnet|Top Gun Telnet on the Palm Pilot Professional:\
+	:am:bs:xn:\
+	:co#39:li#16:\
+	:bl=^G:cl=\Ec:cm=\Em%+ %+ :cr=^M:do=^J:ho=\Em\s\s:kN=^L:\
+	:kP=^K:kb=^H:kd=^J:kl=^H:le=^H:nw=\Em~\s:se=\EB:sf=^J:so=\Eb:\
+	:ta=^I:
+
+pccons|pcconsole|ANSI (mostly) Alpha PC console terminal emulation:\
+	:am:xo:\
+	:co#80:li#25:\
+	:al=\E[L:bl=^G:ce=\E[K:cl=\E[H\E[2J:cm=\E[%i%d;%dH:cr=^M:\
+	:dc=\E[P:dl=\E[M:do=^J:ei=:ho=\E[H:ic=\E[@:im=:kb=^H:kd=\E[B:\
+	:kh=\E[H:kl=\E[D:kr=\E[C:ku=\E[A:le=^H:me=\E[m:mr=\E[7m:\
+	:nd=\E[C:nw=^M^J:se=\E[m:so=\E[7m:ta=^I:up=\E[A:
+
+
+oldsun|Sun Microsystems Workstation console:\
+	:am:bs:km:mi:ms:\
+	:co#80:it#8:li#34:\
+	:AL=\E[%dL:DC=\E[%dP:DL=\E[%dM:IC=\E[%d@:al=\E[L:bl=^G:\
+	:cd=\E[J:ce=\E[K:cl=^L:cm=\E[%i%d;%dH:cr=^M:dc=\E[P:\
+	:dl=\E[M:do=\E[B:ei=:i1=\E[1r:ic=\E[@:im=:k1=\EOP:k2=\EOQ:\
+	:k3=\EOR:k4=\EOS:kd=\E[B:kh=\E[H:kl=\E[D:kr=\E[C:ku=\E[A:\
+	:le=^H:me=\E[m:nd=\E[C:se=\E[m:sf=^J:so=\E[7m:ta=^I:up=\E[A:
+sun-il|Sun Microsystems console with working insert-line:\
+	:am:km:ms:\
+	:co#80:li#34:\
+	:%7=\E[194z:&5=\E[193z:&8=\E[195z:@7=\E[220z:AL=\E[%dL:\
+	:DC=\E[%dP:DL=\E[%dM:F1=\E[234z:F2=\E[235z:IC=\E[%d@:\
+	:K2=\E[218z:al=\E[L:bl=^G:cd=\E[J:ce=\E[K:cl=^L:\
+	:cm=\E[%i%d;%dH:cr=^M:dc=\E[P:dl=\E[M:do=^J:ei=:ic=\E[@:im=:\
+	:k1=\E[224z:k2=\E[225z:k3=\E[226z:k4=\E[227z:k5=\E[228z:\
+	:k6=\E[229z:k7=\E[230z:k8=\E[231z:k9=\E[232z:k;=\E[233z:\
+	:kD=\177:kN=\E[222z:kP=\E[216z:kb=^H:kd=\E[B:kh=\E[214z:\
+	:kl=\E[D:kr=\E[C:ku=\E[A:le=^H:md@:me=\E[m:mr=\E[7m:nd=\E[C:\
+	:rs=\E[s:\
+	:..sa=\E[0%?%p6%t;1%;%?%p2%t;4%;%?%p1%p3%|%t;7%;m:\
+	:se=\E[m:sf=^J:so=\E[7m:ta=^I:u8=\E[1t:u9=\E[11t:ue@:\
+	:up=\E[A:us@:
+sun-cgsix|sun-ss5|Sun SparcStation 5 console:\
+	:AL@:al@:tc=sun-il:
+sun|sun1|sun2|Sun Microsystems Inc. workstation console:\
+	:tc=sun-il:
+
+sun-s|Sun Microsystems Workstation window with status line:\
+	:hs:\
+	:ds=\E]l\E\\:fs=\E\\:ts=\E]l:tc=sun:
+sun-e-s|sun-s-e|Sun Microsystems Workstation with status hacked for emacs:\
+	:hs:\
+	:ds=\E]l\E\\:fs=\E\\:ts=\E]l:tc=sun-e:
+sun-48|Sun 48-line window:\
+	:co#80:li#48:tc=sun:
+sun-34|Sun 34-line window:\
+	:co#80:li#34:tc=sun:
+sun-24|Sun 24-line window:\
+	:co#80:li#24:tc=sun:
+sun-17|Sun 17-line window:\
+	:co#80:li#17:tc=sun:
+sun-12|Sun 12-line window:\
+	:co#80:li#12:tc=sun:
+sun-1|Sun 1-line window for sysline:\
+	:es:hs:\
+	:co#80:li#1:\
+	:ds=^L:fs=\E[K:ts=^M:tc=sun:
+sun-e|sun-nic|sune|Sun Microsystems Workstation without insert character:\
+	:ei@:ic@:im@:tc=sun:
+sun-c|sun-cmd|Sun Microsystems Workstation console with scrollable history:\
+	:li#35:\
+	:te=\E[>4h:ti=\E[>4l:tc=sun:
+
+wsiris|iris40|iris emulating a 40 line visual 50 (approximately):\
+	:am:bs:nc:pt:\
+	:co#80:it#8:kn#3:li#40:\
+	:al=\EL:bl=^G:cd=\EJ:ce=\EK:cl=\Ev:cm=\EY%+ %+ :dl=\EM:\
+	:do=\EB:ho=\EH:is=\E7B0\E7F7\E7C2\E7R3:k0=\E0:k1=\E1:\
+	:k2=\E2:k3=\E3:k4=\E4:k5=\E5:k6=\E6:k7=\E7:k8=\E8:k9=\E9:\
+	:kd=\EB:kl=\ED:kr=\EC:ku=\EA:le=^H:me=\E7F7:mh=\E7F2:nd=\EC:\
+	:nl=\EB:se=\E0@:sf=^J:so=\E9P:sr=\EI:ta=^I:ue=\E7R3\E0@:\
+	:up=\EA:us=\E7R2\E9P:vb=\E7F4\E7B1\013\E7F7\E7B0:ve=\E>:\
+	:vs=\E;:
+
+cygwin|ansi emulation for Cygwin:\
+	:am:eo:in:ms:xo:\
+	:Co#8:NC#3:co#80:it#8:li#25:pa#64:\
+	:&7=^Z:@7=\E[4~:AB=\E[4%dm:AF=\E[3%dm:AL=\E[%dL:DC=\E[%dP:\
+	:DL=\E[%dM:F1=\E[23~:F2=\E[24~:F3=\E[25~:F4=\E[26~:\
+	:F5=\E[28~:F6=\E[29~:F7=\E[31~:F8=\E[32~:F9=\E[33~:\
+	:FA=\E[34~:IC=\E[%d@:S2=\E[11m:S3=\E[10m:al=\E[L:bl=^G:\
+	:cb=\E[1K:cd=\E[J:ce=\E[K:ch=\E[%i%dG:cl=\E[H\E[J:\
+	:cm=\E[%i%d;%dH:cr=^M:cv=\E[%i%dd:dc=\E[P:dl=\E[M:do=\E[B:\
+	:ei=\E[4l:ho=\E[H:ic=\E[@:im=\E[4h:k1=\E[[A:k2=\E[[B:\
+	:k3=\E[[C:k4=\E[[D:k5=\E[[E:k6=\E[17~:k7=\E[18~:k8=\E[19~:\
+	:k9=\E[20~:k;=\E[21~:kD=\E[3~:kI=\E[2~:kN=\E[6~:kP=\E[5~:\
+	:kb=^H:kd=\E[B:kh=\E[1~:kl=\E[D:kr=\E[C:ku=\E[A:le=^H:\
+	:md=\E[1m:me=\E[0;10m:mk=\E[8m:mr=\E[7m:nd=\E[C:nw=^M^J:\
+	:op=\E[39;49m:r1=\Ec\E]R:rc=\E8:sc=\E7:se=\E[27m:sf=^J:\
+	:so=\E[7m:sr=\EM:st=\EH:ta=^I:u6=\E[%i%d;%dR:u7=\E[6n:\
+	:u9=\E[c:ue=\E[24m:up=\E[A:us=\E[4m:
+
+ansi-nt|psx_ansi|Microsoft Windows NT console POSIX ANSI mode:\
+	:am:bw:ms:\
+	:co#80:it#8:li#25:\
+	:bl=^G:cd=\E[J:ce=\E[K:cl=\E[2J:cm=\E[%i%d;%dH:cr=^M:do=^J:\
+	:ho=\E[H:kb=^H:kd=\E[V:kl=\E[D:kr=\E[C:ku=\E[A:le=^H:\
+	:me=\E[0m:mr=\E[7m:nd=\E[C:nw=\r\E[S:rc=\E[u:sc=\E[s:\
+	:se=\E[m:sf=\E[S:so=\E[7m:sr=\E[T:ta=^I:up=\E[A:
+
+hpgeneric|hp|hewlett-packard generic terminal:\
+	:am:bs:da:db:mi:pt:xs:\
+	:co#80:li#24:lm#0:vt#6:\
+	:al=\EL:bl=^G:cd=\EJ:ce=\EK:ch=\E&a%dC:cl=\EH\EJ:\
+	:cm=\E&a%r%dc%dY:cr=^M:ct=\E3:cv=\E&a%dY:dc=\EP:dl=\EM:\
+	:do=^J:ei=\ER:im=\EQ:kB=\Ei:kb=^H:le=^H:me=\E&d@:nd=\EC:\
+	:se=\E&d@:sf=^J:so=\E&dJ:st=\E1:ta=^I:ue=\E&d@:up=\EA:\
+	:us=\E&dD:
+
