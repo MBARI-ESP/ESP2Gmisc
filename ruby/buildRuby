@@ -1,0 +1,29 @@
+#!/bin/bash
+#Build ruby and core utilities
+coreDirs='ruby-1.6.8 mbarilib termios'
+[ -n "$1" ] && target=$1
+if [ -n "$target" ]; then
+  for d in $coreDirs; do
+    echo "Making $target in $d:"
+    cd $d; make $target; cd ..
+  done
+fi
+cd ruby-1.6.8
+if [ ! -r Makefile ]; then
+  CFLAGS=-O2 CXXFLAGS=-O2 configure
+fi
+cd ..
+for d in $coreDirs; do
+  echo "Making $d:"
+  cd $d
+  if [ ! -r Makefile ]; then
+    ../ruby-1.6.8/miniruby extconf.rb
+  fi
+  make
+  cd ..
+done
+
+ruby=$PWD
+cd $HOME
+[ -f .irbrc ] && mv .irbrc .irbrc.save
+cp $ruby/irbrc .irbrc
