@@ -29,7 +29,7 @@
 #   With a version of irb.rb modified to store the last backtrace,
 #   the following features are available at the irb prompt:
 #
-#     list|edit|view|reload  Module|Method|Integer|Symbol|Exception|String
+#     list|edit|view|reload Module|Method|Integer|Symbol|Exception|String|Thread
 #
 #   Module operates on the list of files that comprise the Module
 #   Method operates on the text of the Method
@@ -38,6 +38,7 @@
 #   Exception operates on the source where the exception occured
 #   String fn:nnn operates on file "fn" at line nnn
 #   no argument is equivalent to backtrace level 0
+#   Thread operates on that thread's most recent exception
 #
 ############################################################################
 
@@ -212,13 +213,8 @@ class SourceRef   #combines source file name and line number
   end #module SourceRef::Code
 
   
-  def self.lastErr (err=IRB.CurrentContext.exception)
-  #the root cause of the last exception recorded by IRB
-    err.last.rootCause
-  end
-  
   def self.doMethod (m, *args)
-    src = args.length==0 ? SourceRef.lastErr : args.shift
+    src = args.length==0 ? IRB.CurrentContext.thread.lastErr : args.shift
     #convert src to an appropriate SourceRef by whatever means possible
     #Modified irb.rb saves last back_trace & exception in IRB.conf
     case src
@@ -227,7 +223,7 @@ class SourceRef   #combines source file name and line number
         return srcs
       when Integer, Symbol
         #assume parameter is a backtrace level or method name
-        srcFromTrace = SourceRef.lastErr.to_srcRef src
+        srcFromTrace = IRB.CurrentContext.thread.lastErr.to_srcRef src
         src = srcFromTrace if srcFromTrace
       when Thread
         src = src.exception.last.rootCause
