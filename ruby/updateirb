@@ -1,7 +1,0 @@
-#!/bin/sh
-# update irb and irbtools in ruby installation
-#  if supplied, 1st arg is the top directory of the installation to be updated
-prefix=$1
-(cd irb-0.9-02.09.03; ./instirb.rb $prefix)
-(cd irbtools-0.9; ./inst-irbtools.rb $prefix)
-rm -rf `find $prefix -name CVS`
