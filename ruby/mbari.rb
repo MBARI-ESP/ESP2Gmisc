@@ -56,3 +56,11 @@ class Class  #create an uninitialized class instance
     Marshal.load "\004\006o:"+(class_name.length+5).chr+class_name+"\000"
   end
 end
+
+class Struct
+  def with hash
+  #assign fields of struct specified in given hash(-like) object
+    hash.each {|fieldName, value| self[fieldName]=value }
+  end
+end
+
