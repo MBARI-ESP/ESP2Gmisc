@@ -1,0 +1,6 @@
+#!/bin/sh
+# configure ruby 1.6.8 build for arm-linux -- 2/22/03 brent@mbari.org
+# ac_cv_func_getrlimit=no
+ac_cv_func_getpgrp_void=yes ac_cv_func_setpgrp_void=yes \
+CFLAGS=-O2 CXXFLAGS=-O2 CC=arm-linux-gcc \
+configure arm-unknown-linux --build=i686-pc-linux
