@@ -17,7 +17,6 @@ for d in $toolDirs; do
   cd ..
 done
 
-ruby=$PWD
 cd $HOME
 [ -f .irbrc ] && mv .irbrc .irbrc.save
 cp $top/irbrc .irbrc
