@@ -140,7 +140,7 @@ class SourceRef   #combines source file name and line number
   end
   
 
-  def SourceRef.find_in_back_trace (trace, symbol)
+  def self.find_in_back_trace (trace, symbol)
   # return first element in trace containing symbol
   # returns nil if no such stack level found
     for msg in trace
@@ -152,11 +152,11 @@ class SourceRef   #combines source file name and line number
     return nil
   end
    
-  def SourceRef.from_back_trace (trace, level=0)
+  def self.from_back_trace (trace, level=0)
   # return sourceref at level in backtace
   #  or return level if no such level found
     traceLvl=level.kind_of?(Symbol) ?
-                SourceRef.find_in_back_trace (trace, level) : trace[level]
+                find_in_back_trace (trace, level) : trace[level]
     return nil if traceLvl.nil?
     possibleIRBprefix, traceLvl = traceLvl.split(' ', 3)
     traceLvl = possibleIRBprefix unless possibleIRBprefix == "from"
@@ -179,14 +179,17 @@ class SourceRef   #combines source file name and line number
   end #module SourceRef::Code
 
   
+  def self.lastErr
+  #the root cause of the last exception recorded by IRB
+    IRB.CurrentContext.exception.last.rootCause
+  end
+  
   module CommandBundle   #add convenient commands for viewing source code
     private
     
     Code::OPS.each {|m|
       define_method (m) { |*args|
-        lastErr = IRB.CurrentContext.exception.last
-        lastErr = lastErr.rootCause if lastErr.respond_to? :rootCause
-        src = args.length==0 ? lastErr : args.shift
+        src = args.length==0 ? SourceRef.lastErr : args.shift
         #convert src to an appropriate SourceRef by whatever means possible
         #Modified irb.rb saves last back_trace & exception in IRB.conf
         if src.kind_of?(Module)
@@ -194,7 +197,7 @@ class SourceRef   #combines source file name and line number
         else
           if src.kind_of?(Integer) || src.kind_of?(Symbol) 
             #assume parameter is a backtrace level or method name
-            srcFromTrace = lastErr.to_srcRef src
+            srcFromTrace = SourceRef.lastErr.to_srcRef src
             src = srcFromTrace unless srcFromTrace.nil?
           end
           if src.respond_to? :to_srcRef
@@ -237,6 +240,10 @@ class Exception
   def to_srcRef (level=0)
   # default given any exception the best guess as to its location
     SourceRef.from_back_trace(backtrace, level)
+  end
+  def rootCause
+  # define as a NOP so subclasses can override
+    self
   end
 end
 
