@@ -128,13 +128,13 @@ class SourceRef   #combines source file name and line number
       localPath
     end
   end
-  @@remote = @@remoteStub   #use stub remote definition until changed
+  @@remote = @@remoteStub unless defined? @@remote
     
   def self.remote= remoteObject
 # configure SourceRef for remote editting
 # remoteObject must implement remap to convert pathnames and
 # must implement the method :system(string) similar to Kernel::system
-    @@remote = remoteObject ? remoteObject : @@remoteStub
+    @@remote = remoteObject || @@remoteStub
   end
     
   def self.remote 
@@ -149,18 +149,23 @@ class SourceRef   #combines source file name and line number
   def edit (options=nil, readonly=false)
   # start an editor session on file at line
   # If X-windows display available, try nedit client, then nedit directly
-    if ENV["DISPLAY"]
+    if disp=ENV["DISPLAY"]
       path = @@remote.remap(File.expand_path (file))
-      neditArgs = "-lm Ruby #{options} '#{path}'"
-      neditArgs = "-line #{line} " + neditArgs if line > 1
-      neditArgs = "-read " + neditArgs if readonly
-      return self if  #neditc is linked to /usr/bin/X11/nc
-        sys ("neditc -noask -svrname ruby #{neditArgs} &") ||
-        sys ("nedit #{neditArgs} &") ||
-        sys ("vi #{"-R " if readonly}#{"-c"+line.to_s+" " if line>1}'#{path}'")
+      if disp.length>1
+        neditArgs = ""
+        neditArgs<< "-read " if readonly
+        neditArgs<< "-line #{line} " if line > 1
+        neditArgs<< "-lm Ruby #{options} \"#{path}\""
+        return self if 
+          sys ("nohup ~/bin/redit #{neditArgs} >/dev/null") || 
+          sys ("nedit #{neditArgs}")
+      end
+      return self if
+        sys ("TERM=#{ENV["TERM"]} nano -m #{"-v " if readonly}#{
+          "+#{line} " if line>1}\"#{path}\"")
     end
-  # if all else fails, fall back on the venerable 'vi'
-    system ("vi #{"-R " if readonly}#{"-c"+line.to_s+" " if line>1}'#{file}'")
+  # if all else fails, fall back on the venerable local 'vi'
+    system ("vi #{"-R " if readonly}#{"-c"+line.to_s+" " if line>1}\"#{file}\"")
     self
   end
   

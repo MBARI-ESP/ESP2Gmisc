@@ -13,9 +13,8 @@ if IRB.conf[:HOST]  #target configured to use a remote host for source code
   if ENV["DISPLAY"]
     class <<SourceRef.remote = Object.new
       def system localCmd
-        prefix="PATH=/usr/bin/X11:$PATH DISPLAY=#{ENV["DISPLAY"]} "
-        suffix=localCmd[-1]==?& ? localCmd[0...-1]+'"&' : localCmd+'"'
-        Kernel.system ('rsh '+IRB.conf[:HOST]+' "'+prefix+suffix)
+        prefix="DISPLAY=#{ENV["DISPLAY"]} "
+        Kernel.system ('ssh -t '+IRB.conf[:HOST]+' "'+prefix+localCmd+'"')
       end
       def remap path  #clever symlinks obviate the need for path remapping :-)
         path
