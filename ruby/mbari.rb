@@ -32,7 +32,7 @@ class Module
   
   private
   def rename_method newId,oldId
-    alias_method newId, oldId unless instance_methods.include? newId.to_s
+    alias_method newId, oldId unless respond_to? newId
   end
 end
  
