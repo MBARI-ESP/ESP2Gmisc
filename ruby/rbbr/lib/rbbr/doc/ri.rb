@@ -40,12 +40,16 @@ module RBBR
       
       def lookup_method( method )
 	begin
-	  result = `ri "#{method}"`
+    	  result = `ri "#{method}"`
 	  if /(?:Cannot|Couldn't) find/ === result
-	    raise LookupError
-	  else
-	    result
+            kname, mname = method.split('#',2)
+            #ri catalogs Object(Kernel) mixins in the Object methods
+            if mname && kname == "Kernel"
+              result = `ri "Object##{mname}"`
+              raise LookupError if /(?:Cannot|Couldn't) find/ === result
+            end
 	  end
+	  result
 	rescue
 	  raise LookupError, $!.message
 	end
