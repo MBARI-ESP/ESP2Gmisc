@@ -1,13 +1,28 @@
 #!/bin/bash
 # configure ruby 1.6.8 build for arm-linux -- 2/14/05 brent@mbari.org
-# ac_cv_func_getrlimit=no
 : ${CFLAGS:=-O2}
 : ${CXXFLAGS:=$CFLAGS}
 : ${ARMGCC:=/arm}
 : ${CC:=$ARMGCC/bin/gcc}
+: ${TARGETTOP:=${1-/usr/local}}
 export CC CFLAGS CXXFLAGS
 cd ${RUBYVERS-ruby-1.6.8}
+[ -r Makefile ] && make distclean
+# ac_cv_func_getrlimit=no
 ac_cv_func_getpgrp_void=yes ac_cv_func_setpgrp_void=yes \
-configure --target=arm-unknown-linux --prefix=$ARMGCC $@
+configure --target=arm-unknown-linux --prefix=$ARMGCC $@ || exit 2
 #--enable-enable-shared
-# use the command arminstall instead of make install!
+echo 'Patching RUBY_*_LIB* in config.h for target'
+sed -e "s:\"$ARMGCC:\"$TARGETTOP:g" config.h >config.h.patched || {
+  echo "Failed to patch config.h"
+  exit 3
+}
+mv -f config.h.patched config.h || exit 6
+echo Patching prefix in ext/extmk.rb for target
+cd ext &&
+sed -e "s:prefix = $ARMGCC:prefix = $TARGETTOP:" extmk.rb >extmk.rb.patched || {
+  echo "Failed to patch extmk.rb"
+  exit 3
+}
+mv -f extmk.rb.patched extmk.rb &&
+  echo "  $ arminstall       #to install ruby and core libaries"
