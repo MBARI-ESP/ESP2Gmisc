@@ -1,6 +1,12 @@
 #!/bin/sh
-# install ruby 1.6.8 build for arm-linux -- 2/25/03 brent@mbari.org
-
+# install ruby 1.6.8 build for arm-linux -- 2/17/05 brent@mbari.org
+# also install modules needed for ESP unless 
+#   coreOnly environment variable is set
+#
+# $1 = top directory of installation on the target [/usr/local]
+# $2 = top directory on the host [$HOME/$1]
+# $3 = temporary install directory [/tmp]
+# 
 # remove all fields $1 from list delminited by $2 starting with $3
 # send the filtered version of $2 to stdout
 remove ()
@@ -20,35 +26,47 @@ remove ()
   }
 }
 
-
-export DESTDIR=${3:-/tmp}
+startDir=$PWD
+export DESTDIR=${3:-$HOME/armHost}
 : ${ARMGCC:=/arm}
 : ${ARMSTRIP:=$ARMGCC/bin/strip}
-: ${TARGETTOP:=${1-/opt}}
-: ${HOSTTOP:=${2-$HOME/armHost$TARGETTOP}}
-DESTTOP=$DESTDIR$ARMGCC
+: ${TARGETTOP:=${1-/usr/local}}
+: ${HOSTTOP:=${2-$DESTDIR$TARGETTOP}}
+
 echo "Installing in $HOSTTOP"
 echo "  for execution at $TARGETTOP on the ARM target"
-rm -rf $DESTTOP
 PATH=`remove . : $PATH`  #remove current directory from PATH
-make -C ${RUBYVERS-ruby-1.6.8} all install || exit 1
-cd $DESTTOP || exit 2
-echo "Deleting docs and intermediate files"
-rm -rf `find -name man`
-rm -f `find -name "*.[aoh]"` #remove all compiler & linker intermediate files
-objs="bin/ruby `find -name "*.so*"`"
-chmod +w $objs || exit 6
-$ARMSTRIP $objs || exit 7
-chmod -w $objs || exit 8
-rbcfg=`find -name "rbconfig.rb"` || {
-  echo "Cannot find rbconfig.rb under $DESTTOP"
-  exit 1
-}
+cd ${RUBYVERS:=ruby-1.6.8} &&
+  ln -sf `which ruby --skip-dot` miniruby || {
+    echo "ruby must be already installed on the build machine"
+    exit 8
+  }
+export RUBYLIB=$PWD
+rbcfg=rbconfig.rb
+make -o miniruby $rbcfg
 echo "Changing prefix from $ARMGCC to $TARGETTOP in $rbcfg"
 sed -e "s:+ \"$ARMGCC\":+ \"$TARGETTOP\":" $rbcfg >$rbcfg.patched || {
   echo "Failed to patch $rbcfg"
   exit 2
 }
 mv -f $rbcfg.patched $rbcfg && mkdir -p $HOSTTOP &&
-tar c * | tar xC $HOSTTOP
+make -o miniruby all install || exit 1
+cd $HOSTTOP || exit 2
+echo "Deleting docs, intermediate files and empty directories"
+rm -rf `find -name man`
+rm -f `find lib/ruby -name "*.[aoh]"` #remove all development intermediate files
+find lib/ruby/1.6 -depth -type d \
+  -exec rmdir {} --ignore-fail-on-non-empty \;
+objs="bin/ruby `find lib/ruby -name "*.so*"`"
+chmod +w $objs &&
+$ARMSTRIP $objs &&
+chmod -w $objs || exit 8
+echo "Successfully Installed core Ruby environment at $HOSTTOP"
+[ -n "$coreOnly" ] || {
+  echo "   Installing extensions required by MBARI ESP:"
+  cd $startDir
+  PATH=.:$PATH
+  buildUtils clean install && echo "Done."
+}
+
 
