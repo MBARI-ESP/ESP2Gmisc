@@ -1,5 +1,6 @@
 ##################  sourceref.rb -- brent@mbari.org  #####################
-# $Header$
+# $Source$
+# $Id$
 #
 #  The SourceRef class relies on a patched version of ruby/eval.c
 #  to provide access to the source file and line # where every Method
