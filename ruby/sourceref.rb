@@ -98,21 +98,22 @@ class SourceRef   #combines source_file_name and line number
   end
   
 
+  def SourceRef.find_in_back_trace (trace, symbol)
+  # return highest level in trace referencing symbol
+    symbol = level
+    level = 0
+    for msg in trace
+      if inPart = msg.split(':',4)[2]
+        name = inPart.split('in\s*', 2)[1][1...-1]
+        break if symbol == name.intern
+      end
+      level += 1
+    end
+  end
+   
   def SourceRef.from_back_trace (trace, level=0)
   # return sourceref at level in backtace
-  #   if level is a :symbol, search for first method with that name in trace
-    if level.kind_of? Symbol
-      symbol = level
-      level = 0
-      for msg in trace
-        if inPart = msg.split(':',4)[2]
-          name = inPart.split('in\s*', 2)[1][1...-1]
-          break if symbol == name.intern
-        end
-        level += 1
-      end
-      # level is now always an index into trace 
-    end
+    SourceRef.find_in_back_trace (trace, level) if level.kind_of?(Symbol)
     trace[level].split[1].split(':',3)[0..1].join(':').to_srcRef
   end
 
@@ -134,7 +135,13 @@ class SourceRef   #combines source_file_name and line number
 
     Code::OPS.each {|m|
       define_method (m) { |*args|
-        src = args.length==0 ? 0 : args.shift
+        src = args.length==0 ? IRB.conf[:exception] : args.shift
+        #convert src to an appropriate SourceRef by whatever means possible
+        #Modified irb.rb saves last back_trace & exception in IRB.conf
+        if src.kind_of?(Exception)
+          src = src.kind_of?(SyntaxError) ? 
+                  src.to_s.split("\s",2)[0].to_srcRef : 0
+        end          
         if src.kind_of?(Module)
           src.sources.each {|srcRef| srcRef.method(m).call (*args)}
         else
@@ -142,12 +149,9 @@ class SourceRef   #combines source_file_name and line number
             src = src.source
           elsif src.kind_of?(Integer) || src.kind_of?(Symbol) 
             #assume parameter is a backtrace level or method name
-            #Rely on modified irb.rb to save last back_trace in IRB.conf!
             src = SourceRef.from_back_trace(IRB.conf[:back_trace], src)
-          else
-            src = src.to_srcRef      
           end
-          src.method(m).call (*args)
+          src.to_srcRef.method(m).call (*args)
         end
       }
     }
