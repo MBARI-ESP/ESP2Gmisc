@@ -55,6 +55,7 @@ method:Method
     class MultiDatabase < Database
 
       FeatureList = [
+        'rbbr/doc/source',
 	'rbbr/doc/refe',
 	'rbbr/doc/ri',
 	'rbbr/doc/rubyapi',
@@ -65,7 +66,6 @@ method:Method
 
       def initialize
 	@children = []
-
 	FeatureList.each do |feature|
 	  begin
 	    Kernel.require( feature )
@@ -85,6 +85,7 @@ method:Method
 	end
       end
 
+      
       def lookup_module( modul )
 	raise
       end
@@ -104,6 +105,13 @@ method:Method
 	raise LookupError
       end
 
+      def find_instance_of ( dbClass )
+        @children.each do |dbInstance|
+          return dbInstance if dbInstance.kind_of? dbClass
+        end
+        nil
+      end
+      
     end
 
 
