@@ -65,11 +65,11 @@
 #include "defines.h"
 
 # define RUBY
-extern int rb_prohibit_interrupt;
+extern int rb_prohibit_interrupt, rb_thread_critical;
 extern int rb_trap_pending;
 void rb_trap_exec _((void));
 
-# define CHECK_INTS if (!rb_prohibit_interrupt) {\
+# define CHECK_INTS if (!(rb_prohibit_interrupt | rb_thread_critical)) {\
     if (rb_trap_pending) rb_trap_exec();\
 }
 
