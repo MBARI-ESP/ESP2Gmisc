@@ -1,21 +1,18 @@
 #!/bin/sh
-# install libreadline-4.3 build for arm-linux -- 2/17/05 brent@mbari.org
+# build & install libreadline-4.3 for arm-linux -- 2/18/05 brent@mbari.org
 
-export DESTDIR=${3:-/tmp}
 : ${ARMGCC:=/arm}
 : ${ARMSTRIP:=$ARMGCC/bin/strip}
-: ${TARGETTOP:=${1-/usr/lib}}
-: ${HOSTTOP:=${2-$HOME/armHost$TARGETTOP}}
+: ${LIBTOP:=$ARMGCC/usr}
+: ${TARGETTOP:=${2-/usr/lib}}
+: ${HOSTTOP:=${1-$HOME/armHost$TARGETTOP}}
 echo "Installing in $HOSTTOP"
 echo "  for execution at $TARGETTOP on the ARM target"
 cd ${READLNVERS-readline-4.3} || exit 2
-make || exit 1
+make install || exit 1
 mkdir -p $HOSTTOP || exit 3
 for lib in libreadline libhistory; do
-  install shlib/$lib.so.4.3 $HOSTTOP || exit 3
-  (cd $HOSTTOP
-     $ARMSTRIP $lib.so.4.3
-     ln -sf $lib.so.4.3 $lib.so.4
-     ln -sf $lib.so.4 $lib.so
-  )
+  cp -af $LIBTOP/lib/$lib.so*[^.old] $HOSTTOP &&
+  $ARMSTRIP $HOSTTOP/$lib.so.?.? || exit 3
 done
+echo "Done."
