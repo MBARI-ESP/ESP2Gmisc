@@ -48,3 +48,11 @@ class Symbol
     self
   end
 end
+
+class Class  #create an uninitialized class instance
+#see http://whytheluckystiff.net/articles/rubyOneEightOh.html
+  def allocate
+    class_name = to_s
+    Marshal.load "\004\006o:"+(class_name.length+5).chr+class_name+"\000"
+  end
+end
