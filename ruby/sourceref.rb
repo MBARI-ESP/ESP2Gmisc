@@ -79,22 +79,40 @@ class SourceRef   #combines source file name and line number
     end
     text
   end
+      
+  @@remote = nil
   
+  def self.remote= path_prefix
+# configure SourceRef for remote editting
+# path_prefix is a string that will be prepended to all remote filenames AND
+# it must implement the method :system(string) similar to Kernel::system
+    @@remote = path_prefix
+  end
+    
+  def self.remote 
+    @@remote
+  end
+
+  def sys os_cmd
+    (@@remote ? @@remote:Kernel).system os_cmd
+  end  
+  private :sys
+    
   def edit (options=nil, readonly=false)
   # start an editor session on file at line
   # If X-windows display available, try nedit client, then nedit directly
     if ENV["DISPLAY"]
-      neditArgs = "-lm Ruby #{options} '#{file}'"
+      path = File.expand_path (@@remote+file)
+      neditArgs = "-lm Ruby #{options} '#{path}'"
       neditArgs = "-line #{line} " + neditArgs if line > 1
       neditArgs = "-read " + neditArgs if readonly
-      # nclient will normally be a symlink to /usr/bin/X11/nc
-      return self if 
-        system ("nclient -noask -svrname ruby #{neditArgs} 2>/dev/null") || 
-        system ("nedit #{neditArgs} &")
+      return self if  #neditc is linked to /usr/bin/X11/nc
+        sys ("neditc -noask -svrname ruby #{neditArgs} &") ||
+        sys ("nedit #{neditArgs} &") ||
+        sys ("vi #{"-R " if readonly}#{"-c"+line.to_s+" " if line>1}'#{path}'")
     end
-  # if all else fails, fall back on the venerable 'vim' or busybox 'vi'
-    system ("vi #{"-R " if readonly}'#{file}'") unless 
-      system ("vim #{"-R " if readonly}#{"+"+line.to_s+" " if line>1}'#{file}'")
+  # if all else fails, fall back on the venerable 'vi'
+    system ("vi #{"-R " if readonly}#{"-c"+line.to_s+" " if line>1}'#{file}'")
     self
   end
   

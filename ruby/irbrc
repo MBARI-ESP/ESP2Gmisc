@@ -1,6 +1,25 @@
 # things to do before the start of any interactive ruby session
-#  2/18/03 brent@mbari.org
+#  2/27/03 brent@mbari.org
 require 'irb/completion'
-$: << "~/ESP/gen2/software/ruby"
 require 'sourceref'
-$RBBR=startRBBR if ENV["DISPLAY"]
+
+prompt = IRB.conf[:PROMPT][:DEFAULT]
+prompt[:RETURN] = "=> %s\n"
+prompt[:AUTO_INDENT] = true
+
+#IRB.conf[:HOST] = "bufflehead"
+
+if IRB.conf[:HOST]  #if target configured to use a remote host for source code
+  if ENV["DISPLAY"]
+    class <<SourceRef.remote = "ESParmImage"  #file path prefix on remote HOST
+      def system localCmd
+        prefix="PATH=/usr/bin/X11:$PATH DISPLAY=#{ENV["DISPLAY"]} "
+        suffix=localCmd[-1,1]=='&' ? localCmd[0...-1]+'"&' : localCmd+'"'
+        Kernel.system ('rsh '+IRB.conf[:HOST]+' "'+prefix+suffix)
+      end
+    end
+  end
+else  #we're running a workstation
+  #$:.unshift "~/ESP/gen2/software/ruby"
+  $RBBR=startRBBR if ENV["DISPLAY"]
+end
