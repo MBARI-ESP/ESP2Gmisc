@@ -94,26 +94,10 @@ class SourceRef   #combines source_file_name and line number
     def source
       SourceRef.new (source_file_name, source_line)
     end
-
-    def list (lineCount=16, lineOffset=0)
-    # return the first lineCount lines of receiver's source text
-      source.list (lineCount, lineOffset)
-    end
-
-    def edit
-    # start an editor session on the receiver's source
-      source.edit
-    end
-
-    def view
-    # start a read-only editor session on the receiver's source
-      source.view
-    end
-
-    def reload
-    # load entire file containing receiver's source text
-      source.reload
-    end
+    
+    (OPS = [ :list, :edit, :view, :reload ]).each {|m|
+      define_method (m) { | *args | source.method(m).call(*args) }
+    }
 
   end #module SourceRef::Code
 
@@ -144,7 +128,7 @@ class Module
     sourceHash (:method, singleton_methods)
   end
   
-  def instance_source (includeAncestors=true)
+  def instance_source (includeAncestors=false)
   # return hash on receiver's instance methods to corresponding SourceRefs
   #        optionally include accessible methods in ancestor classes
     sourceHash (:instance_method,
@@ -190,6 +174,17 @@ class Module
 end
 
 
+class String
+  def to_srcRef
+  # parse a source reference from string of form fn:line#
+    strip!
+    a = split(sep=':')
+    return SourceRef.new (self, 0) if a.length < 2
+    SourceRef.new (a[0..-2].join(sep), a[-1].to_i)
+  end
+end
+
+  
 class Hash
 
   def join (sep = " => ")
@@ -201,3 +196,22 @@ class Hash
   
 end
        
+
+module Kernel   #add convenient commands for viewing source code
+
+  SourceRef::Code::OPS.each {|m|
+    define_method (m) { |src, *args|      
+      if src.kind_of?(Module)
+        src.sources.each {|srcRef| srcRef.method(m).call (*args)}
+      else 
+        if src.kind_of?(Method) || src.kind_of?(Proc)
+          src = src.source
+        else
+          src = src.to_srcRef if src.respond_to? :to_srcRef       
+        end
+        src.method(m).call (*args)
+      end
+    }
+  }
+      
+end  
