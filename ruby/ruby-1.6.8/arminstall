@@ -1,10 +1,13 @@
 #!/bin/sh
-# install ruby 1.6.8 build for arm-linux -- 2/24/03 brent@mbari.org
+# install ruby 1.6.8 build for arm-linux -- 2/25/03 brent@mbari.org
+[ -n "$ARMLIBDIR" ] || ARMLIBDIR=/usr/local/arm/Intrinsyc/arm-linux/lib
 export DESTDIR=${1:-`pwd`/arm}  #where to store ruby installation on the host
 [ -d $DESTDIR ] && rm -rf $DESTDIR
 make install #to $DESTDIR
 cd $DESTDIR || exit
+LIBDIR=`find -name lib | head -n 1`  #topmost dir under DESTDIR called 'lib'
 rm -rf `find -name man`
 rm -f `find -name "*.[aoh]"` #remove all compiler & linker intermediate files
-arm-linux-strip `find -name "*.so"`
+cp $ARMLIBDIR/libtermcap.so.2 $ARMLIBDIR/libreadline.so.4 $LIBDIR
+arm-linux-strip `find -name "*.so*"`
 arm-linux-strip `find -name bin`/ruby
