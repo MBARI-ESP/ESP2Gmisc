@@ -191,7 +191,7 @@ if (pai->ai_flags & AI_CANONNAME) {\
 
 #define ERR(err) { error = (err); goto bad; }
 
-#if defined __UCLIBC__
+#if defined __UCLIBC__ || __GNUC__>3 || (__GNUC__==3 && __GNUC_MINOR__>3)
 const
 #endif
 char *
