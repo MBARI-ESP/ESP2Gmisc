@@ -45,8 +45,8 @@ class Hash
   end
 end
 
-class Symbol
-  def intern  #just for mathematical completeness!
+class Object
+  def intern  #Symbol class overrides this. All classes respond to it
     self
   end
 end
