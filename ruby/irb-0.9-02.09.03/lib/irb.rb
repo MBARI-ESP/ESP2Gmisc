@@ -109,7 +109,8 @@ module IRB
 
     def log_exception    
       $! = RuntimeError.new("unknown exception raised") unless $!
-      context.exception=$! 
+      context.exception=[] unless context.exception.respond_to? :<<
+      context.exception << $! 
       print $!.type, ": ", $!, "\n" 
     end
     
