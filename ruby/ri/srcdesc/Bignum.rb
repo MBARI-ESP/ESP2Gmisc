@@ -1,0 +1,38 @@
+# Automatically generated....
+raise 'Must be invoked by installation process' unless $opfile
+
+# -----------------------------------------
+aClass = ClassModule.new("Bignum", "Integer", "class")
+aClass.addFragment(Paragraph.new("<code>Bignum</code> objects hold integers outside the range of <code>Fixnum</code>. <code>Bignum</code> objects are created automatically when integer calculations would otherwise overflow a <code>Fixnum</code>. When a calculation involving <code>Bignum</code> objects returns a result that will fit in a <code>Fixnum</code>, the result is automatically converted.\n"))
+aClass.addFragment(Paragraph.new("For the purposes of the bitwise operations and <code>[]</code>, a <code>Bignum</code> is treated as if it were an infinite-length bitstring with 2's complement representation.\n"))
+aClass.addFragment(Paragraph.new("While <code>Fixnum</code> values are immediate, <code>Bignum</code> objects are not---assignment and parameter passing work with references to objects, not the objects themselves.\n"))
+m0002 = MethodDesc.new("Arithmeticoperations", "Bignum", "instance", "<p></p>")
+m0002.addFragment(Paragraph.new("Performs various arithmetic operations on <i>big</i>.\n"))
+aClass.addMethod(m0002)
+m0003 = MethodDesc.new("Bitoperations", "Bignum", "instance", "<p></p>")
+m0003.addFragment(Paragraph.new("Performs various operations on the binary representations of the <code>Bignum</code>.\n"))
+aClass.addMethod(m0003)
+m0004 = MethodDesc.new("<=>", "Bignum", "instance", "<i>big</i> <=> <i>aNumeric</i> -> -1, 0, +1")
+m0004.addFragment(Paragraph.new("Comparison---Returns -1, 0, or +1 depending on whether <i>big</i> is less than, equal to, or greater than <i>aNumeric</i>. This is the basis for the tests in <code>Comparable</code>.\n"))
+aClass.addMethod(m0004)
+m0005 = MethodDesc.new("[]", "Bignum", "instance", "<i>big</i>[ <i>n</i> ] -> 0, 1")
+m0005.addFragment(Paragraph.new("Bit Reference---Returns the <em>n</em>th bit in the (assumed) binary representation of <i>big</i>, where <i>big</i>[0] is the least significant bit.\n"))
+m0005.addFragment(Verbatim.new("a = 9**15\n50.downto(0) do |n|\n  print a[n]\nend"))
+m0005.addFragment(Paragraph.new("<em>produces:</em>\n"))
+m0005.addFragment(Verbatim.new("000101110110100000111000011110010100111100010111001"))
+aClass.addMethod(m0005)
+m0006 = MethodDesc.new("size", "Bignum", "instance", "<i>big</i>.size -> <i>anInteger</i>")
+m0006.addFragment(Paragraph.new("Returns the number of bytes in the machine representation of <i>big</i>.\n"))
+m0006.addFragment(Verbatim.new("(256**10 - 1).size   \#=> 12\n(256**20 - 1).size   \#=> 20\n(256**40 - 1).size   \#=> 40\n"))
+aClass.addMethod(m0006)
+m0007 = MethodDesc.new("to_f", "Bignum", "instance", "<i>big</i>.to_f -> <i>aFloat</i>")
+m0007.addFragment(Paragraph.new("Converts <i>big</i> to a <code>Float</code>. If <i>big</i> doesn't fit in a <code>Float</code>, the result is infinity.\n"))
+aClass.addMethod(m0007)
+m0008 = MethodDesc.new("to_i", "Bignum", "instance", "<i>big</i>.to_i -> <i><i>big</i></i>")
+m0008.addFragment(Paragraph.new("Returns <i>big</i>.\n"))
+aClass.addMethod(m0008)
+m0009 = MethodDesc.new("to_s", "Bignum", "instance", "<i>big</i>.to_s -> <i>aString</i>")
+m0009.addFragment(Paragraph.new("Returns a string containing the decimal representation of <i>big</i>.\n"))
+aClass.addMethod(m0009)
+
+File.open($opfile, "w") {|f| Marshal.dump(aClass, f) }
