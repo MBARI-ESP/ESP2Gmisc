@@ -1,0 +1,24 @@
+#!/bin/bash
+#Build the ruby extra utilities MBARI needs for ESP
+toolDirs='mbarilib termios'
+[ -n "$1" ] && target=$1
+if [ -n "$target" ]; then
+  for d in $toolDirs; do
+    echo "Making $target in $d:"
+    (cd $d; make $target)
+  done
+fi
+for d in $toolDirs; do
+  echo "Making $d:"
+  cd $d
+  if [ ! -r Makefile ]; then
+    ../ruby-1.6.8/miniruby extconf.rb
+  fi
+  make
+  cd ..
+done
+
+ruby=$PWD
+cd $HOME
+[ -f .irbrc ] && mv .irbrc .irbrc.save
+cp $ruby/irbrc .irbrc
