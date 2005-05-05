@@ -156,9 +156,8 @@ class SourceRef   #combines source file name and line number
         neditArgs<< "-read " if readonly
         neditArgs<< "-line #{line} " if line > 1
         neditArgs<< "-lm Ruby #{options} \"#{path}\""
-        return self if 
-          sys ("nohup ~/bin/redit #{neditArgs} >/dev/null") || 
-          sys ("nedit #{neditArgs}")
+        return self if sys (
+   "PATH=~/bin:$PATH nohup redit #{neditArgs} >/dev/null || nedit #{neditArgs}")
       end
       return self if
         sys ("TERM=#{ENV["TERM"]} nano -m #{"-v " if readonly}#{
