@@ -8,7 +8,9 @@ prompt[:RETURN] = "=> %s\n"
 prompt[:AUTO_INDENT] = true
 
 display=ENV["DISPLAY"]
-srcHost=display[0,display.index(':')] unless srcHost=ENV["SRCHOST"] if display
+srcHost=ENV["SRCHOST"]
+# for platforms without X-windows support, uncomment:
+#srcHost=display[0,display.index(':')] if display and !srcHost
 
 if srcHost  #is there a remote host for source code?
   class <<SourceRef.remote = Object.new  #if so, view/edit remotely
