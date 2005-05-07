@@ -61,10 +61,11 @@ class String
 end
 
 class Exception
-  def to_srcRef (level=0)
+  def to_srcRef (levelOrMethod=0)
   # default given any exception the best guess as to its location
-    SourceRef.from_back_trace(backtrace, level)
+    SourceRef.from_back_trace(backtrace, levelOrMethod)
   end
+  alias_method :[], :to_srcRef
   def rootCause
   # define as a NOP so subclasses can override
     self
@@ -118,8 +119,7 @@ class SourceRef   #combines source file name and line number
     end
     text
   end
-      
-  
+
   class <<@@remoteStub = Object.new
     def system localCmd
       Kernel.system (localCmd)
@@ -216,9 +216,8 @@ class SourceRef   #combines source file name and line number
     
   end #module SourceRef::Code
 
-  
   def self.doMethod (m, *args)
-    src = args.length==0 ? IRB.CurrentContext.thread.lastErr : args.shift
+    src = args.empty? ? $lastErr : args.shift
     #convert src to an appropriate SourceRef by whatever means possible
     #Modified irb.rb saves last back_trace & exception in IRB.conf
     case src
@@ -227,10 +226,12 @@ class SourceRef   #combines source file name and line number
         return srcs
       when Integer, Symbol
         #assume parameter is a backtrace level or method name
-        srcFromTrace = IRB.CurrentContext.thread.lastErr.to_srcRef src
+        srcFromTrace = $lastErr.to_srcRef src
         src = srcFromTrace if srcFromTrace
       when Thread
-        src = src.exception.last.rootCause
+        src = $lastErr = src.lastErr
+      when Exception
+        $lastErr = src
     end
     if src.respond_to? :to_srcRef
       src.to_srcRef.send m, *args
@@ -245,6 +246,20 @@ class SourceRef   #combines source file name and line number
     
     Code::OPS.each{|m|define_method(m){|*args|SourceRef.doMethod(m,*args)}}
 
+    def backtrace err=$lastErr   #display a backtrace from the last error
+      case err  #try to make whatever we're handed into an Exception
+        when Exception
+        when Thread
+          err = err.lastErr
+        else
+          err = Thread[err].lastErr
+      end
+      if err
+        puts err.backtrace
+        $lastErr=err
+      end
+    end
+    
     def startRBBR  #start another Ruby Class Browser
       require 'rbbr'
       (rbbrThread=Thread.new {RBBR.main}).priority=Thread.current.priority+1
