@@ -53,10 +53,19 @@ class Object
     eval "class << self; def intern; #{identifier.inspect}; end; end"
     identifier
   end
+  
   def deepClone
     Marshal::load(Marshal::dump(self))
   end
   alias_method :reallyEqual?, :==  #override for recursive equality tests
+  
+  def with hash
+  #assign instance variables specified in given hash
+    hash.each do |parameter, value|
+      send ((parameter.to_s<<?=).intern, value)
+    end
+    self
+  end  
 end
 
 class Class  #create an uninitialized class instance
@@ -68,12 +77,6 @@ class Class  #create an uninitialized class instance
 end
 
 class Struct
-  def with hash
-  #assign fields of struct specified in given hash(-like) object
-    hash.each {|fieldName, value| self[fieldName]=value }
-    self
-  end
-  
   def reallyEqual? other
   #built-in Struct#== gets confused when a singleton
   #method is associated with the Struct.  This version does not.
