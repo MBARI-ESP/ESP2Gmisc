@@ -17,6 +17,7 @@
 #include <libgen.h>
 #include <limits.h>
 #include <stdarg.h>
+#include <time.h>
 
 #include "devctl.h"   //low-level camera device control
 
@@ -73,6 +74,20 @@ void syntaxErr (char *format, ...)
 }
 
 
+int progress (char *format, ...)
+{
+  char buffer[2000];
+  va_list ap;
+  size_t bytesWritten;
+  va_start (ap, format);
+  vsnprintf (buffer, sizeof(buffer), format, ap);
+  va_end(ap);
+  bytesWritten = write (progressFD, buffer, strlen(buffer));
+  fsync (progressFD);
+  return bytesWritten;
+}
+  
+  
 char *parseInt (char *cursor, int *integer)
 // parse an integer at cursor
 // returns pointer to next char
@@ -135,6 +150,7 @@ int main (int argc, char **argv)
   unsigned rowPixels, colPixels;
   char *outFn;
   FILE *outFile;
+  time_t snapStartTime, snapEndTime;
   
   const static struct option options[] = {
     {"binning", 1, NULL, 'b'},
@@ -153,7 +169,7 @@ int main (int argc, char **argv)
   };
     
   progName = basename (argv[0]);
-  if (!fsync(progressFD)) progressFD=fileno(stderr);
+  if (fsync(progressFD)) progressFD=fileno(stderr);
       
   for (;;) {
     int optc = getopt_long_only (argc, argv, "", options, 0);
@@ -211,8 +227,8 @@ gotAllOpts: //on to required arguments (exposure time and output file)
   if (*parseFloat (argv[optind], &exposureSecs)) {
     syntaxErr ("Junk text after exposure duration");
   }
-  if (exposureSecs <= 0.0f) {
-    syntaxErr ("Exposure duration (%g) must be > 0.0 seconds", exposureSecs);
+  if (exposureSecs < 0.001f) {
+    syntaxErr ("Exposure duration (%g) must be >= 0.001 seconds", exposureSecs);
   }
   if (exposureSecs > (float)INT_MAX/1000.0f) {
     syntaxErr ("Exposure duration (%g) is too long!", exposureSecs);
@@ -230,11 +246,11 @@ gotAllOpts: //on to required arguments (exposure time and output file)
     outFile = fopen (outFn, "w");
     if (!outFile) {
       perror(outFn);
-      return 6;
+      return errno;
     }
   }else{  //trying to write image to stdout
     if (isatty(fileno(stdout)))
-      syntaxErr ("Cannot write image to terminal -- specify a filename!");
+      syntaxErr ("Cannot write image to terminal stdout.  Specify a filename!");
     outFile = stdout;
   }
   
@@ -251,7 +267,7 @@ gotAllOpts: //on to required arguments (exposure time and output file)
   exposure.xbin = binX;
   exposure.ybin = binY;
   exposure.dacBits = CCDdepth ? CCDdepth : device.dacBits;
-  exposure.msec = exposureSecs * 1000;
+  exposure.msec = exposureSecs * 1000.0f;
 
   rowPixels = exposure.width / binX;
   colPixels = exposure.height / binY;
@@ -259,20 +275,39 @@ gotAllOpts: //on to required arguments (exposure time and output file)
     exposure.dacBits, rowPixels, colPixels, exposureSecs);
     
   CCDexposeFrame (&exposure);
+  snapStartTime = time(NULL);
+  snapEndTime = snapStartTime + exposureSecs;
+  
   pixelRow = (unsigned short *) malloc (exposure.rowBytes);
   if (!pixelRow) {
     fprintf (stderr, "Row buffer malloc failed!");
     return 2;
   }
   end = pixelRow + exposure.rowBytes/sizeof(unsigned short);
+
+#define REMAINING " seconds remaining"
+  result = snapEndTime - time(NULL);
+  if (result > 1) {  //output exposure progress messages
+    int digits = progress ("%d" REMAINING, result) - (sizeof(REMAINING)-1);
+    sleep(1);
+    while ((result = snapEndTime - time(NULL)) > 1) {
+      progress ("\r%*d ", digits, result);
+      sleep(1);
+    }
+  }
   while ((result = CCDloadFrame (&exposure, pixelRow)) > 0) {
     unsigned short *cursor = pixelRow;
     unsigned sum = 0;
+    if (result == 1) {
+      progress ("\r  0%% of Image Uploaded");
+    }else if (!(result & 127)) {
+      progress ("\r%3d%%", result*100 / colPixels);
+    }
     while (cursor < end) sum += *cursor++;
-    avgPixel += sum / rowPixels;      
+    avgPixel += sum / rowPixels;    
   }
   avgPixel /= colPixels;
-  
+  progress ("\rImage Upload Complete\n");
   fprintf (stderr, "Average pixel value = %u\n", avgPixel);
   return 0;
 }
