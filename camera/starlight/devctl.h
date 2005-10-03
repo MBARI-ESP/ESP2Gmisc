@@ -42,6 +42,7 @@ struct CCDexp
     unsigned int      dacBits;
     unsigned int      flags;
     unsigned int      msec;
+    time_t            start;            //seconds since start of epoch
     unsigned int      readRow;
     size_t            rowBytes;
 };

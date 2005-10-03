@@ -22,6 +22,7 @@
 #include "devctl.h"   //low-level camera device control
 
 #define validBin(b)  (b >= 1 && b <= 4)
+#define REMAINING " seconds remaining"
 
 static char *progName;
 static int progressFD = 3;
@@ -34,7 +35,7 @@ static float exposureSecs;
 
 void usage (void)
 {
-  fprintf (stderr, "%s revised 10/1/05 brent@mbari.org\n", progName);
+  fprintf (stderr, "%s revised 10/3/05 brent@mbari.org\n", progName);
   fprintf (stderr, 
 "Snap a photo from a monochrome Starlight CCD camera. Usage:\n"
 "  %s {options} <exposure seconds> <TIFF output file>\n"
@@ -57,8 +58,8 @@ void usage (void)
 "  %s 1.5 myimage.tiff  #1.5 second exposure to myimage.tiff w/o binning\n"
 "  %s -bin 2x2 .005 myimage.tiff  #5 msec exposure with 2x2 binning\n"
 "notes:\n"
-"  If possible, progress messages are output to file descriptor 3,\n"
-"  otherwise, they are sent to stderr.\n", 
+"  If possible, progress messages are output to file descriptor 3\n"
+"  Otherwise, they are sent to stderr.\n", 
   progName, progName, progName);
 }
 
@@ -138,6 +139,136 @@ char *parseFloat (char *cursor, float *f)
 }
 
 
+/*
+ * FITS file routines.
+ */
+#define FITS_CARD_COUNT     36
+#define FITS_CARD_SIZE      80
+#define FITS_RECORD_SIZE    (FITS_CARD_COUNT*FITS_CARD_SIZE)
+/*
+ * Convert unsigned LE pixels to BE pixels and reverse order
+ */
+
+#define swab2(word16)  (((word16) >> 8) | ((word16) << 8) )
+
+#define swab4(word32)  (((word32) >> 24) | ((word32) << 24) | \
+          (((word32) & 0x00FF0000) >> 8) | (((word32) & 0x0000FF00) << 8) )
+
+static void convert_pixels(unsigned char *src, unsigned char *dst, int pixel_size, int count)
+{
+    switch (pixel_size)
+    {
+        case 1:
+            {
+              unsigned char *end = src + count - 1;
+              while (src < end) {
+                unsigned char b = *src; *src++ = *end; *end-- = b;
+              }
+            }
+            break;
+        case 2:
+            {
+              unsigned short *start = (unsigned short *) src;
+              unsigned short *end = start + count - 1;              
+              while (start <= end) {
+                unsigned short startPixel = *start;
+                unsigned short endPixel = *end;
+                *end-- = swab2 (startPixel);
+                *start++ = swab2 (endPixel);
+              }
+            }
+            break;
+        case 4:
+            {
+              unsigned long *start = (unsigned long *) src;
+              unsigned long *end = start + count - 1;              
+              while (start <= end) {
+                unsigned long startPixel = *start;
+                unsigned long endPixel = *end;
+                *end-- = swab4 (startPixel);
+                *start++ = swab4 (endPixel);
+              }
+            }
+            break;
+    }
+}
+
+/*
+ * Save image to FITS file.
+ */
+static int saveFITS(int fd, struct CCDexp *exposure)
+{
+    char           record[FITS_CARD_COUNT][FITS_CARD_SIZE];
+    unsigned char *pixelRow;
+    int            i, k, result, pixelBytes;
+    unsigned cols = exposure->width / exposure->xbin;
+    unsigned rows = exposure->height / exposure->ybin;
+    char *timeString = ctime (&exposure->start);
+    timeString[strlen(timeString)-1] = '\0';  //remove trailing newline
+    
+    /*
+     * Fill header records.
+     */
+    memset(record, ' ', FITS_RECORD_SIZE);
+    i = 0;
+    sprintf(record[i++], "SIMPLE  = %20c", 'T');
+    sprintf(record[i++], "BITPIX  = %20d", exposure->dacBits);
+    sprintf(record[i++], "NAXIS   = %20d", 2);
+    sprintf(record[i++], "NAXIS1  = %20d",  cols);
+    sprintf(record[i++], "NAXIS2  = %20d",  rows);
+    sprintf(record[i++], "BZERO   = %20f", 0.0);
+    sprintf(record[i++], "BSCALE  = %20f", 1.0);
+    sprintf(record[i++], "DATAMIN = %20u", 0);
+    sprintf(record[i++], "DATAMAX = %20u", (1<<exposure->dacBits)-1);
+    sprintf(record[i++], "XPIXSZ  = %20f", exposure->ccd->pixel_width*exposure->xbin);
+    sprintf(record[i++], "YPIXSZ  = %20f", exposure->ccd->pixel_height*exposure->ybin);
+    sprintf(record[i++], "DATE-OBS= '%s'", timeString);
+    sprintf(record[i++], "EXPOSURE= %20f", (float)exposure->msec / 1000.0f);
+    
+    //TODO: insert environment strings here...
+    
+    sprintf(record[i++], "END");
+    for (k = 0; k < FITS_RECORD_SIZE; k++)
+        if (((char *)record)[k] == '\0')
+            ((char *)record)[k] = ' ';
+    if (write(fd, record, FITS_RECORD_SIZE) != FITS_RECORD_SIZE)
+      return -1;
+      
+    /*
+     * Convert and write image data.
+     */
+    pixelBytes  = ((exposure->dacBits + 7) / 8);
+    pixelRow = (unsigned char *) malloc(exposure->rowBytes);
+    if (!pixelRow) {
+      fprintf (stderr, "No memory for row buffer!\n");
+      return -2;
+    }
+    while ((result = CCDloadFrame (exposure, pixelRow)) > 0) {
+      if (result == 1) {
+        progress ("\r  0%% Uploaded        ");
+      }else if (!(result & 127)) {
+        progress ("\r%3d%%", result*100 / rows);
+      }
+      convert_pixels(pixelRow, pixelRow, pixelBytes, cols);
+      if (write(fd, pixelRow, exposure->rowBytes) != exposure->rowBytes) 
+        return -1;
+    }
+    free(pixelRow);
+    /*
+     * Pad remaining record size with zeros and close.
+     */
+    {
+      size_t image_size = exposure->rowBytes*rows;
+      size_t shortLen = image_size % FITS_RECORD_SIZE;
+      if (shortLen) {
+        size_t padBytes = FITS_RECORD_SIZE - shortLen;
+        memset(record, 0, padBytes);    
+        if (write(fd, record, padBytes) != padBytes)
+          return -1;
+      }
+    }
+    return close(fd);
+}
 
 
 int main (int argc, char **argv)
@@ -147,10 +278,9 @@ int main (int argc, char **argv)
   unsigned short *pixelRow, *end;
   int result, overage;
   unsigned avgPixel = 0;
-  unsigned rowPixels, colPixels;
   char *outFn;
   FILE *outFile;
-  time_t snapStartTime, snapEndTime;
+  time_t snapEndTime;
   
   const static struct option options[] = {
     {"binning", 1, NULL, 'b'},
@@ -269,23 +399,13 @@ gotAllOpts: //on to required arguments (exposure time and output file)
   exposure.dacBits = CCDdepth ? CCDdepth : device.dacBits;
   exposure.msec = exposureSecs * 1000.0f;
 
-  rowPixels = exposure.width / binX;
-  colPixels = exposure.height / binY;
   fprintf (stderr, "Exposing %d-bit deep %dx%d pixel image for %g seconds\n",
-    exposure.dacBits, rowPixels, colPixels, exposureSecs);
+    exposure.dacBits, exposure.width / binX, exposure.height / binY, exposureSecs);
     
   CCDexposeFrame (&exposure);
-  snapStartTime = time(NULL);
-  snapEndTime = snapStartTime + exposureSecs;
+  exposure.start = time(NULL);
+  snapEndTime = exposure.start + exposureSecs;
   
-  pixelRow = (unsigned short *) malloc (exposure.rowBytes);
-  if (!pixelRow) {
-    fprintf (stderr, "Row buffer malloc failed!");
-    return 2;
-  }
-  end = pixelRow + exposure.rowBytes/sizeof(unsigned short);
-
-#define REMAINING " seconds remaining"
   result = snapEndTime - time(NULL);
   if (result > 1) {  //output exposure progress messages
     int digits = progress ("%d" REMAINING, result) - (sizeof(REMAINING)-1);
@@ -295,19 +415,10 @@ gotAllOpts: //on to required arguments (exposure time and output file)
       sleep(1);
     }
   }
-  while ((result = CCDloadFrame (&exposure, pixelRow)) > 0) {
-    unsigned short *cursor = pixelRow;
-    unsigned sum = 0;
-    if (result == 1) {
-      progress ("\r  0%% of Image Uploaded");
-    }else if (!(result & 127)) {
-      progress ("\r%3d%%", result*100 / colPixels);
-    }
-    while (cursor < end) sum += *cursor++;
-    avgPixel += sum / rowPixels;    
+  if (saveFITS (fileno(outFile), &exposure)) {
+    fprintf (stderr, "\nFITS image write failed!");
+    return 2;
   }
-  avgPixel /= colPixels;
-  progress ("\rImage Upload Complete\n");
-  fprintf (stderr, "Average pixel value = %u\n", avgPixel);
+  progress ("\r%s Upload Complete\n", outFn);
   return 0;
 }
