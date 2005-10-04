@@ -33,12 +33,13 @@ static int offsetX = 0, offsetY = 0;
 static int sizeX = 0, sizeY = 0;
 static float exposureSecs;
 
+//note that options commented out in usage don't seem to work for SXV-H9 camera
 void usage (void)
 {
-  fprintf (stderr, "%s revised 10/3/05 brent@mbari.org\n", progName);
+  fprintf (stderr, "%s revised 10/4/05 brent@mbari.org\n", progName);
   fprintf (stderr, 
 "Snap a photo from a monochrome Starlight CCD camera. Usage:\n"
-"  %s {options} <exposure seconds> <TIFF output file>\n"
+"  %s {options} <exposure seconds> <output file>\n"
 "seconds may be specified in floating point to for msec resolution\n"
 "omit output file to write image to stdout (provided it is not a terminal)\n"
 "options:  (may be abbriviated)\n"
@@ -46,17 +47,17 @@ void usage (void)
 "  -offset=x{,y}     #origin offset\n"
 "  -origin=x{,y}     #same as -offset=\n"
 "  -size=x{,y}       #size of the image (width x height)\n"
-"  -dark             #do not open shutter\n"
-"  -depth=n          #number of bits per pixel\n"
+//"  -dark             #do not open shutter\n"
+//"  -depth=n          #number of bits per pixel\n"
 "  -camera=deviceFn  #use specified device rather than /dev/ccda\n"
-"  -nowipe           #do not wipe frame\n"
-"  -noclear          #do not clear frame\n"
-"  -noaccumulation   #do not accumulate charge when binning\n"
-"  -tdi              #time delay and integrate\n"
+//"  -nowipe           #do not wipe frame\n"
+//"  -noclear          #do not clear frame\n"
+//"  -noaccumulation   #do not accumulate charge when binning\n"
+//"  -tdi              #time delay and integrate\n"
 "  -help             #displays this\n"
 "examples:\n"
 "  %s 1.5 myimage.tiff  #1.5 second exposure to myimage.tiff w/o binning\n"
-"  %s -bin 2x2 .005 myimage.tiff  #5 msec exposure with 2x2 binning\n"
+"  %s -bin 2x3 .005 myimage.tiff  #5 msec exposure with 2x3 binning\n"
 "notes:\n"
 "  If possible, progress messages are output to file descriptor 3\n"
 "  Otherwise, they are sent to stderr.\n", 
@@ -154,7 +155,7 @@ char *parseFloat (char *cursor, float *f)
 #define swab4(word32)  (((word32) >> 24) | ((word32) << 24) | \
           (((word32) & 0x00FF0000) >> 8) | (((word32) & 0x0000FF00) << 8) )
 
-static void convert_pixels(unsigned char *src, unsigned char *dst, int pixel_size, int count)
+static void convert_pixels(unsigned char *src, int pixel_size, int count)
 {
     switch (pixel_size)
     {
@@ -249,7 +250,7 @@ static int saveFITS(int fd, struct CCDexp *exposure)
       }else if (!(result & 127)) {
         progress ("\r%3d%%", result*100 / rows);
       }
-      convert_pixels(pixelRow, pixelRow, pixelBytes, cols);
+      convert_pixels(pixelRow, pixelBytes, cols);
       if (write(fd, pixelRow, exposure->rowBytes) != exposure->rowBytes) 
         return -1;
     }
@@ -340,6 +341,9 @@ int main (int argc, char **argv)
         break;
       case 'a':  //no binning accumulation
         exposure.flags |= CCD_EXP_FLAGS_NOBIN_ACCUM;
+        break;
+      case 'D':  //dard frame
+        exposure.flags |= CCD_EXP_FLAGS_NOOPEN_SHUTTER;
         break;
       case 'n':  //camera device file
         device.filename[NAME_STRING_LENGTH]='\0';
