@@ -276,14 +276,15 @@ int main (int argc, char **argv)
   struct CCDdev device = {"/dev/ccda"};
   struct CCDexp exposure = {&device};
   unsigned short *pixelRow, *end;
-  int result, overage;
+  int overage;
   unsigned avgPixel = 0;
   char *outFn;
   FILE *outFile;
-  time_t snapEndTime;
+  time_t snapEndTime, secsLeft;
   
   const static struct option options[] = {
     {"binning", 1, NULL, 'b'},
+    {"bin", 1, NULL, 'b'},
     {"offset", 1, NULL, 'o'},
     {"origin", 1, NULL, 'o'},
     {"size", 1, NULL, 's'},
@@ -295,7 +296,8 @@ int main (int argc, char **argv)
     {"tdi", 0, NULL, 't'},
     {"TDI", 0, NULL, 't'},
     {"camera", 1, NULL, 'n'},
-    {"help", 0, NULL, 'h'}
+    {"help", 0, NULL, 'h'},
+    {NULL}
   };
     
   progName = basename (argv[0]);
@@ -368,8 +370,8 @@ gotAllOpts: //on to required arguments (exposure time and output file)
     fprintf (stderr, "Cannot open camera device: %s\n", device.filename);
     return 1;
   }
-  fprintf (stderr, "%s: %d-bit %dx%d pixel CCD camera\n", 
-    device.camera, device.depth, device.width, device.height);
+  fprintf (stderr, "%s: %dx%d pixel %d-bit CCD camera\n", 
+    device.camera, device.width, device.height, device.depth);
        
   outFn = argv[++optind];
   if (outFn) {
@@ -399,19 +401,19 @@ gotAllOpts: //on to required arguments (exposure time and output file)
   exposure.dacBits = CCDdepth ? CCDdepth : device.dacBits;
   exposure.msec = exposureSecs * 1000.0f;
 
-  fprintf (stderr, "Exposing %d-bit deep %dx%d pixel image for %g seconds\n",
-    exposure.dacBits, exposure.width / binX, exposure.height / binY, exposureSecs);
+  fprintf (stderr, "Exposing %dx%d pixel %d-bit image for %g seconds\n",
+    exposure.width/binX, exposure.height/binY, exposure.dacBits, exposureSecs);
     
   CCDexposeFrame (&exposure);
   exposure.start = time(NULL);
-  snapEndTime = exposure.start + exposureSecs;
+  snapEndTime = exposure.start + (time_t) exposureSecs;
   
-  result = snapEndTime - time(NULL);
-  if (result > 1) {  //output exposure progress messages
-    int digits = progress ("%d" REMAINING, result) - (sizeof(REMAINING)-1);
+  secsLeft = exposureSecs;
+  if (secsLeft > 1) {  //output exposure progress messages
+    int digits = progress ("%d" REMAINING, secsLeft) - (sizeof(REMAINING)-1);
     sleep(1);
-    while ((result = snapEndTime - time(NULL)) > 1) {
-      progress ("\r%*d ", digits, result);
+    while ((secsLeft = snapEndTime - time(NULL)) > 1) {
+      progress ("\r%*d ", digits, secsLeft);
       sleep(1);
     }
   }
