@@ -11,5 +11,4 @@ tar zxkf ${TIFFVERS}-tar.gz 2>/dev/null
 cd $TIFFVERS &&
 (make distclean
  ARMTOP=$ARMGCC configure --target=arm-unknown-linux --noninteractive) && 
-make && 
 echo "Now, run arminstall"
