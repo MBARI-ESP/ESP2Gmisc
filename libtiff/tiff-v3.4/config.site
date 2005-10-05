@@ -49,10 +49,11 @@ ZIP="yes"			# yes|no configure Deflate support (see below)
 #
 # Directory parameters.
 #
-DIR_BIN="$PWD/arm/bin"          # directory for tools
-DIR_LIB="$PWD/arm/lib"		# directory for libraries
-DIR_INC="$PWD/arm/include"      # directory for include files
-DIR_MAN="$PWD/arm/man"		# directory for manual pages
+: ${ARMTOP:=$PWD/arm}
+DIR_BIN="$ARMTOP/usr/bin"      # directory for tools
+DIR_LIB="$ARMTOP/usr/lib"      # directory for libraries
+DIR_INC="$ARMTOP/include"      # directory for include files
+DIR_MAN="$ARMTOP/usr/man"      # directory for manual pages
 rm -rf arm && mkdir -p arm
 #
 # Configuring supporting libraries.
