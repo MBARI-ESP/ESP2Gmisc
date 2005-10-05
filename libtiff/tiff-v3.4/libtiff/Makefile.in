@@ -306,15 +306,9 @@ installHdrs: ${INCS}
 		-src $$i -O $$f;					\
 	done
 installDSO: @DSO@dso
-	if [ @DSOSUF_VERSION@ != @DSOSUF@ ]; then			\
-	    ${INSTALL} -idb tiff.sw.tools -m 555 -F @DIR_LIB@		\
-		-O libtiff.@DSOSUF_VERSION@;				\
-	    ${INSTALL} -idb tiff.sw.tools -F @DIR_LIB@			\
-		-ln -s libtiff.@DSOSUF_VERSION@ libtiff.@DSOSUF@;	\
-	else								\
 	    ${INSTALL} -idb tiff.sw.tools -m 444 -F @DIR_LIB@		\
-		-O libtiff.@DSOSUF@;					\
-	fi
+		-O libtiff.@DSOSUF@;
+
 install: all installHdrs
 	${INSTALL} -idb tiff.sw.dev -m 755 -dir @DIR_LIB@
 	${INSTALL} -idb tiff.sw.dev -m 444 -F @DIR_LIB@ -O libtiff.a
