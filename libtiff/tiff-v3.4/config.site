@@ -40,7 +40,7 @@
 #
 # Package controls.
 #
-#DSO="auto"			# auto|IRIX|IRIX52 enable DSO support for system
+DSO="auto"			# auto|IRIX|IRIX52 enable DSO support for system
 #JPEG="no"			# yes|no configure JPEG support (see below)
 ZIP="yes"			# yes|no configure Deflate support (see below)
 #LIBGL="auto"			# yes|no|auto configure IRIS GL-based tools
@@ -53,7 +53,7 @@ DIR_BIN="$PWD/arm/bin"          # directory for tools
 DIR_LIB="$PWD/arm/lib"		# directory for libraries
 DIR_INC="$PWD/arm/include"      # directory for include files
 DIR_MAN="$PWD/arm/man"		# directory for manual pages
-mkdir -p arm
+rm -rf arm && mkdir -p arm
 #
 # Configuring supporting libraries.
 #
