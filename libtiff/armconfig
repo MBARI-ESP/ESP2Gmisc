@@ -1,0 +1,15 @@
+#!/bin/bash
+# unpack & configure readline-4.3 build for arm-linux -- 10/5/05 brent@mbari.org
+: ${CFLAGS:=-Os -fomit-frame-pointer}
+: ${CXXFLAGS:=$CFLAGS}
+: ${ARMGCC:=/arm}
+: ${CC:=$ARMGCC/bin/gcc}
+: ${LIBTOP:=${1-$ARMGCC/usr}}
+: ${TIFFVERS:=tiff-v3.4}
+export CC CFLAGS CXXFLAGS
+tar zxkf ${TIFFVERS}-tar.gz 2>/dev/null
+cd $TIFFVERS &&
+(make distclean
+ ARMTOP=$ARMGCC configure --target=arm-unknown-linux --noninteractive) && 
+make && 
+echo "Now, run arminstall"
