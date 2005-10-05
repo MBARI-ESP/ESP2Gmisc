@@ -310,7 +310,7 @@ installDSO: @DSO@dso
 	    ${INSTALL} -idb tiff.sw.tools -m 555 -F @DIR_LIB@		\
 		-O libtiff.@DSOSUF_VERSION@;				\
 	    ${INSTALL} -idb tiff.sw.tools -F @DIR_LIB@			\
-		-ln libtiff.@DSOSUF_VERSION@ -O libtiff.@DSOSUF@;	\
+		-ln -s libtiff.@DSOSUF_VERSION@ libtiff.@DSOSUF@;	\
 	else								\
 	    ${INSTALL} -idb tiff.sw.tools -m 444 -F @DIR_LIB@		\
 		-O libtiff.@DSOSUF@;					\
