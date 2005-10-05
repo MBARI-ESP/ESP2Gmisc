@@ -42,18 +42,18 @@
 #
 #DSO="auto"			# auto|IRIX|IRIX52 enable DSO support for system
 #JPEG="no"			# yes|no configure JPEG support (see below)
-#ZIP="no"			# yes|no configure Deflate support (see below)
+ZIP="yes"			# yes|no configure Deflate support (see below)
 #LIBGL="auto"			# yes|no|auto configure IRIS GL-based tools
 #LIBIMAGE="auto"		# yes|no|auto configure SGI RGB image tools
 
 #
 # Directory parameters.
 #
-#DIR_BIN="/usr/local/bin"		# directory for tools
-#DIR_LIB="/usr/local/lib"		# directory for libraries
-#DIR_INC="/usr/local/include"		# directory for include files
-#DIR_MAN="/usr/local/man"		# directory for manual pages
-
+DIR_BIN="$PWD/arm/bin"          # directory for tools
+DIR_LIB="$PWD/arm/lib"		# directory for libraries
+DIR_INC="$PWD/arm/include"      # directory for include files
+DIR_MAN="$PWD/arm/man"		# directory for manual pages
+mkdir -p arm
 #
 # Configuring supporting libraries.
 #
@@ -107,8 +107,8 @@
 #
 #     Look for it also at ftp://ftp.uu.net/pub/archiving/zip/zlib.
 #
-#DIRS_LIBINC="$DIRS_LIBINC ../zlib"	# directory for zlib include files
-#DIR_GZLIB="../zlib"			# directory for libz
+DIRS_LIBINC="$DIRS_LIBINC /arm/include"	# directory for zlib include files
+DIR_GZLIB="/arm/lib"			# directory for libz
 
 #
 # Miscellaneous parameters.
@@ -127,9 +127,9 @@
 #
 #AR="/bin/ar"				# pathname of suitable ar program
 #AROPTS="rc"				# options to ar for creating archive
-#CC="gcc"				# name/pathname of C compiler
+CC="/arm/bin/gcc"		        # name/pathname of C compiler
 #ENVOPTS="-Aa"				# options for getting ANSI C
-#GCOPTS="-g"				# options to pass C compiler
+GCOPTS="-O2"				# options to pass C compiler
 #LIBPORT='${PORT}/libport.a'		# library with emulation code
 #MACHDEPLIBS=""				# extra libraries for linking
 #PORTFUNCS=""				# non-standard functions to emulate
@@ -155,4 +155,4 @@
 #MV_F="-f"				# option to ${MV} to force operation
 #SED="/bin/sed"				# pathname of suitable sed program
 #SCRIPT_SH="/bin/sh"			# pathname of suitable shell
-#STRIP="/bin/strip"			# strip program used by install.sh
+STRIP="/arm/bin/strip"			# strip program used by install.sh
