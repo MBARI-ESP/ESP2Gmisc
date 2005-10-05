@@ -40,6 +40,7 @@ AR	= @AR@
 AROPTS	= @AROPTS@
 RANLIB	= @RANLIB@
 INSTALL	= @INSTALL@
+HOSTCC  = gcc
 
 #
 # If JPEG support is to be included and the Independent JPEG
@@ -208,7 +209,7 @@ ALPHA	= @ALPHAFILE@
 VERSION	= @VERSIONFILE@
 
 version.h: ${VERSION} ${ALPHA} ${SRCDIR}/mkversion.c
-	gcc -o mkversion ${CFLAGS} ${SRCDIR}/mkversion.c
+	${HOSTCC} -o mkversion ${CFLAGS} ${SRCDIR}/mkversion.c
 	rm -f version.h; ./mkversion -v ${VERSION} -a ${ALPHA} version.h
 tif_version.o: version.h
 
@@ -218,7 +219,7 @@ tif_version.o: version.h
 # make these rules have to be manually carried out.
 #
 tif_fax3sm.c: ${SRCDIR}/mkg3states.c ${SRCDIR}/tif_fax3.h
-	gcc -o mkg3states ${CFLAGS} ${SRCDIR}/mkg3states.c
+	${HOSTCC} -o mkg3states ${CFLAGS} ${SRCDIR}/mkg3states.c
 	rm -f tif_fax3sm.c; ./mkg3states -c const tif_fax3sm.c
 
 tif_aux.o: ${SRCDIR}/tif_aux.c
