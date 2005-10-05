@@ -1126,14 +1126,12 @@ if [ "$DSO" = auto ]; then
 	LIBCOPTS="-K PIC"
 	DSO=SOLARIS
 	;;
-    *-linux)
-	if [ -x /lib/libc.so.5 ]; then
+    *-linux-*)
 	    DSOSUF=so.${DIST_MAJOR}
 	    DSOSUF_VERSION=${DSOSUF}.${DIST_MINOR}.${DIST_ALPHA}
 	    LIBCOPTS='-fPIC'
 	    DSOOPTS='-shared'
 	    DSO=LINUX
-	fi
 	;;
     *-osf3*)
 	DSOSUF=so
