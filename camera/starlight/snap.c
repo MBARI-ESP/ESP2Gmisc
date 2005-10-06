@@ -77,10 +77,10 @@ static void usage (void)
 //"  -noclear        #do not clear frame\n"
 //"  -noaccumulation #do not accumulate charge when binning\n"
 //"  -tdi            #time delay and integrate\n"
-"  -tiff             #output TIFF file\n"
+"  -tiff{=deflate}   #output TIFF file with optional deflate compression\n"
 "  -fits             #output FITS file\n"
 "  -jpeg             #output JPEG file\n"
-"  -debug            #display debugging info\n"
+"  -debug{=1}        #display debugging info\n"
 "  -help             #displays this\n"
 "examples:\n"
 "  %s 1.5 myimage.tiff  #1.5 second exposure to myimage.tiff w/o binning\n"
@@ -221,27 +221,24 @@ readOutImage (struct CCDexp *exposure, writeLineFn *writeLine,
   end = line+width;
   *line0 = *end = 0;  //clear pad pixels
 
-  for (row = 0; row < height; row++) {
+  while ((result = CCDloadFrame (exposure, line)) > 0) {
     uint32 sum = 0;
-
-    while ((result = CCDloadFrame (exposure, line)) > 0) {
-      if (result == 1) {
-        progress ("\r  0%% Uploaded        ");
-      }else if (!(result & 127)) {
-        progress ("\r%3d%%", result*100 / height);
-      }
-      for (cursor=line; cursor<end; cursor++) {
-	uint16 pixel = *cursor;
-	sum+=pixel;
-	if (pixel < minPixel) minPixel=pixel;
-	if (pixel > maxFiltered) {  //look left and right to filter out hotspots
-	      if (!(pixel > cursor[-1] && pixel > cursor[1])) maxFiltered=pixel;
-	  if (pixel > maxPixel) maxPixel=pixel;
-	}
-      }
-      avgPixel += sum / width;
-      if (writeLine(fileDescriptor, exposure, line)) {result=-1; break;}
+    if (result == 1) {
+      progress ("\r  0%% Uploaded        ");
+    }else if (!(result & 127)) {
+      progress ("\r%3d%%", result*100 / height);
     }
+    for (cursor=line; cursor<end; cursor++) {
+      uint16 pixel = *cursor;
+      sum+=pixel;
+      if (pixel < minPixel) minPixel=pixel;
+      if (pixel > maxFiltered) {  //look left and right to filter out hotspots
+	    if (!(pixel > cursor[-1] && pixel > cursor[1])) maxFiltered=pixel;
+	if (pixel > maxPixel) maxPixel=pixel;
+      }
+    }
+    avgPixel += sum / width;
+    if (writeLine(fileDescriptor, exposure, line)) {result=-1; break;}
   }
   avgPixel /= height;
   free (line0);
@@ -496,7 +493,7 @@ setTiffDate (TIFF* tif)
 
 int writeTIFFline (void *tif, struct CCDexp *exposure, uint16 *lineBuffer) 
 {
-  return TIFFWriteScanline((TIFF *)tif, lineBuffer, exposure->readRow, 0) != 1;
+  return TIFFWriteScanline((TIFF *)tif, lineBuffer, exposure->readRow-1, 0) != 1;
 }
 
 
@@ -509,19 +506,19 @@ static int saveTIFF(TIFF *tif, struct CCDexp *exposure)
   char *artist = getenv ("TIFF_ARTIST");
   char *host = getenv ("TIFF_HOST");
   char *soft = getenv ("TIFF_SOFTWARE");
+  char *make = getenv ("TIFF_MAKE");
   char *compressString = getenv ("TIFF_COMPRESSION");
   char *predictString = getenv ("TIFF_PREDICTOR");
   char *comment = getenv ("TIFF_COMMENT");
   int compress = compressString ? atoi(compressString) : 0;
   int predict = predictString ? atoi(predictString) : 0;
   
-  setTiff (tif, TIFFTAG_MAKE, "Starlight Xpress");
   setTiff (tif, TIFFTAG_MODEL, exposure->ccd->camera);
-
+  setTiffDate (tif);
+  if (make) setTiff (tif, TIFFTAG_MAKE, make);
   if (artist) setTiff (tif, TIFFTAG_ARTIST, artist);
   if (host) setTiff (tif, TIFFTAG_HOSTCOMPUTER, host);
   if (soft) setTiff (tif, TIFFTAG_SOFTWARE, soft);
-  setTiffDate (tif);
   if (compress) setTiff (tif, TIFFTAG_COMPRESSION, compress);
   if (predict) setTiff (tif, TIFFTAG_PREDICTOR, predict);
   {
@@ -533,7 +530,7 @@ static int saveTIFF(TIFF *tif, struct CCDexp *exposure)
     if (!strips) strips = 1;
     stripRows = height / strips;
     if (!stripRows) stripRows = 1;
-    if (debug)
+    if (debug>1)
       fprintf (stderr, "(%dx%d) TIFF image in %ld strips with %ld rows/strip\n",
 			        width, height, strips, stripRows);
     setTiff(tif, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);
@@ -605,14 +602,14 @@ int main (int argc, char **argv)
     {"noaccumulation", 0, NULL, 'A'},
     {"tdi", 0, NULL, 't'},
     {"TDI", 0, NULL, 't'},
-    {"tiff", 0, NULL, 'T'},
-    {"TIFF", 0, NULL, 'T'},
+    {"tiff", 2, NULL, 'T'},
+    {"TIFF", 2, NULL, 'T'},
     {"FITS", 0, NULL, 'F'},
     {"fits", 0, NULL, 'F'},
     {"JPEG", 0, NULL, 'J'},
     {"jpeg", 0, NULL, 'J'},
     {"camera", 1, NULL, 'n'},
-    {"debug", 0, NULL, 'S'},
+    {"debug", 2, NULL, 'S'},
     {"help", 0, NULL, 'h'},
     {NULL}
   };
@@ -655,7 +652,7 @@ int main (int argc, char **argv)
           syntaxErr ("Negative # of depth bits specified");
         break;
       case 'S':  //display debuging status info
-        debug = 1;
+        debug = optarg ? atoi(optarg) : 1;
         break;
       case 'w':  //suppress CCD wipe
         exposure.flags |= CCD_EXP_FLAGS_NOWIPE_FRAME;
@@ -678,6 +675,8 @@ int main (int argc, char **argv)
         break;
       case 'T':  //generate TIFF file
         assignType(TIFFfile);
+        if (optarg && toupper(*optarg)=='D')
+          setenv ("TIFF_COMPRESSION", "32946", 1);
         break;
       case 'F': //generate FITS file
         assignType(FITSfile);
