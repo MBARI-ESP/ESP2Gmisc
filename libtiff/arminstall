@@ -17,7 +17,7 @@ cplinks() {
 
 cplib() {
 #copy and strip ARM library $1 and all symlinks to it
-   $ARMSTRIP $1 -o $HOSTTOP/$1 # && cplinks $1
+   $ARMSTRIP $1 -o $HOSTTOP/$1 && cplinks $1
 }
 
 echo "Installing in $HOSTTOP"
