@@ -70,18 +70,18 @@ static void usage (void)
 "  -offset=x{,y}     #origin offset\n"
 "  -origin=x{,y}     #same as -offset=\n"
 "  -size=x{,y}       #size of the image (width x height)\n"
+"  -camera=deviceFn  #use specified device rather than /dev/ccda\n"
+"  -tiff{=deflate}   #output TIFF file with optional deflate compression\n"
+"  -fits             #output FITS file (image rotated 180 degrees wrt TIFF)\n"
+"  -jpeg             #output JPEG file\n"
+"  -debug{=1}        #display debugging info\n"
+"  -help             #displays this\n"
 //"  -dark           #do not open shutter\n"
 //"  -depth=n        #number of bits per pixel\n"
-"  -camera=deviceFn  #use specified device rather than /dev/ccda\n"
 //"  -nowipe         #do not wipe frame\n"
 //"  -noclear        #do not clear frame\n"
 //"  -noaccumulation #do not accumulate charge when binning\n"
 //"  -tdi            #time delay and integrate\n"
-"  -tiff{=deflate}   #output TIFF file with optional deflate compression\n"
-"  -fits             #output FITS file\n"
-"  -jpeg             #output JPEG file\n"
-"  -debug{=1}        #display debugging info\n"
-"  -help             #displays this\n"
 "examples:\n"
 "  %s 1.5 myimage.tiff  #1.5 second exposure to myimage.tiff w/o binning\n"
 "  %s -bin 2x3 .005 myimage.tiff  #5 msec exposure with 2x3 binning\n"
@@ -509,9 +509,11 @@ static int saveTIFF(TIFF *tif, struct CCDexp *exposure)
   char *make = getenv ("TIFF_MAKE");
   char *compressString = getenv ("TIFF_COMPRESSION");
   char *predictString = getenv ("TIFF_PREDICTOR");
+  char *orientString = getenv ("TIFF_ORIENTATION");
   char *comment = getenv ("TIFF_COMMENT");
   int compress = compressString ? atoi(compressString) : 0;
   int predict = predictString ? atoi(predictString) : 0;
+  int orientation = orientString ? atoi(orientString) : 0;
   
   setTiff (tif, TIFFTAG_MODEL, exposure->ccd->camera);
   setTiffDate (tif);
@@ -521,6 +523,7 @@ static int saveTIFF(TIFF *tif, struct CCDexp *exposure)
   if (soft) setTiff (tif, TIFFTAG_SOFTWARE, soft);
   if (compress) setTiff (tif, TIFFTAG_COMPRESSION, compress);
   if (predict) setTiff (tif, TIFFTAG_PREDICTOR, predict);
+  if (orientation) setTiff (tif, TIFFTAG_ORIENTATION, orientation);
   {
     unsigned width = exposure->width / exposure->xbin;
     unsigned height = exposure->height / exposure->ybin;
@@ -536,7 +539,8 @@ static int saveTIFF(TIFF *tif, struct CCDexp *exposure)
     setTiff(tif, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);
     setTiff(tif, TIFFTAG_SAMPLESPERPIXEL, 1);
     setTiff(tif, TIFFTAG_BITSPERSAMPLE, 16);
-
+//tried to fix this, but most image readers don't respect orientation
+//    setTiff(tif, TIFFTAG_ORIENTATION, ORIENTATION_BOTLEFT); //to match .fits!
     setTiff(tif, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_MINISBLACK);
     setTiff(tif, TIFFTAG_IMAGEWIDTH, width);
     setTiff(tif, TIFFTAG_ROWSPERSTRIP, stripRows);
