@@ -17,7 +17,11 @@
 #include <libgen.h>
 #include <limits.h>
 #include <stdarg.h>
+#include <ctype.h>
 #include <time.h>
+
+#include <tiff.h>
+#include <tiffio.h>
 
 #include "devctl.h"   //low-level camera device control
 
@@ -31,18 +35,36 @@ static int CCDdepth = 0;
 static int binX = 1, binY = 1;
 static int offsetX = 0, offsetY = 0;
 static int sizeX = 0, sizeY = 0;
-static float exposureSecs;
+static float exposureSecs = 0.0f;  //negative --> autoexposure time limit
+static char debug = 0;
+
+static enum {  //supported output file types
+  unspecified, TIFF, FITS, JPEG,
+} outputFileType = unspecified;
+
+static const char **fileTypeName = {
+  "unspecified", "TIFF", "FITS", "JPEG"
+};
+
+
+typedef struct {
+	unsigned minimum, maximum, average, filteredMax;  // pixel values
+		} imageStats;	// basic image statistics for autoexposure
+
+typedef int writeLineFn (void *file, CCDdev *exposure, uint16 *lineBuffer);
+
 
 //note that options commented out in usage don't seem to work for SXV-H9 camera
 void usage (void)
 {
-  fprintf (stderr, "%s revised 10/4/05 brent@mbari.org\n", progName);
+  fprintf (stderr, "%s revised 10/5/05 brent@mbari.org\n", progName);
   fprintf (stderr, 
 "Snap a photo from a monochrome Starlight CCD camera. Usage:\n"
 "  %s {options} <exposure seconds> <output file>\n"
 "seconds may be specified in floating point to for msec resolution\n"
 "omit output file to write image to stdout (provided it is not a terminal)\n"
 "options:  (may be abbriviated)\n"
+"  -autoexpose=limit #automatic exposure with specified time limit in seconds"
 "  -binning=x{,y}    #x,y binning factors\n"
 "  -offset=x{,y}     #origin offset\n"
 "  -origin=x{,y}     #same as -offset=\n"
@@ -54,6 +76,10 @@ void usage (void)
 //"  -noclear          #do not clear frame\n"
 //"  -noaccumulation   #do not accumulate charge when binning\n"
 //"  -tdi              #time delay and integrate\n"
+"  -tiff             #output TIFF file\n"
+"  -fits             #output FITS file\n"
+"  -jpeg             #output JPEG file\n"
+"  -debug            #display debugging info\n"
 "  -help             #displays this\n"
 "examples:\n"
 "  %s 1.5 myimage.tiff  #1.5 second exposure to myimage.tiff w/o binning\n"
@@ -140,6 +166,90 @@ char *parseFloat (char *cursor, float *f)
 }
 
 
+float parseDuration (char *cursor)
+{
+  float *secs;
+  if (*parseFloat (cursor, &secs))
+    syntaxErr ("Junk text after exposure duration");
+  if (secs > (float)INT_MAX/1000.0f)
+    syntaxErr ("Exposure duration (%g) is too long!", secs);
+  return secs;
+}
+
+ 
+static void 
+showStats (imageStats *pixel)
+{
+  fprintf (fprintf, 
+    "(Min/Avg/Max/FilteredMax) Pixel lumenence = (%u/%u/%u/%u) A/D counts\n", 
+      pixel->minimum,pixel->average,pixel->maximum,pixel->filteredMax);
+}
+
+
+int doNotWrite (void *ignored, CCDdev *exposure, uint16 *lineBuffer) 
+{
+  return 0;
+}
+
+
+static int 
+readOutImage (CCDexp exposure, writeLineFn *writeLine, void *fileDescriptor, imageStats *stats)
+/*
+  Read out an image from the CCD and produce image stats
+  assumes 16-bit pixels for now
+*/
+{
+  unsigned width = exposure->width / exposure->xbin;
+  unsigned height = exposure->height / exposure->ybin;
+//  unsigned pixelBytes  = ((exposure->dacBits + 7) / 8);
+  uint32 avgPixel = 0;
+  uint16 maxPixel = 0;
+  uint16 maxFiltered = 0;
+  uint16 minPixel = -1;
+  unsigned row;
+  int result = 0;
+  uint16 *end, *cursor;
+  uint16 *line, *line0 = malloc (exposure->rowBytes+2);
+  if (!line0) return -2;
+  line = line0+1;  //precharge line array with state info for filter
+  end = line+width;
+  *line0 = *end = 0;  //clear pad pixels
+
+  for (row = 0; row < height; row++) {
+    uint32 sum = 0;
+
+    while ((result = CCDloadFrame (exposure, pixelRow)) > 0) {
+      if (result == 1) {
+        progress ("\r  0%% Uploaded        ");
+      }else if (!(result & 127)) {
+        progress ("\r%3d%%", result*100 / rows);
+      }
+      for (cursor=line; cursor<end; cursor++) {
+	uint16 pixel = *cursor;
+	sum+=pixel;
+	if (pixel < minPixel) minPixel=pixel;
+	if (pixel > maxFiltered) {  //look left and right to filter out hotspots
+	      if (!(pixel > cursor[-1] && pixel > cursor[1])) maxFiltered=pixel;
+	  if (pixel > maxPixel) maxPixel=pixel;
+	}
+      }
+      avgPixel += sum / width;
+      if (writeLine(fileDescriptor, exposure, line)) {result=-1; break;}
+    }
+  }
+  avgPixel /= height;
+  free (line0);
+  if (stats) {
+    stats->minimum = minPixel;
+    stats->maximum = maxPixel;
+    stats->average = avgPixel;
+    stats->filteredMax = maxFiltered;
+    showStats (stats);
+  }
+  return result;
+}
+
+
 /*
  * FITS file routines.
  */
@@ -193,6 +303,7 @@ static void convert_pixels(unsigned char *src, int pixel_size, int count)
             break;
     }
 }
+
 
 /*
  * Save image to FITS file.
@@ -272,6 +383,137 @@ static int saveFITS(int fd, struct CCDexp *exposure)
 }
 
 
+//  TIFF file routines
+
+int setTiff (TIFF* tif, ttag_t tag, ...)
+/*
+  Convenient function to set a TIFF tag.
+  Calls TIFFVSetField
+*/
+{
+    va_list ap;
+    int ok;
+    va_start  (ap, tag);
+    ok = TIFFVSetField(tif, tag, ap);
+    va_end (ap);
+    if (!ok)
+      fprintf (stderr, "Error while setting TIFF tag #%d\n", tag);
+    return ok;
+}
+
+
+static int 
+setTiffDate (TIFF* tif)
+/*
+	write the 20 character TIFF DateTime tag
+*/
+{
+	char buffer[20];
+	time_t	now;
+	struct tm date;
+	time (&now);
+	gmtime_r (&now, &date);	
+	strftime (buffer, sizeof(buffer), "%Y:%m:%d %H:%M:%S", &date);
+	return setTiff (tif, TIFFTAG_DATETIME, buffer);
+}
+
+
+int writeTIFFline (TIFF *tif, CCDdev *exposure, uint16 *lineBuffer) 
+{
+  return TIFFWriteScanline(tif, lineBuffer, exposure->readRow, 0) != 1;
+}
+
+
+/*
+ *  write TIFF image to prepared TIFF file
+ */
+static int insertTIFFimage (TIFF *tiff, struct CCDexp *exposure)
+{
+  imageStats stats;
+  unsigned width = exposure->width / exposure->xbin;
+  unsigned height = exposure->height / exposure->ybin;
+  unsigned pixelBytes  = ((exposure->dacBits + 7) / 8);
+    //shoot for 64KByte TIFF image strips
+  unsigned strips = width*height*pixelBytes / 65536;  
+  unsigned stripRows;
+  if (!strips) strips = 1;
+  stripRows = height / strips;
+  if (!stripRows) stripRows = 1;
+  if (debug)
+    fprintf (stderr, "(%dx%d) TIFF image in %ld strips with %ld rows/strip\n",
+			      width, height, strips, stripRows);
+  setTiff(tif, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);
+  setTiff(tif, TIFFTAG_SAMPLESPERPIXEL, 1);
+  setTiff(tif, TIFFTAG_BITSPERSAMPLE, 16);
+
+  setTiff(tif, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_MINISBLACK);
+  setTiff(tif, TIFFTAG_IMAGEWIDTH, width);
+  setTiff(tif, TIFFTAG_ROWSPERSTRIP, stripRows);
+
+  return readoutTIFFimage (tiff, exposure, &stats);
+}
+
+
+/*
+ * Save image to TIFF file.
+ */
+static int saveTIFF(TIFF *tif, struct CCDexp *exposure)
+{
+  char *artist = getenv ("TIFF_ARTIST");
+  char *host = getenv ("TIFF_HOST");
+  char *soft = getenv ("TIFF_SOFTWARE");
+  char *compressString = getenv ("TIFF_COMPRESSION");
+  char *predictString = getenv ("TIFF_PREDICTOR");
+  char *comment getenv ("TIFF_COMMENT");
+  int *compress = compressString ? atoi(compressString) : 0;
+  int *predict = predictString ? atoi(predictString) : NO_PREDICTOR;
+  
+  setTiff (tif, TIFFTAG_MAKE, "Starlight Xpress");
+  setTiff (tif, TIFFTAG_MODEL, exposure->device.camera);
+
+  if (artist) setTiff (tif, TIFFTAG_ARTIST, artist);
+  if (host) setTiff (tif, TIFFTAG_HOSTCOMPUTER, host);
+  if (soft) setTiff (tif, TIFFTAG_SOFTWARE, soft);
+  setTiffDate (tif);
+  if (compress) setTiff (tif, TIFFTAG_COMPRESSION, compress);
+  if (predict != NO_PREDICTOR) setTiff (tif, TIFFTAG_PREDICTOR, predict);
+
+  if (insertTIFFimage (tiff, exposure)) return -1;
+  {
+    char description[2000], *cursor=description;
+    char binning[30];
+    binning[0] = '\0';
+    if (exposure->xbin != 1 || exposure->xbin != 1) 
+      sprintf (binning, "with %dx%d binning", binX, binY);
+
+    if (comment) {
+      strcat (description, comment, 1800);
+      cursor += strlen(description);
+      *cursor++ = '\n';
+    }
+    sprintf (cursor, "Exposed %g seconds %s",
+                        (double)exposure->msec/1000.0, binning);			    
+    setTiff (tif, TIFFTAG_IMAGEDESCRIPTION, description);
+  }
+  return 0;
+}
+
+
+void assignType (int fileType)
+{
+  if (outputFileType != unspecified)
+    syntaxErr ("Redundant ouput file type specification!");
+  outputFileType = fileType
+}
+
+
+void imageWrtFailed (void)
+{
+   fprintf (stderr, "\n%s image write failed!\n", fileTypeName[outputFileType]);
+   exit(2);
+}
+        
+
 int main (int argc, char **argv)
 {
   struct CCDdev device = {"/dev/ccda"};
@@ -284,19 +526,27 @@ int main (int argc, char **argv)
   time_t snapEndTime, secsLeft;
   
   const static struct option options[] = {
+    {"autoexpose", 1, NULL, 'a'}, 
     {"binning", 1, NULL, 'b'},
     {"bin", 1, NULL, 'b'},
     {"offset", 1, NULL, 'o'},
     {"origin", 1, NULL, 'o'},
     {"size", 1, NULL, 's'},
     {"dark", 0, NULL, 'D'},
-    {"depth", 1, NULL, 'd'},
+//    {"depth", 1, NULL, 'd'},
     {"nowipe", 0, NULL, 'w'},
     {"noclear", 0, NULL, 'c'},
     {"noaccumulation", 0, NULL, 'a'},
     {"tdi", 0, NULL, 't'},
     {"TDI", 0, NULL, 't'},
+    {"tiff", 0, NULL, 'T'},
+    {"TIFF", 0, NULL, 'T'},
+    {"FITS", 0, NULL, 'F'},
+    {"fits", 0, NULL, 'F'},
+    {"JPEG", 0, NULL, 'J'},
+    {"jpeg", 0, NULL, 'J'},
     {"camera", 1, NULL, 'n'},
+    {"debug", 0, NULL, 'S'},
     {"help", 0, NULL, 'h'},
     {NULL}
   };
@@ -309,6 +559,11 @@ int main (int argc, char **argv)
     switch (optc) {
       case -1:
         goto gotAllOpts;
+      case 'a':  //auto exposure
+        exposureSecs = -parseDuration (optarg);
+        if (exposureSecs >= -0.002f)
+          syntaxErr ("autoexposure limit must be > 2ms");
+        break;
       case 'b':  //XY binning
         parseXYoptArg (&binX, &binY);
         if (!validBin(binX) || !validBin(binY))
@@ -330,6 +585,9 @@ int main (int argc, char **argv)
         if (CCDdepth <= 0)
           syntaxErr ("Negative # of depth bits specified");
         break;
+      case 'S':  //display debuging status info
+        debug = 1;
+        break;
       case 'w':  //suppress CCD wipe
         exposure.flags |= CCD_EXP_FLAGS_NOWIPE_FRAME;
         break;
@@ -349,6 +607,15 @@ int main (int argc, char **argv)
         device.filename[NAME_STRING_LENGTH]='\0';
         strncpy (device.filename, optarg, NAME_STRING_LENGTH-1);
         break;
+      case 'T':  //generate TIFF file
+        assignType(TIFF);
+        break;
+      case 'F': //generate FITS file
+        assignType(FITS);
+        break;
+      case 'J': //generate JPEG file
+        assignType(JPEG);
+        break;
       case 'h':
         usage();
         return 0;
@@ -356,20 +623,15 @@ int main (int argc, char **argv)
         syntaxErr("invalid option: %s", argv[optind]);
     }
   }
-gotAllOpts: //on to required arguments (exposure time and output file)
-  if (!argv[optind]) {
-    syntaxErr ("Missing Exposure Time");
+gotAllOpts: //on to arguments (exposure time and output file name)
+  if (exposureSecs == 0.0f) {
+    if (!argv[optind]) {
+      syntaxErr ("Missing Exposure Time");
+    exposureSecs = parseDuration (argv[optind]);
+    if (exposureSecs < 0.001f)
+      syntaxErr ("Exposure duration must be >= 0.001 seconds");
+    ++optind;
   }
-  if (*parseFloat (argv[optind], &exposureSecs)) {
-    syntaxErr ("Junk text after exposure duration");
-  }
-  if (exposureSecs < 0.001f) {
-    syntaxErr ("Exposure duration (%g) must be >= 0.001 seconds", exposureSecs);
-  }
-  if (exposureSecs > (float)INT_MAX/1000.0f) {
-    syntaxErr ("Exposure duration (%g) is too long!", exposureSecs);
-  }
-  
   if (!CCDconnect (&device)) {
     fprintf (stderr, "Cannot open camera device: %s\n", device.filename);
     return 1;
@@ -377,12 +639,24 @@ gotAllOpts: //on to required arguments (exposure time and output file)
   fprintf (stderr, "%s: %dx%d pixel %d-bit CCD camera\n", 
     device.camera, device.width, device.height, device.depth);
        
-  outFn = argv[++optind];
+  outFn = argv[optind];
   if (outFn) {
+    char *lastDot;
     outFile = fopen (outFn, "w");
     if (!outFile) {
       perror(outFn);
       return errno;
+    }
+    if (outputFileType == unspecified) {
+      lastDot = strrchr (outFn, '.');
+      if (lastDot) switch (toupper(lastDot[1])) {
+        case 'J': outputFileType = JPEG;
+          break;
+        case 'T': outputFileType = TIFF;
+          break;
+        case 'F': outputFileType = FITS;
+          break 
+      }
     }
   }else{  //trying to write image to stdout
     if (isatty(fileno(stdout)))
@@ -403,7 +677,17 @@ gotAllOpts: //on to required arguments (exposure time and output file)
   exposure.xbin = binX;
   exposure.ybin = binY;
   exposure.dacBits = CCDdepth ? CCDdepth : device.dacBits;
-  exposure.msec = exposureSecs * 1000.0f;
+  
+  if (exposure.dacBits < 8 || exposure.dacBits > 16)
+    syntaxErr ("Pixel depth of %d bits is not currently supported!\n", exposure.dacBits);
+
+  if (exposureSecs < 0.0) {
+    fprintf (stderr, "Setting exposure time for no longer than %g seconds...\n",
+                exposureSecs = -exposureSecs);
+    exposure.msec = exposureSecs * 1000.0f;
+    optimizeExposure (exposure);
+  }else
+    exposure.msec = exposureSecs * 1000.0f;
 
   fprintf (stderr, "Exposing %dx%d pixel %d-bit image for %g seconds\n",
     exposure.width/binX, exposure.height/binY, exposure.dacBits, exposureSecs);
@@ -421,10 +705,25 @@ gotAllOpts: //on to required arguments (exposure time and output file)
       sleep(1);
     }
   }
-  if (saveFITS (fileno(outFile), &exposure)) {
-    fprintf (stderr, "\nFITS image write failed!");
-    return 2;
+  /*  Write out the image in the specified format */
+  switch (outputFileType) {
+    case unspecified:
+      outputFileType = TIFF;  //default to TIFF
+    case TIFF:
+      {
+        TIFF *tif = TIFFFdOpen (fileno(outfile), outfn, "w");
+        if (!tif || saveTIFF (tif, &exposure)) imageWrtFailed();
+        TIFFclose(tif);
+      }
+      break;
+      
+    case FITS:
+      if (saveFITS (fileno(outFile), &exposure)) imageWrtFailed();
+      break;
+      
+    default:
+      syntaxErr("Unsupported image file type:  %s",fileTypeName[outputFileType]);
   }
-  progress ("\r%s Upload Complete\n", outFn);
+  progress ("\r%s: %s Upload Complete\n", outFn, fileTypeName[outputFileType]);
   return 0;
 }
