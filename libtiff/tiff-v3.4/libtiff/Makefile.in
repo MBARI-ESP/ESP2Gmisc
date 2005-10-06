@@ -307,7 +307,8 @@ installHdrs: ${INCS}
 	done
 installDSO: @DSO@dso
 	    ${INSTALL} -idb tiff.sw.tools -m 444 -F @DIR_LIB@		\
-		-O libtiff.@DSOSUF@;
+		-O libtiff.@DSOSUF@; \
+            ln -sf libtiff.@DSOSUF@ @DIR_LIB@/libtiff.so
 
 install: all installHdrs
 	${INSTALL} -idb tiff.sw.dev -m 755 -dir @DIR_LIB@
