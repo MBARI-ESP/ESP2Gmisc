@@ -65,18 +65,18 @@ static void usage (void)
 "seconds may be specified in floating point for millisecond resolution\n"
 "omit output file to write image to stdout (provided it is not a terminal)\n"
 "options:  (may be abbriviated)\n"
-"  -autoexpose=limit #automatic exposure with specified max duration in seconds\n"
+"  -autoexpose{=600} #auto duration with specified max duration in seconds\n"
 "  -binning=x{,y}    #x,y binning factors\n"
 "  -offset=x{,y}     #origin offset\n"
 "  -origin=x{,y}     #same as -offset=\n"
 "  -size=x{,y}       #size of the image (width x height)\n"
-//"  -dark             #do not open shutter\n"
-//"  -depth=n          #number of bits per pixel\n"
+//"  -dark           #do not open shutter\n"
+//"  -depth=n        #number of bits per pixel\n"
 "  -camera=deviceFn  #use specified device rather than /dev/ccda\n"
-//"  -nowipe           #do not wipe frame\n"
-//"  -noclear          #do not clear frame\n"
-//"  -noaccumulation   #do not accumulate charge when binning\n"
-//"  -tdi              #time delay and integrate\n"
+//"  -nowipe         #do not wipe frame\n"
+//"  -noclear        #do not clear frame\n"
+//"  -noaccumulation #do not accumulate charge when binning\n"
+//"  -tdi            #time delay and integrate\n"
 "  -tiff             #output TIFF file\n"
 "  -fits             #output FITS file\n"
 "  -jpeg             #output JPEG file\n"
@@ -183,7 +183,7 @@ showStats (imageStats *pixel)
 {
   if (debug)
     fprintf (stderr, 
-      "(Min/Avg/Max/FilteredMax) Pixel lumenence = (%u/%u/%u/%u) A/D counts\n", 
+      "\r( %u Min / %u Avg / %u Max / %u FilteredMax ) A/D counts\n", 
         pixel->minimum,pixel->average,pixel->maximum,pixel->filteredMax);
 }
 
@@ -592,7 +592,7 @@ int main (int argc, char **argv)
   time_t snapEndTime, secsLeft;
   
   const static struct option options[] = {
-    {"autoexpose", 1, NULL, 'a'}, 
+    {"autoexpose", 2, NULL, 'a'}, 
     {"binning", 1, NULL, 'b'},
     {"bin", 1, NULL, 'b'},
     {"offset", 1, NULL, 'o'},
@@ -626,9 +626,12 @@ int main (int argc, char **argv)
       case -1:
         goto gotAllOpts;
       case 'a':  //auto exposure
-        exposureSecs = -parseDuration (optarg);
-        if (exposureSecs >= -0.002f)
-          syntaxErr ("autoexposure limit must be > 2ms");
+        if (optarg) {
+          exposureSecs = -parseDuration (optarg);
+          if (exposureSecs >= -0.002f)
+            syntaxErr ("autoexposure limit must be > 2ms");
+        }else
+          exposureSecs = -600;  //default to 5 minute max exposure time
         break;
       case 'b':  //XY binning
         parseXYoptArg (&binX, &binY);
