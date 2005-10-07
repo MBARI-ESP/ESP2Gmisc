@@ -36,7 +36,8 @@ static int CCDdepth = 0;
 static int binX = 1, binY = 1;
 static int offsetX = 0, offsetY = 0;
 static int sizeX = 0, sizeY = 0;
-static float exposureSecs = 0.0f;  //negative --> autoexposure time limit
+static double exposureSecs = 0.0;  //negative --> autoexposure time limit
+static unsigned maxAutoSignal = 0;
 static char debug = 0;
 
 static enum {  //supported output file types
@@ -60,12 +61,12 @@ static void usage (void)
 {
   fprintf (stderr, "%s revised 10/5/05 brent@mbari.org\n", progName);
   fprintf (stderr, 
-"Snap a photo from a monochrome Starlight CCD camera. Usage:\n"
+"Snap a photo from a monochrome Starlight Xpress CCD camera. Usage:\n"
 "  %s {options} <exposure seconds> <output file>\n"
 "seconds may be specified in floating point for millisecond resolution\n"
 "omit output file to write image to stdout (provided it is not a terminal)\n"
 "options:  (may be abbriviated)\n"
-"  -autoexpose{=600} #auto duration with specified max duration in seconds\n"
+"  -autoexpose{=300} #auto duration with specified max duration in seconds\n"
 "  -binning=x{,y}    #x,y binning factors\n"
 "  -offset=x{,y}     #origin offset\n"
 "  -origin=x{,y}     #same as -offset=\n"
@@ -151,8 +152,8 @@ static char *parseXYoptArg (int *x, int * y)
 }
 
 
-static char *parseFloat (char *cursor, float *f)
-// parse a floating point (single precision) number at cursor
+static char *parseDouble (char *cursor, double *f)
+// parse a floating point (double precision) number at cursor
 // returns pointer to next char
 //  abort with a syntaxErr if no valid text found
 {
@@ -167,14 +168,12 @@ static char *parseFloat (char *cursor, float *f)
 }
 
 
-static float parseDuration (char *cursor)
+static char *parseDuration (char *cursor, double *secs)
 {
-  float secs;
-  if (*parseFloat (cursor, &secs))
-    syntaxErr ("Junk text after exposure duration");
-  if (secs > (float)INT_MAX/1000.0f)
-    syntaxErr ("Exposure duration (%g) is too long!", secs);
-  return secs;
+  char *terminator = parseDouble (cursor, secs);
+  if (*secs > (double)INT_MAX/1000.0)
+    syntaxErr ("Exposure duration (%g) is too long!", *secs);
+  return terminator;
 }
 
  
@@ -188,7 +187,8 @@ showStats (imageStats *pixel)
 }
 
 
-int doNotWrite (void *ignored, struct CCDexp *exposure, uint16 *lineBuffer) 
+static
+int dummyWrite (void *ignored, struct CCDexp *exposure, uint16 *lineBuffer) 
 {
   return 0;
 }
@@ -253,84 +253,89 @@ readOutImage (struct CCDexp *exposure, writeLineFn *writeLine,
 }
 
 
-#if 0
+static void
+expose (struct CCDexp *exposure)
+{
+  time_t snapEndTime, secsLeft = exposure->msec / 1000;
+  CCDexposeFrame (exposure);
+  snapEndTime = (exposure->start = time(NULL)) + secsLeft;
+  if (secsLeft > 1) {  //output exposure progress messages
+    int digits = progress ("%d" REMAINING, secsLeft) - (sizeof(REMAINING)-1);
+    sleep(1);
+    while ((secsLeft = snapEndTime - time(NULL)) > 1) {
+      progress ("\r%*d ", digits, secsLeft);
+      sleep(1);
+    }
+  }
+}
+
+
 static int 
 optimizeExposure (struct CCDexp *exposure)
 /*
 calculate optimized exposure time in milliseconds 
-limit exposure time to maxSeconds.
+limit exposure time to exposure->msec
+stores optimal exposure time in exposure->msec
+returns 0 if successful
 
 Theory:
-Take a short exposure with the coursest binning.
+Take a short exposure with the coarsest binning.
 Optimum Exposure time is determined
-by the brightest pixel in this course image.  Scale exposure time so that this
+by the brightest pixel in this coarse image.  Scale exposure time so that this
 "bright" pixel reads approximately max A/D counts.
 */
 {
-  const double minSBIGseconds = (double)minSBIGms / 1000.0;
-  const long absoluteMaxSignal = binningMode ? maxSBIGAD : maxSBIGAD0;
-  unsigned long testms = testSBIGms;
-  struct readoutInfo *image = &imagingInfo.readoutInfo[0];
-  struct readoutInfo *desired = image + binningMode;
-  struct readoutInfo *testExposure = desired;  //test image info
-  float  desiredAspect = (float)desired->height / (float)desired->width;
-  struct readoutInfo *end = image + imagingInfo.readoutModes;
-  struct readoutInfo *cursor = image;
-  while (cursor < end) {
-    if (cursor->height < testExposure->height) {
-      float aspect = (float)cursor->height / (float)cursor->width;
-      float ratio = aspect / desiredAspect;
-      if (ratio >= .98f && ratio <= 1.02f)  //nearly the desired aspect ratio
-	testExposure = cursor;  //found a better readout mode for our test exposure
-    }
-    cursor++;
-  }
+  const unsigned binArea = exposure->xbin * exposure->ybin;
+  const double binAreaf = binArea;
+  unsigned maxSignalTarget =  maxAutoSignal;
+  struct CCDexp testExposure = *exposure;
+//testExposure.xbin = testExposure.ybin = 4;
+  testExposure.msec /= 151;
+  
  tooBright:
   {
-    imageStats lightStats, darkStats;
+    imageStats lightStats;
+    unsigned testArea = testExposure.xbin * testExposure.ybin;
 
-    if (expose (testms, SC_OPEN_SHUTTER) ||
-	  readOutImage (testExposure->mode, NULL, &lightStats)) return lastSBIGerr;
+    if (!testExposure.msec) testExposure.msec=1;
+    expose (&testExposure);
+    if (readOutImage (&testExposure, dummyWrite, NULL, &lightStats)) return -1;
 
-    if (lightStats.filteredMax <= absoluteMaxSignal) {
-      if (expose (testms, SC_CLOSE_SHUTTER) ||
-	  readOutImage (testExposure->mode, NULL, &darkStats)) return lastSBIGerr;
-      {
-        long maxSignal = lightStats.filteredMax - darkStats.filteredMax;
-        long desiredBinArea = desired->height * desired->width;
-        long testBinArea = testExposure->height * testExposure->width;
-	float targetMaxSignal = SBIGtarget * (float)absoluteMaxSignal;
-        float exposureScaleFactor = (float)testBinArea/(float)desiredBinArea * 
-					(float)targetMaxSignal/(float)maxSignal;
-	*seconds = (double)testms / 1000.0 * exposureScaleFactor;
-	if (*seconds >= maxSeconds) {
-	  if (debug) 
-  fprintf (stderr, 
-    "Too Dark -- required %gs exposure is longer than %gs time limit\n", 
-					  *seconds, maxSeconds);
-	   *seconds = maxSeconds;
-	   return CE_NO_ERROR;
-	 }
+    if (lightStats.filteredMax <= (testArea>1 ? 65000 : 60000)) {
+      unsigned brightPt = lightStats.filteredMax - 
+          (lightStats.minimum <= 1500 ? lightStats.minimum : 1500);
+      double exposureScaleFactor = testArea / binAreaf * 
+        (double)maxSignalTarget/(double)brightPt;
+      unsigned testms = testExposure.msec * exposureScaleFactor;
+      if (testms > exposure->msec) {
+	if (debug) fprintf (stderr, 
+          "WARNING:  Too Dark -- required %gs exposure > %gs time limit\n", 
+				testms/1000.0, exposure->msec/1000.0);
+	 return 0;
       }
+      exposure->msec = testms;
+      
     }else{  //overexposed!
-	  if (testms > minSBIGms) { // 1st try short test exposure
-	    testms = minSBIGms;
-	    goto tooBright;
-	  }
-	  if (testExposure != desired) {
-	    testExposure = desired;   //then try using the desired binning mode...
-	    goto tooBright;			// as a last resort
-	  }
+    
+      if (testExposure.msec > 1) { // 1st try short test exposure
+	testExposure.msec /= 128;
+	goto tooBright;
+      }
+      if (testExposure.xbin != exposure->xbin || 
+          testExposure.ybin != exposure->ybin) {
+        testExposure.xbin = exposure->xbin;
+        testExposure.ybin = exposure->ybin;
+	 //then try using the desired binning mode...
+	goto tooBright;	// as a last resort
+      }
+      if (debug) fprintf (stderr,
+          "WARNING:  Too Bright -- required exposure time < 1ms\n");
+      exposure->msec = 1;
     }
   }
-  if (*seconds < minSBIGseconds) {
-    if (SBIGdebug > 1)
-      printf ("Too Bright -- required exposure is faster than camera allows\n"); 
-    *seconds = minSBIGseconds;
-  }
-  return CE_NO_ERROR;	  
+  return 0;	  
 }
-#endif
+
 
 /*
  * FITS file routines.
@@ -423,7 +428,7 @@ static int saveFITS(int fd, struct CCDexp *exposure)
     sprintf(record[i++], "XPIXSZ  = %20f", exposure->ccd->pixel_width*exposure->xbin);
     sprintf(record[i++], "YPIXSZ  = %20f", exposure->ccd->pixel_height*exposure->ybin);
     sprintf(record[i++], "DATE-OBS= '%s'", timeString);
-    sprintf(record[i++], "EXPOSURE= %20f", (float)exposure->msec / 1000.0f);
+    sprintf(record[i++], "EXPOSURE= %20f", (double)exposure->msec / 1000.0);
     
     //TODO: insert environment strings here...
     
@@ -590,7 +595,6 @@ int main (int argc, char **argv)
   unsigned avgPixel = 0;
   char *outFn;
   FILE *outFile;
-  time_t snapEndTime, secsLeft;
   
   const static struct option options[] = {
     {"autoexpose", 2, NULL, 'a'}, 
@@ -627,12 +631,23 @@ int main (int argc, char **argv)
       case -1:
         goto gotAllOpts;
       case 'a':  //auto exposure
+        exposureSecs = 5*60;  //default to 5 minute max exposure time
         if (optarg) {
-          exposureSecs = -parseDuration (optarg);
-          if (exposureSecs >= -0.002f)
+          char *terminator = optarg;
+          if (*optarg != ',') terminator=parseDuration (optarg, &exposureSecs);
+          switch (*terminator) {
+            case ',':
+              if (*parseInt (terminator+1, &maxAutoSignal))
+                syntaxErr ("Junk text after autoexposure max A/D count target!");
+            case '\0':
+              break;
+            default:
+              syntaxErr ("Junk text after autoexposure max duration!");
+          }
+          if (exposureSecs < 0.002)
             syntaxErr ("autoexposure limit must be > 2ms");
-        }else
-          exposureSecs = -600;  //default to 5 minute max exposure time
+        }
+        exposureSecs = -exposureSecs;
         break;
       case 'b':  //XY binning
         parseXYoptArg (&binX, &binY);
@@ -696,11 +711,12 @@ int main (int argc, char **argv)
     }
   }
 gotAllOpts: //on to arguments (exposure time and output file name)
-  if (exposureSecs == 0.0f) {
+  if (exposureSecs == 0.0) {
     if (!argv[optind])
       syntaxErr ("Missing Exposure Time");
-    exposureSecs = parseDuration (argv[optind]);
-    if (exposureSecs < 0.001f)
+    if (*parseDuration (argv[optind], &exposureSecs))
+      syntaxErr ("Junk text after exposure duration");
+    if (exposureSecs < 0.001)
       syntaxErr ("Exposure duration must be >= 0.001 seconds");
     ++optind;
   }
@@ -754,30 +770,26 @@ gotAllOpts: //on to arguments (exposure time and output file name)
     syntaxErr ("Pixel depth of %d bits is not currently supported!\n", exposure.dacBits);
 
   if (exposureSecs < 0.0) {
-    fprintf (stderr, "Auto exposure (for no longer than %g seconds) ...\n",
-                exposureSecs = -exposureSecs);
-    exposure.msec = exposureSecs * 1000.0f;
-//    if (optimizeExposure (&exposure)) 
+    if (!maxAutoSignal)  //default to lower pixel saturation if no binning
+      maxAutoSignal = exposure.xbin==1&&exposure.ybin==1 ? 40000 : 50000;
+    exposureSecs = -exposureSecs;
+    if (debug) fprintf(stderr,
+      "Calibrating <= %g second exposure for %d max A/D counts...\n",
+                exposureSecs, maxAutoSignal);
+    exposure.msec = exposureSecs * 1000.0 + 0.5;
+    if (optimizeExposure (&exposure)) {
+      fprintf (stderr, "Autoexposure calibration failed!\n");
       return 6;
+    }
   }else
-    exposure.msec = exposureSecs * 1000.0f;
+    exposure.msec = exposureSecs * 1000.0 + 0.5;
 
-  fprintf (stderr, "Exposing %dx%d pixel %d-bit image for %g seconds\n",
+  exposureSecs = (double)exposure.msec / 1000.0;
+  fprintf (stderr, "\rExposing %dx%d pixel %d-bit image for %g seconds\n",
     exposure.width/binX, exposure.height/binY, exposure.dacBits, exposureSecs);
     
-  CCDexposeFrame (&exposure);
-  exposure.start = time(NULL);
-  snapEndTime = exposure.start + (time_t) exposureSecs;
-  
-  secsLeft = exposureSecs;
-  if (secsLeft > 1) {  //output exposure progress messages
-    int digits = progress ("%d" REMAINING, secsLeft) - (sizeof(REMAINING)-1);
-    sleep(1);
-    while ((secsLeft = snapEndTime - time(NULL)) > 1) {
-      progress ("\r%*d ", digits, secsLeft);
-      sleep(1);
-    }
-  }
+  expose (&exposure);
+
   /*  Write out the image in the specified format */
   switch (outputFileType) {
     case unspecifiedFile:
