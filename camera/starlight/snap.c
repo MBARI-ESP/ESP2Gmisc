@@ -59,12 +59,11 @@ typedef int writeLineFn (void *file, struct CCDexp *exposure, uint16 *lineBuffer
 //note that options commented out in usage don't seem to work for SXV-H9 camera
 static void usage (void)
 {
-  fprintf (stderr, "%s revised 10/5/05 brent@mbari.org\n", progName);
-  fprintf (stderr, 
+  printf ("%s revised 10/6/05 brent@mbari.org\n", progName);
+  printf (
 "Snap a photo from a monochrome Starlight Xpress CCD camera. Usage:\n"
 "  %s {options} <exposure seconds> <output file>\n"
 "seconds may be specified in floating point for millisecond resolution\n"
-"omit output file to write image to stdout (provided it is not a terminal)\n"
 "options:  (may be abbriviated)\n"
 "  -autoexpose{=300} #auto duration with specified max duration in seconds\n"
 "  -binning=x{,y}    #x,y binning factors\n"
@@ -74,8 +73,8 @@ static void usage (void)
 "  -camera=deviceFn  #use specified device rather than /dev/ccda\n"
 "  -tiff{=deflate}   #output TIFF file with optional deflate compression\n"
 "  -fits             #output FITS file (image rotated 180 degrees wrt TIFF)\n"
-"  -jpeg             #output JPEG file\n"
-"  -debug{=1}        #display debugging info\n"
+//"  -jpeg             #output JPEG file\n"
+"  -debug{=2}        #display debugging info with optional debugging level\n"
 "  -help             #displays this\n"
 //"  -dark           #do not open shutter\n"
 //"  -depth=n        #number of bits per pixel\n"
@@ -88,7 +87,7 @@ static void usage (void)
 "  %s -bin 2x3 .005 myimage.tiff  #5 msec exposure with 2x3 binning\n"
 "notes:\n"
 "  If possible, progress messages are output to file descriptor 3\n"
-"  Otherwise, they are sent to stderr.\n", 
+"  Otherwise, they are sent to stdout.\n", 
   progName, progName, progName);
 }
 
@@ -181,8 +180,7 @@ static void
 showStats (imageStats *pixel)
 {
   if (debug)
-    fprintf (stderr, 
-      "\r( %u Min / %u Avg / %u Max / %u FilteredMax ) A/D counts\n", 
+    printf ("\r( %u Min / %u Avg / %u Max / %u FilteredMax ) A/D counts\n", 
         pixel->minimum,pixel->average,pixel->maximum,pixel->filteredMax);
 }
 
@@ -308,7 +306,7 @@ by the brightest pixel in this coarse image.  Scale exposure time so that this
         (double)maxSignalTarget/(double)brightPt;
       unsigned testms = testExposure.msec * exposureScaleFactor;
       if (testms > exposure->msec) {
-	if (debug) fprintf (stderr, 
+	fprintf (stderr, 
           "WARNING:  Too Dark -- required %gs exposure > %gs time limit\n", 
 				testms/1000.0, exposure->msec/1000.0);
 	 return 0;
@@ -328,7 +326,7 @@ by the brightest pixel in this coarse image.  Scale exposure time so that this
 	 //then try using the desired binning mode...
 	goto tooBright;	// as a last resort
       }
-      if (debug) fprintf (stderr,
+      fprintf (stderr,
           "WARNING:  Too Bright -- required exposure time < 1ms\n");
       exposure->msec = 1;
     }
@@ -539,7 +537,7 @@ static int saveTIFF(TIFF *tif, struct CCDexp *exposure)
     stripRows = height / strips;
     if (!stripRows) stripRows = 1;
     if (debug>1)
-      fprintf (stderr, "(%dx%d) TIFF image in %ld strips with %ld rows/strip\n",
+      printf ("(%dx%d) TIFF image in %ld strips with %ld rows/strip\n",
 			        width, height, strips, stripRows);
     setTiff(tif, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);
     setTiff(tif, TIFFTAG_SAMPLESPERPIXEL, 1);
@@ -623,8 +621,8 @@ int main (int argc, char **argv)
   };
     
   progName = basename (argv[0]);
-  if (fsync(progressFD)) progressFD=fileno(stderr);
-      
+  if (write (progressFD, "", 0)) progressFD=fileno(stdout);
+printf ("progressFD=%d\n", progressFD);      
   for (;;) {
     int optc = getopt_long_only (argc, argv, "", options, 0);
     switch (optc) {
@@ -724,7 +722,7 @@ gotAllOpts: //on to arguments (exposure time and output file name)
     fprintf (stderr, "Cannot open camera device: %s\n", device.filename);
     return 1;
   }
-  fprintf (stderr, "%s: %dx%d pixel %d-bit CCD camera\n", 
+  printf ("%s: %dx%d pixel %d-bit CCD camera\n", 
     device.camera, device.width, device.height, device.depth);
        
   outFn = argv[optind];
@@ -746,11 +744,8 @@ gotAllOpts: //on to arguments (exposure time and output file name)
           break;
       }
     }
-  }else{  //trying to write image to stdout
-    if (isatty(fileno(stdout)))
-      syntaxErr ("Cannot write image to terminal stdout.  Specify a filename!");
-    outFile = stdout;
-  }
+  }else  //trying to write image to stdout
+    syntaxErr ("Missing output image filename!");
   
   exposure.width = sizeX ? sizeX : device.width;
   exposure.height = sizeY ? sizeY : device.height;
@@ -773,7 +768,7 @@ gotAllOpts: //on to arguments (exposure time and output file name)
     if (!maxAutoSignal)  //default to lower pixel saturation if no binning
       maxAutoSignal = exposure.xbin==1&&exposure.ybin==1 ? 40000 : 50000;
     exposureSecs = -exposureSecs;
-    if (debug) fprintf(stderr,
+    if (debug) printf(
       "Calibrating <= %g second exposure for %d max A/D counts...\n",
                 exposureSecs, maxAutoSignal);
     exposure.msec = exposureSecs * 1000.0 + 0.5;
@@ -785,7 +780,7 @@ gotAllOpts: //on to arguments (exposure time and output file name)
     exposure.msec = exposureSecs * 1000.0 + 0.5;
 
   exposureSecs = (double)exposure.msec / 1000.0;
-  fprintf (stderr, "\rExposing %dx%d pixel %d-bit image for %g seconds\n",
+  printf ("\rExposing %dx%d pixel %d-bit image for %g seconds\n",
     exposure.width/binX, exposure.height/binY, exposure.dacBits, exposureSecs);
     
   expose (&exposure);
@@ -809,6 +804,6 @@ gotAllOpts: //on to arguments (exposure time and output file name)
     default:
       syntaxErr("Unsupported image file type:  %s",fileTypeName[outputFileType]);
   }
-  progress ("\r%s: %s Upload Complete\n", outFn, fileTypeName[outputFileType]);
+  printf ("\r%s: %s Upload Complete\n", outFn, fileTypeName[outputFileType]);
   return 0;
 }
