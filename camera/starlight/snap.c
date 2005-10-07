@@ -59,7 +59,7 @@ typedef int writeLineFn (void *file, struct CCDexp *exposure, uint16 *lineBuffer
 //note that options commented out in usage don't seem to work for SXV-H9 camera
 static void usage (void)
 {
-  printf ("%s revised 10/6/05 brent@mbari.org\n", progName);
+  printf ("%s revised 10/7/05 brent@mbari.org\n", progName);
   printf (
 "Snap a photo from a monochrome Starlight Xpress CCD camera. Usage:\n"
 "  %s {options} <exposure seconds> <output file>\n"
@@ -622,7 +622,6 @@ int main (int argc, char **argv)
     
   progName = basename (argv[0]);
   if (write (progressFD, "", 0)) progressFD=fileno(stdout);
-printf ("progressFD=%d\n", progressFD);      
   for (;;) {
     int optc = getopt_long_only (argc, argv, "", options, 0);
     switch (optc) {
