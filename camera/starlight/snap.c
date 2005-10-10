@@ -59,7 +59,7 @@ typedef int writeLineFn (void *file, struct CCDexp *exposure, uint16 *lineBuffer
 //note that options commented out in usage don't seem to work for SXV-H9 camera
 static void usage (void)
 {
-  printf ("%s revised 10/7/05 brent@mbari.org\n", progName);
+  printf ("%s revised 10/9/05 brent@mbari.org\n", progName);
   printf (
 "Snap a photo from a monochrome Starlight Xpress CCD camera. Usage:\n"
 "  %s {options} <exposure seconds> <output file>\n"
@@ -180,7 +180,7 @@ static void
 showStats (imageStats *pixel)
 {
   if (debug)
-    printf ("\r( %u Min / %u Avg / %u Max / %u FilteredMax ) A/D counts\n", 
+    printf ("( %u Min / %u Avg / %u Max / %u FilteredMax ) A/D counts\n", 
         pixel->minimum,pixel->average,pixel->maximum,pixel->filteredMax);
 }
 
@@ -238,6 +238,7 @@ readOutImage (struct CCDexp *exposure, writeLineFn *writeLine,
     avgPixel += sum / width;
     if (writeLine(fileDescriptor, exposure, line)) {result=-1; break;}
   }
+  progress("\r");
   avgPixel /= height;
   free (line0);
   if (stats) {
@@ -264,6 +265,7 @@ expose (struct CCDexp *exposure)
       progress ("\r%*d ", digits, secsLeft);
       sleep(1);
     }
+    progress("\r");
   }
 }
 
@@ -779,7 +781,7 @@ gotAllOpts: //on to arguments (exposure time and output file name)
     exposure.msec = exposureSecs * 1000.0 + 0.5;
 
   exposureSecs = (double)exposure.msec / 1000.0;
-  printf ("\rExposing %dx%d pixel %d-bit image for %g seconds\n",
+  printf ("Exposing %dx%d pixel %d-bit image for %g seconds\n",
     exposure.width/binX, exposure.height/binY, exposure.dacBits, exposureSecs);
     
   expose (&exposure);
@@ -803,6 +805,6 @@ gotAllOpts: //on to arguments (exposure time and output file name)
     default:
       syntaxErr("Unsupported image file type:  %s",fileTypeName[outputFileType]);
   }
-  printf ("\r%s: %s Upload Complete\n", outFn, fileTypeName[outputFileType]);
+  printf ("%s: %s Upload Complete\n", outFn, fileTypeName[outputFileType]);
   return 0;
 }
