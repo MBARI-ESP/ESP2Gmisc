@@ -57,7 +57,10 @@ class Object
   def deepClone
     Marshal::load(Marshal::dump(self))
   end
-  alias_method :reallyEqual?, :==  #override for recursive equality tests
+  
+  def reallyEqual? other  #for recursive equality tests
+    self == other
+  end
   
   def with hash
   #assign instance variables specified in given hash
