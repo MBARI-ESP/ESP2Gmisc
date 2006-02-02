@@ -2,7 +2,12 @@
 
   A termios library for Ruby.
   Copyright (C) 1999, 2000, 2002 akira yamada.
+ 
   $Id$
+  
+  Revised:  2006/2/1 brent@mbari.org
+    Don't assume that all termios constants can be represented by a FIXNUM
+    CRTSCTS under Linux, for example, is a BIGNUM
 
  */
 
@@ -21,7 +26,6 @@ static VALUE
 termios_set_iflag(self, value)
     VALUE self, value;
 {
-    Check_Type(value, T_FIXNUM);
     rb_ivar_set(self, id_iflag, value);
 
     return value;
@@ -31,7 +35,6 @@ static VALUE
 termios_set_oflag(self, value)
     VALUE self, value;
 {
-    Check_Type(value, T_FIXNUM);
     rb_ivar_set(self, id_oflag, value);
 
     return value;
@@ -41,7 +44,6 @@ static VALUE
 termios_set_cflag(self, value)
     VALUE self, value;
 {
-    Check_Type(value, T_FIXNUM);
     rb_ivar_set(self, id_cflag, value);
 
     return value;
@@ -51,7 +53,6 @@ static VALUE
 termios_set_lflag(self, value)
     VALUE self, value;
 {
-    Check_Type(value, T_FIXNUM);
     rb_ivar_set(self, id_lflag, value);
 
     return value;
@@ -71,7 +72,6 @@ static VALUE
 termios_set_ispeed(self, value)
     VALUE self, value;
 {
-    Check_Type(value, T_FIXNUM);
     rb_ivar_set(self, id_ispeed, value);
 
     return value;
@@ -81,7 +81,6 @@ static VALUE
 termios_set_ospeed(self, value)
     VALUE self, value;
 {
-    Check_Type(value, T_FIXNUM);
     rb_ivar_set(self, id_ospeed, value);
 
     return value;
@@ -147,19 +146,19 @@ termios_to_Termios(t)
 
     obj = rb_funcall(cTermios, rb_intern("new"), 0);
 
-    termios_set_iflag(obj, INT2FIX(t->c_iflag));
-    termios_set_oflag(obj, INT2FIX(t->c_oflag));
-    termios_set_cflag(obj, INT2FIX(t->c_cflag));
-    termios_set_lflag(obj, INT2FIX(t->c_lflag));
+    termios_set_iflag(obj, UINT2NUM(t->c_iflag));
+    termios_set_oflag(obj, UINT2NUM(t->c_oflag));
+    termios_set_cflag(obj, UINT2NUM(t->c_cflag));
+    termios_set_lflag(obj, UINT2NUM(t->c_lflag));
 
     cc_ary = rb_ary_new2(NCCS);
     for (i = 0; i < NCCS; i++) {
-	rb_ary_store(cc_ary, i, INT2FIX(t->c_cc[i]));
+	rb_ary_store(cc_ary, i, UINT2NUM(t->c_cc[i]));
     }
     termios_set_cc(obj, cc_ary);
 
-    termios_set_ispeed(obj, INT2FIX(cfgetispeed(t)));
-    termios_set_ospeed(obj, INT2FIX(cfgetospeed(t)));
+    termios_set_ispeed(obj, UINT2NUM(cfgetispeed(t)));
+    termios_set_ospeed(obj, UINT2NUM(cfgetospeed(t)));
 
     return obj;
 }
@@ -172,23 +171,23 @@ Termios_to_termios(obj, t)
     int i;
     VALUE cc_ary;
 
-    t->c_iflag = FIX2INT(rb_ivar_get(obj, id_iflag));
-    t->c_oflag = FIX2INT(rb_ivar_get(obj, id_oflag));
-    t->c_cflag = FIX2INT(rb_ivar_get(obj, id_cflag));
-    t->c_lflag = FIX2INT(rb_ivar_get(obj, id_lflag));
+    t->c_iflag = NUM2UINT(rb_ivar_get(obj, id_iflag));
+    t->c_oflag = NUM2UINT(rb_ivar_get(obj, id_oflag));
+    t->c_cflag = NUM2UINT(rb_ivar_get(obj, id_cflag));
+    t->c_lflag = NUM2UINT(rb_ivar_get(obj, id_lflag));
 
     cc_ary = rb_ivar_get(obj, id_cc);
     for (i = 0; i < NCCS; i++) {
 	if (TYPE(RARRAY(cc_ary)->ptr[i]) == T_FIXNUM) {
-	    t->c_cc[i] = NUM2INT(RARRAY(cc_ary)->ptr[i]);
+	    t->c_cc[i] = NUM2UINT(RARRAY(cc_ary)->ptr[i]);
 	}
 	else {
 	    t->c_cc[i] = 0;
 	}
     }
 
-    cfsetispeed(t, FIX2INT(rb_ivar_get(obj, id_ispeed)));
-    cfsetospeed(t, FIX2INT(rb_ivar_get(obj, id_ospeed)));
+    cfsetispeed(t, NUM2UINT(rb_ivar_get(obj, id_ispeed)));
+    cfsetospeed(t, NUM2UINT(rb_ivar_get(obj, id_ospeed)));
 }
 
 
@@ -544,17 +543,20 @@ Init_termios()
     tcflow_act = rb_ary_new();
     rb_define_const(mTermios, "FLOW_ACTIONS", tcflow_act);
 
+#define unsignedConst(n) (POSFIXABLE(n) ? INT2FIX(n) : UINT2NUM(n))
+  
 #define define_flag(hash, flag) \
     { \
-      rb_define_const(mTermios, #flag, INT2FIX(flag)); \
+      rb_define_const(mTermios, #flag, unsignedConst(flag)); \
       rb_hash_aset(hash, rb_const_get(mTermios, rb_intern(#flag)), \
 	  ID2SYM(rb_intern(#flag))); \
     }
 #define define_flag2(ary, flag) \
     { \
-      rb_define_const(mTermios, #flag, INT2FIX(flag)); \
+      rb_define_const(mTermios, #flag, unsignedConst(flag)); \
       rb_ary_push(ary, rb_const_get(mTermios, rb_intern(#flag)));\
     }
+
 
     /* c_cc characters */
 #ifdef VINTR
