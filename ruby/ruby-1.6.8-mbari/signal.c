@@ -364,7 +364,7 @@ sighandle(sig)
     ruby_signal(sig, sighandle);
 #endif
 
-    if (ATOMIC_TEST(rb_trap_immediate)) {
+    if (ATOMIC_TEST(rb_trap_immediate) && THREAD_INTERRUPTABLE) {
 	IN_MAIN_CONTEXT(signal_exec, sig);
 	ATOMIC_SET(rb_trap_immediate, 1);
     }
