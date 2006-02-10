@@ -5363,7 +5363,6 @@ rb_feature_p(feature, wait)
 		    return Qtrue;
 		}
 		CHECK_INTS;
-		rb_thread_schedule();
 	    }
 	}
     }
@@ -6977,6 +6976,54 @@ rb_mod_define_method(argc, argv, mod)
     return body;
 }
 
+/* NK: added */
+
+static VALUE
+method_source_file_name(VALUE method)
+{
+    struct METHOD *data;
+    const char *filename;
+
+    Data_Get_Struct(method, struct METHOD, data);
+    filename = data->body->nd_file;
+    return rb_str_new2( filename == NULL ? "" : filename );
+}
+
+static VALUE
+method_source_line(VALUE method)
+{
+    struct METHOD *data;
+
+    Data_Get_Struct(method, struct METHOD, data);
+    return INT2FIX( nd_line(data->body) );
+}
+
+/* NK: end */
+
+/* BAR: added */
+
+static VALUE
+proc_source_file_name(VALUE block)
+{
+    struct BLOCK *data;
+    const char *filename;
+
+    Data_Get_Struct(block, struct BLOCK, data);
+    filename = data->body->nd_file;
+    return rb_str_new2( filename == NULL ? "" : filename );
+}
+
+static VALUE
+proc_source_line(VALUE block)
+{
+    struct BLOCK *data;
+
+    Data_Get_Struct(block, struct BLOCK, data);
+    return INT2FIX( nd_line(data->body) );
+}
+
+/* BAR: end */
+
 void
 Init_Proc()
 {
@@ -6991,6 +7038,8 @@ Init_Proc()
     rb_define_method(rb_cProc, "[]", proc_call, -2);
     rb_define_method(rb_cProc, "==", proc_eq, 1);
     rb_define_method(rb_cProc, "to_s", proc_to_s, 0);
+    rb_define_method(rb_cProc, "__file__", proc_source_file_name, 0); /* BAR */
+    rb_define_method(rb_cProc, "__line__", proc_source_line, 0); /* BAR */    
     rb_define_global_function("proc", rb_f_lambda, 0);
     rb_define_global_function("lambda", rb_f_lambda, 0);
     rb_define_global_function("binding", rb_f_binding, 0);
@@ -7008,6 +7057,8 @@ Init_Proc()
     rb_define_method(rb_cMethod, "to_s", method_inspect, 0);
     rb_define_method(rb_cMethod, "to_proc", method_proc, 0);
     rb_define_method(rb_cMethod, "unbind", method_unbind, 0);
+    rb_define_method(rb_cMethod, "__file__", method_source_file_name, 0); /* NK */
+    rb_define_method(rb_cMethod, "__line__", method_source_line, 0); /* NK */    
     rb_define_method(rb_mKernel, "method", rb_obj_method, 1);
 
     rb_cUnboundMethod = rb_define_class("UnboundMethod", rb_cMethod);
@@ -7710,7 +7761,7 @@ rb_thread_schedule()
     int need_select = 0;
     int select_timeout = 0;
 
-    rb_thread_pending = 0;
+    rb_thread_pending = rb_thread_critical = 0;
     if (curr_thread == curr_thread->next
 	&& curr_thread->status == THREAD_RUNNABLE)
 	return;
@@ -8237,7 +8288,6 @@ rb_thread_stop()
 {
     enum thread_status last_status = THREAD_RUNNABLE;
 
-    rb_thread_critical = 0;
     if (curr_thread == curr_thread->next) {
 	rb_raise(rb_eThreadError, "stopping only thread\n\tnote: use sleep to stop forever");
     }
@@ -8771,8 +8821,8 @@ rb_thread_trap_eval(cmd, sig)
     VALUE cmd;
     int sig;
 {
-#if 0
     rb_thread_critical = 0;
+#if 0  //first, try to eval trap on the current thread, if it's alive
     if (!rb_thread_dead(curr_thread)) {
 	rb_thread_ready(curr_thread);
 	rb_trap_eval(cmd, sig);
@@ -8782,22 +8832,17 @@ rb_thread_trap_eval(cmd, sig)
     if (THREAD_SAVE_CONTEXT(curr_thread)) {
 	return;
     }
-    th_cmd = cmd;
-    th_sig = sig;
-    curr_thread = main_thread;
-    rb_thread_restore_context(curr_thread, RESTORE_TRAP);
-#else
-    rb_thread_critical = 0;
+#else  //always eval trap on the main thread
     if (!rb_thread_dead(curr_thread)) {
 	if (THREAD_SAVE_CONTEXT(curr_thread)) {
 	    return;
 	}
     }
+#endif
     th_cmd = cmd;
     th_sig = sig;
     curr_thread = main_thread;
     rb_thread_restore_context(curr_thread, RESTORE_TRAP);
-#endif
 }
 
 static VALUE
