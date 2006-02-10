@@ -8,6 +8,7 @@
 
 #include "ruby.h"
 #include "rubysig.h"
+#include "rubyio.h"
 
 static VALUE mReadline;
 
@@ -23,12 +24,13 @@ static VALUE mReadline;
 #endif
 
 static int
-readline_event()
+readline_getc (ignored)
+  FILE *ignored;
 {
-    CHECK_INTS;
-    rb_thread_schedule();
-    return 0;
+  VALUE string = rb_funcall (rb_stdin, rb_intern("sysread"), 1, INT2FIX(1));
+  return RSTRING(string)->ptr[0];  //single byte read
 }
+
 
 static VALUE
 readline_readline(argc, argv, self)
@@ -461,6 +463,6 @@ Init_readline()
 
     rl_attempted_completion_function
 	= (CPPFunction *) readline_attempted_completion_function;
-    rl_event_hook = readline_event;
+    rl_getc_function = readline_getc;
     rl_clear_signals();
 }
