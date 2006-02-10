@@ -156,7 +156,7 @@ extern int getnameinfo __P((
 
 extern void freehostent __P((struct hostent *));
 extern void freeaddrinfo __P((struct addrinfo *));
-#if defined __UCLIBC__
+#if defined __UCLIBC__  || __GNUC__>3 || (__GNUC__==3 && __GNUC_MINOR__>=3)
 const
 #endif
 extern char *gai_strerror __P((int));
