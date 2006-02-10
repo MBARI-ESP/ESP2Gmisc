@@ -1,1 +1,1 @@
-readline.o: readline.c $(hdrdir)/ruby.h $(topdir)/config.h $(hdrdir)/defines.h
+readline.o: readline.c $(hdrdir)/ruby.h $(hdrdir)/rubyio.h $(topdir)/config.h $(hdrdir)/defines.h

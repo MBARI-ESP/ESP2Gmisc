@@ -172,9 +172,11 @@ def install_rb(mfile, srcdir = nil)
   if File.directory? libdir
     Find.find(libdir) do |f|
       next unless /\.rb$/ =~ f
+      d = File.dirname f
+      next if File.basename(d)=='Base' && File.basename(File.dirname d)=='CVS'
       f = f[libdir.length+1..-1]
       path.push f
-      dir |= [File.dirname(f)]
+      dir |= [d]
     end
   end
   for f in dir
@@ -706,6 +708,7 @@ end
 
 ext_prefix = "#{$top_srcdir}/ext"
 for d in Dir["#{ext_prefix}/**/*"]
+  File.basename(d) == 'Base' && File.basename(File.dirname d) == 'CVS' && next
   File.directory?(d) || next
   File.file?(d + "/MANIFEST") || next
   
