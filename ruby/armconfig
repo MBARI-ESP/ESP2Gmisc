@@ -9,14 +9,12 @@ export CC CFLAGS CXXFLAGS
 cd ${RUBYVERS-ruby-1.6.8-mbari}
 [ -r Makefile ] && make distclean
 tarargs=" 1 --keep-old-files -xzf ../ruby-1.6.8-2004.07.28.tar.gz"
-tar --strip-path $tarargs 2>tarerrs || {
-  [ $? = 64 ] &&  #new tar version
-    tar --strip-component $tarargs 2>tarerrs
-  }
-[ $? != 0 -a $? != 2 ] && {  #we expect File exists errors
-  code=$?
+tar --strip-path $tarargs 2>tarerrs
+result=$?  #cope with new and old gnu tar versions
+[ $result = 64 ] && tar --strip-component $tarargs 2>tarerrs
+[ $result != 0 -a $result != 2 ] && {  #we expect File exists errors
   cat tarerrs >&2
-  exit $?
+  exit $result
 }
 rm -rf disabled_ext &&
 mkdir -p disabled_ext &&
