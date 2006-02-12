@@ -1,5 +1,5 @@
 #!/bin/bash
-# configure ruby 1.6.8 build for arm-linux -- 2/10/06 brent@mbari.org
+# configure ruby 1.6.8 build for arm-linux -- 2/11/06 brent@mbari.org
 : ${CFLAGS:=-O2}
 : ${CXXFLAGS:=$CFLAGS}
 : ${ARMGCC:=/arm}
@@ -8,12 +8,15 @@
 export CC CFLAGS CXXFLAGS
 cd ${RUBYVERS-ruby-1.6.8-mbari}
 [ -r Makefile ] && make distclean
-tar --keep-old-files --strip-path 1 -xzf ../ruby-1.6.8-2004.07.28.tar.gz 2>tarerrs || {
-  [ $? != 2 ] && {  #we expect File exists errors
-    code=$?
-    cat tarerrs >&2
-    exit $?
+tarargs=" 1 --keep-old-files -xzf ../ruby-1.6.8-2004.07.28.tar.gz"
+tar --strip-path $tarargs 2>tarerrs || {
+  [ $? = 64 ] &&  #new tar version
+    tar --strip-component $tarargs 2>tarerrs
   }
+[ $? != 0 -a $? != 2 ] && {  #we expect File exists errors
+  code=$?
+  cat tarerrs >&2
+  exit $?
 }
 rm -rf disabled_ext &&
 mkdir -p disabled_ext &&
