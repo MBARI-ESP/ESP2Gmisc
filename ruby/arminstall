@@ -36,7 +36,7 @@ export DESTDIR=${3:-$HOME/armHost}
 echo "Installing in $HOSTTOP"
 echo "  for execution at $TARGETTOP on the ARM target"
 PATH=`remove . : $PATH`  #remove current directory from PATH
-cd ${RUBYVERS:=ruby-1.6.8} &&
+cd ${RUBYVERS:=ruby-1.6.8-mbari} &&
   ln -sf `which ruby --skip-dot` miniruby || {
     echo "ruby must be already installed on the build machine"
     exit 8
