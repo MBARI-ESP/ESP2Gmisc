@@ -1,3 +1,19 @@
+Sat Feb 10 22:44:50 2006  Brent Roman  <brent@mbari.org>
+
+	* eval.c: added method/proc_file_name/line
+        don't schedule new thread if Thread.critical
+        
+        * extmk.rb:  don't build in CVS subdirs
+        
+        * readline.c:  use ruby's IO classes for keyboard input
+        
+        * addrinfo.h:  compatibility with gcc >3.2
+        
+        * rubysig.h:  defer traps if Thread.critical
+        
+        * signal.c:   added trap for SIGTERM
+        
+
 Fri Apr 16 13:48:29 2004  Akinori MUSHA  <knu@iDaemons.org>
 
 	* ext/socket/extconf.rb: Merge from 1.8: explicity specify
