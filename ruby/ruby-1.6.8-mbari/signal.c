@@ -330,6 +330,9 @@ signal_exec(sig)
 #ifdef SIGALRM
 	  case SIGALRM:
 #endif
+#ifdef SIGTERM
+	  case SIGTERM:
+#endif
 #ifdef SIGUSR1
 	  case SIGUSR1:
 #endif
@@ -544,6 +547,9 @@ trap(arg)
 #ifdef SIGALRM
 	  case SIGALRM:
 #endif
+#ifdef SIGTERM
+	  case SIGTERM:
+#endif
 #ifdef SIGUSR1
 	  case SIGUSR1:
 #endif
@@ -662,6 +668,9 @@ Init_signal()
 #endif
 #ifdef SIGALRM
     ruby_signal(SIGALRM, sighandle);
+#endif
+#ifdef SIGTERM
+    ruby_signal(SIGTERM, sighandle);
 #endif
 #ifdef SIGUSR1
     ruby_signal(SIGUSR1, sighandle);
