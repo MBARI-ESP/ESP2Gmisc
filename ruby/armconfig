@@ -1,17 +1,26 @@
 #!/bin/bash
-# configure ruby 1.6.8 build for arm-linux -- 2/14/05 brent@mbari.org
+# configure ruby 1.6.8 build for arm-linux -- 2/10/06 brent@mbari.org
 : ${CFLAGS:=-O2}
 : ${CXXFLAGS:=$CFLAGS}
 : ${ARMGCC:=/arm}
 : ${CC:=$ARMGCC/bin/gcc}
 : ${TARGETTOP:=${1-/usr/local}}
 export CC CFLAGS CXXFLAGS
-cd ${RUBYVERS-ruby-1.6.8}
+cd ${RUBYVERS-ruby-1.6.8-mbari}
 [ -r Makefile ] && make distclean
-# ac_cv_func_getrlimit=no
+tar --keep-old-files --strip-path 1 -xzf ../ruby-1.6.8-2004.07.28.tar.gz 2>tarerrs || {
+  [ $? != 2 ] && {  #we expect File exists errors
+    code=$?
+    cat tarerrs >&2
+    exit $?
+  }
+}
+rm -rf disabled_ext &&
+mkdir -p disabled_ext &&
+mv ext/tk ext/tcltklib ext/curses disabled_ext &&
+rm -f config.cache &&
 ac_cv_func_getpgrp_void=yes ac_cv_func_setpgrp_void=yes \
-configure --target=arm-unknown-linux --prefix=$ARMGCC $@ || exit 2
-#--enable-enable-shared
+configure --host=arm-unknown-linux --prefix=$ARMGCC $@ || exit 2
 echo 'Patching RUBY_*_LIB* in config.h for target'
 sed -e "s:\"$ARMGCC:\"$TARGETTOP:g" config.h >config.h.patched || {
   echo "Failed to patch config.h"
