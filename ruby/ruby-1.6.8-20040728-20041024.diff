@@ -16,15 +16,6 @@ diff --exclude=CVS -urN ruby-1.6.8-20040728/ChangeLog ruby-1.6.8-20041024/Change
 diff --exclude=CVS -urN ruby-1.6.8-20040728/eval.c ruby-1.6.8-20041024/eval.c
 --- ruby-1.6.8-20040728/eval.c	2004-11-04 23:18:56.000000000 +0900
 +++ ruby-1.6.8-20041024/eval.c	2004-11-05 00:09:05.000000000 +0900
-@@ -3,7 +3,7 @@
-   eval.c -
- 
-   $Author$
--  $Date$
-+  $Date$
-   created at: Thu Jun 10 14:22:17 JST 1993
- 
-   Copyright (C) 1993-2001 Yukihiro Matsumoto
 @@ -6827,6 +6827,9 @@
  	return INT2FIX(1);
        case NODE_IVAR:
@@ -38,17 +29,6 @@ diff --exclude=CVS -urN ruby-1.6.8-20040728/eval.c ruby-1.6.8-20041024/eval.c
 diff --exclude=CVS -urN ruby-1.6.8-20040728/io.c ruby-1.6.8-20041024/io.c
 --- ruby-1.6.8-20040728/io.c	2004-11-04 23:18:56.000000000 +0900
 +++ ruby-1.6.8-20041024/io.c	2004-11-05 00:09:06.000000000 +0900
-@@ -2,8 +2,8 @@
- 
-   io.c -
- 
--  $Author$
--  $Date$
-+  $Author$
-+  $Date$
-   created at: Fri Oct 15 18:08:59 JST 1993
- 
-   Copyright (C) 1993-2000 Yukihiro Matsumoto
 @@ -2184,7 +2184,8 @@
  	    line = rb_obj_as_string(argv[i]);
  	}
@@ -62,15 +42,6 @@ diff --exclude=CVS -urN ruby-1.6.8-20040728/io.c ruby-1.6.8-20041024/io.c
 diff --exclude=CVS -urN ruby-1.6.8-20040728/lib/cgi.rb ruby-1.6.8-20041024/lib/cgi.rb
 --- ruby-1.6.8-20040728/lib/cgi.rb	2004-11-04 23:18:57.000000000 +0900
 +++ ruby-1.6.8-20041024/lib/cgi.rb	2004-11-05 00:09:07.000000000 +0900
-@@ -182,7 +182,7 @@
-   CR  = "\015"
-   LF  = "\012"
-   EOL = CR + LF
--  REVISION = '$Id$'
-+  REVISION = '$Id$'
- 
-   NEEDS_BINMODE = true if /WIN/ni.match(RUBY_PLATFORM)
-   PATH_SEPARATOR = {'UNIX'=>'/', 'WINDOWS'=>'\\', 'MACINTOSH'=>':'}
 @@ -823,13 +823,15 @@
            end
  
