@@ -11,7 +11,10 @@ cd ${RUBYVERS-ruby-1.6.8-mbari}
 tarargs=" 1 --keep-old-files -xzf ../ruby-1.6.8-2004.07.28.tar.gz"
 tar --strip-path $tarargs 2>tarerrs
 result=$?  #cope with new and old gnu tar versions
-[ $result = 64 ] && tar --strip-component $tarargs 2>tarerrs
+[ $result = 64 ] && {
+  tar --strip-component $tarargs 2>tarerrs
+  result=$?
+}
 [ $result != 0 -a $result != 2 ] && {  #we expect File exists errors
   cat tarerrs >&2
   exit $result
