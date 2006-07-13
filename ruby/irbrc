@@ -19,10 +19,10 @@ if srcHost  #is there a remote host for source code?
     end
     def system localCmd
       if display=ENV['DISPLAY']
-        Kernel.system (
+        Kernel.system(
           'ssh -t '<<@srcHost<<' "'<<'DISPLAY='<<display<<' '<<localCmd<<'"')
       else
-      	Kernel.system (
+      	Kernel.system(
       	  'ssh '<<@srcHost<<' "'<<localCmd<<'"')
       end
     end
