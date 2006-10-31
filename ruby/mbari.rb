@@ -54,7 +54,7 @@ class Object
     identifier
   end
   
-  def deepClone
+  def deepCopy
     Marshal::load(Marshal::dump(self))
   end
   
@@ -84,7 +84,7 @@ class Struct
   #built-in Struct#== gets confused when a singleton
   #method is associated with the Struct.  This version does not.
     unless equal? other.id
-      return false unless type == other.type
+      return false unless type.name == other.type.name
       for i in 0...length
         return false unless self[i].reallyEqual? other[i]
       end
