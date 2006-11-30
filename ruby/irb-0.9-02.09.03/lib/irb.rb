@@ -7,6 +7,8 @@
 #
 # --
 #stores most recent exception -- brent@mbari.org 7/15/03
+#use send rather than call method in output_value to avoid security error
+# -- brent@mbari.org 11/21/06
 #
 #
 require "e2mmap"
@@ -309,8 +311,7 @@ module IRB
       displayMethod = @context.inspect_mode
       displayMethod = :inspect unless 
                       (lastVal = @context.last_value).respond_to?(displayMethod)
-      printf @context.return_format, 
-	       @context.last_value.method(displayMethod).call
+      printf @context.return_format, @context.last_value.send displayMethod
     end
 
     def inspect
