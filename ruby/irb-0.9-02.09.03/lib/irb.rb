@@ -9,6 +9,8 @@
 #stores most recent exception -- brent@mbari.org 7/15/03
 #use send rather than call method in output_value to avoid security error
 # -- brent@mbari.org 11/21/06
+#Abort is now a StandardError
+# -- brent@mbari.org 2/1/07
 #
 #
 require "e2mmap"
@@ -27,7 +29,7 @@ STDOUT.sync = true
 module IRB
   @RCS_ID='-$Id$-'
 
-  class Abort < Exception;end
+  class Abort < StandardError;end
 
   #
   @CONF = {}
@@ -166,7 +168,7 @@ module IRB
 	  begin
 	    @context.evaluate(line, line_no)
 	    output_value if @context.echo?
-	  rescue StandardError, ScriptError, Abort
+	  rescue StandardError, ScriptError
             log_exception
 	    if  $@[0] =~ /irb(2)?(\/.*|-.*|\.rb)?:/ && $!.type.to_s !~ /^IRB/
 	      irb_bug = true 
