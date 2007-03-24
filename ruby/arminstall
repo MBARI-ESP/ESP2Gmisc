@@ -51,8 +51,14 @@ sed -e "s:+ \"$ARMGCC\":+ \"$TARGETTOP\":" $rbcfg >$rbcfg.patched || {
 }
 mv -f $rbcfg.patched $rbcfg && mkdir -p $HOSTTOP &&
 make -o miniruby all install || exit 1
+[ -n "$coreOnly" ] || {
+  echo "   Installing extensions required by MBARI ESP:"
+  cd $startDir
+  PATH=.:$PATH
+  buildUtils clean install || exit 9
+}
 cd $HOSTTOP || exit 2
-echo "Deleting docs, intermediate files and empty directories"
+echo "Stripping, Deleting docs, intermediate files and empty directories"
 rm -rf `find -name man`
 rm -f `find lib/ruby -name "*.[aoh]"` #remove all development intermediate files
 find lib/ruby/1.6 -depth -type d \
@@ -61,12 +67,6 @@ objs="bin/ruby `find lib/ruby -name "*.so*"`"
 chmod +w $objs &&
 $ARMSTRIP $objs &&
 chmod -w $objs || exit 8
-echo "Successfully Installed core Ruby environment at $HOSTTOP"
-[ -n "$coreOnly" ] || {
-  echo "   Installing extensions required by MBARI ESP:"
-  cd $startDir
-  PATH=.:$PATH
-  buildUtils clean install && echo "Done."
-}
+echo "Successfully Installed Ruby environment at $HOSTTOP"
 
 
