@@ -482,16 +482,199 @@ rb_gc_mark_maybe(obj)
     }
 }
 
+#ifdef DEBUG_REACHABILITY
+VALUE rbx_reach_test_obj      = Qnil;
+VALUE rbx_reach_test_result   = Qnil;
+VALUE rbx_reach_test_path     = Qnil;
+int   rbx_reach_test_flag     = 0;
+int   rbx_reach_test_len      = 0;
+
+// based on gc_sweep()
+static void
+rbx_gc_unmark()
+{
+    RVALUE *p, *pend;
+    int i, used = heaps_used;
+
+    for (i = 0; i < used; i++) {
+	p = heaps[i]; pend = p + heaps_limits[i];
+	while (p < pend) {
+	    RBASIC(p)->flags &= ~FL_MARK;
+	    p++;
+	}
+    }
+}
+
+
+// based on rb_gc
+static VALUE
+rbx_reachability_paths(mod, obj)
+    VALUE mod;
+    VALUE obj;
+{
+    int i;
+    VALUE result;
+    struct gc_list *list;
+    struct FRAME * volatile frame; /* gcc 2.7.2.3 -O2 bug??  */
+    jmp_buf save_regs_gc_mark;
+#ifdef C_ALLOCA
+    VALUE stack_end;
+    alloca(0);
+# define STACK_END (&stack_end)
+#else
+# if defined(__GNUC__) && (defined(__i386__) || defined(__mc68000__))
+    VALUE *stack_end = __builtin_frame_address(0);
+
+# else
+    VALUE *stack_end = alloca(1);
+# endif
+# define STACK_END (stack_end)
+#endif
+
+    if (rbx_reach_test_obj != Qnil ||
+        rbx_reach_test_result != Qnil ||
+        rbx_reach_test_path != Qnil)
+      rb_raise(rb_eRuntimeError, "reachability_paths called recursively");
+
+    if (!rbx_reach_test_flag) {
+      rbx_reach_test_flag = 1;
+      rb_global_variable(&rbx_reach_test_result);
+      rb_global_variable(&rbx_reach_test_path);
+    }
+
+    rbx_reach_test_obj    = obj;
+    rbx_reach_test_result = rb_ary_new();
+    rbx_reach_test_path   = rb_ary_new();
+    rbx_reach_test_len    = 0;
+    
+    printf("Checking frame stack...\n");
+    /* mark frame stack */
+    i = 0;
+    for (frame = ruby_frame; frame; frame = frame->prev) {
+        char buf[100];
+        sprintf(buf, "frame %d: %s line %d", i, frame->file, frame->line);
+        rb_ary_store(rbx_reach_test_path, rbx_reach_test_len, rb_str_new2(buf));
+        rbx_reach_test_len++;
+	rb_gc_mark_frame(frame);
+        rbx_reach_test_len--;
+        i++;
+        
+	if (frame->tmp) {
+            int ti = 0;
+	    struct FRAME *tmp = frame->tmp;
+	    while (tmp) {
+                sprintf(buf, "tmp frame %d: %s line %d", ti, frame->file, frame->line);
+                rb_ary_store(rbx_reach_test_path, rbx_reach_test_len, rb_str_new2(buf));
+                rbx_reach_test_len++;
+		rb_gc_mark_frame(tmp);
+                rbx_reach_test_len--;
+                ti++;
+		tmp = tmp->prev;
+	    }
+	}
+    }
+    printf("Checking ruby_class...\n");
+    rb_gc_mark(ruby_class);
+    printf("Checking ruby_scope...\n");
+    rb_gc_mark(ruby_scope);
+    printf("Checking ruby_dyna_vars...\n");
+    rb_gc_mark(ruby_dyna_vars);
+    printf("Checking finalizer_table...\n");
+    if (finalizer_table) {
+	rb_mark_tbl(finalizer_table);
+    }
+
+    FLUSH_REGISTER_WINDOWS;
+    /* This assumes that all registers are saved into the jmp_buf */
+    setjmp(save_regs_gc_mark);
+    printf("Checking save_regs_gc_mark...\n");
+    mark_locations_array((VALUE*)save_regs_gc_mark, sizeof(save_regs_gc_mark) / sizeof(VALUE *));
+    printf("Checking stack_start...\n");
+    rb_gc_mark_locations(rb_gc_stack_start, (VALUE*)STACK_END);
+#if defined(__human68k__)
+    rb_gc_mark_locations((VALUE*)((char*)rb_gc_stack_start + 2),
+			 (VALUE*)((char*)STACK_END + 2));
+#endif
+    printf("Checking threads...\n");
+    rb_gc_mark_threads();
+
+    /* mark protected global variables */
+    printf("Checking C globals...\n");
+    for (list = Global_List; list; list = list->next) {
+        char buf[100];
+        sprintf(buf, "C global %d", i);
+        rb_ary_store(rbx_reach_test_path, rbx_reach_test_len, rb_str_new2(buf));
+        rbx_reach_test_len++;
+	rb_gc_mark(*list->varptr);
+        rbx_reach_test_len--;
+        i++;
+    }
+    printf("Checking end_proc...\n");
+    rb_mark_end_proc();
+    printf("Checking global_tbl...\n");
+    rb_gc_mark_global_tbl();    // see changes in variable.c
+
+    printf("Checking class_tbl...\n");
+    rb_mark_tbl(rb_class_tbl);
+    printf("Checking trap_list...\n");
+    rb_gc_mark_trap_list();
+
+    /* mark generic instance variables for special constants */
+    printf("Checking generic_ivar_tbl...\n");
+    rb_mark_generic_ivar_tbl();
+
+    printf("Unmarking...\n");
+    rbx_gc_unmark();
+
+    printf("Done.\n");
+
+    result = rbx_reach_test_result;
+
+    rbx_reach_test_obj    = Qnil;
+    rbx_reach_test_result = Qnil;
+    rbx_reach_test_path   = Qnil;
+    
+    return result;
+}
+#endif
+
+
 void
 rb_gc_mark(ptr)
     VALUE ptr;
 {
     register RVALUE *obj = RANY(ptr);
+#ifdef DEBUG_REACHABILITY
+    int save_reach_test_len;
+    
+    // save position in path array
+    save_reach_test_len = rbx_reach_test_len;
+#endif
 
   Top:
+#ifdef DEBUG_REACHABILITY
+    if (rb_special_const_p((VALUE)obj)) goto Done; /* special const not marked */
+    if (obj->as.basic.flags == 0) goto Done;       /* free cell */
+
+    if (rbx_reach_test_obj != Qnil &&
+        (obj->as.basic.flags & T_MASK) != T_NODE) {
+      if ((VALUE)obj == rbx_reach_test_obj) {
+        printf("  ...found, after %d steps!\n", rbx_reach_test_len);
+        rb_ary_push(rbx_reach_test_result,
+          rb_ary_new4(rbx_reach_test_len, RARRAY(rbx_reach_test_path)->ptr));
+      }
+      else {
+        rb_ary_store(rbx_reach_test_path, rbx_reach_test_len, (VALUE)obj);
+        rbx_reach_test_len++;
+      }
+    }
+
+    if (obj->as.basic.flags & FL_MARK) goto Done;  /* already marked */
+#else
     if (rb_special_const_p((VALUE)obj)) return; /* special const not marked */
     if (obj->as.basic.flags == 0) return;       /* free cell */
     if (obj->as.basic.flags & FL_MARK) return;  /* already marked */
+#endif
 
     obj->as.basic.flags |= FL_MARK;
 
@@ -637,7 +820,11 @@ rb_gc_mark(ptr)
 		goto Top;
 	    }
 	}
+#ifdef DEBUG_REACHABILITY
+	goto Done;
+#else
 	return;			/* no need to mark class. */
+#endif
     }
 
     rb_gc_mark(obj->as.basic.klass);
@@ -727,6 +914,11 @@ rb_gc_mark(ptr)
 	       obj->as.basic.flags & T_MASK, (unsigned long)obj,
 	       is_pointer_to_heap(obj) ? "corrupted object" : "non object");
     }
+#ifdef DEBUG_REACHABILITY
+  Done:
+    // restore position in array
+    rbx_reach_test_len = save_reach_test_len;
+#endif
 }
 
 static void obj_free _((VALUE));
@@ -1409,6 +1601,10 @@ Init_GC()
     rb_define_singleton_method(rb_mGC, "enable", gc_enable, 0);
     rb_define_singleton_method(rb_mGC, "disable", gc_disable, 0);
     rb_define_method(rb_mGC, "garbage_collect", gc_start, 0);
+
+#ifdef DEBUG_REACHABILITY
+    rb_define_singleton_method(rb_mGC, "reachability_paths", rbx_reachability_paths, 1);
+#endif
 
     rb_mObSpace = rb_define_module("ObjectSpace");
     rb_define_module_function(rb_mObSpace, "each_object", os_each_obj, -1);
