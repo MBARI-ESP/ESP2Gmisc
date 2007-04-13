@@ -446,6 +446,52 @@ readonly_setter(val, id, var)
     rb_raise(rb_eNameError, "can't set variable %s", rb_id2name(id));
 }
 
+#ifdef DEBUG_REACHABILITY
+extern VALUE rbx_reach_test_path;
+extern int   rbx_reach_test_len;
+
+static int
+mark_global_entry(key, entry)
+    ID key;
+    struct global_entry *entry;
+{
+    struct trace_var *trace;
+    char buf[100];
+    int i;
+    
+    if (rbx_reach_test_path != Qnil) {
+      sprintf(buf, "Ruby global %s", rb_id2name(key));
+      rb_ary_store(rbx_reach_test_path, rbx_reach_test_len, rb_str_new2(buf));
+      rbx_reach_test_len++;
+      (*entry->marker)(entry->data);
+      rbx_reach_test_len--;
+    }
+    else {
+      (*entry->marker)(entry->data);
+    }
+
+    trace = entry->trace;
+    i = 0;
+    while (trace) {
+        if (trace->data) {
+          if (rbx_reach_test_path != Qnil) {
+            char buf[100];
+            sprintf(buf, "Ruby global %s trace %d", rb_id2name(key), i);
+            rb_ary_store(rbx_reach_test_path, rbx_reach_test_len, rb_str_new2(buf));
+            rbx_reach_test_len++;
+            rb_gc_mark_maybe(trace->data);
+            rbx_reach_test_len--;
+          }
+          else {
+            rb_gc_mark_maybe(trace->data);
+          }
+        }
+	trace = trace->next;
+        i++;
+    }
+    return ST_CONTINUE;
+}
+#else
 static int
 mark_global_entry(key, entry)
     ID key;
@@ -461,6 +507,7 @@ mark_global_entry(key, entry)
     }
     return ST_CONTINUE;
 }
+#endif
 
 void
 rb_gc_mark_global_tbl()
