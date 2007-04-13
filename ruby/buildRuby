@@ -1,6 +1,18 @@
 #!/bin/bash
 #Build ruby
-cd ${RUBYVERS:=ruby-1.6.8}
+cd ${RUBYVERS:=ruby-1.6.8-mbari}
+tarargs=" 1 --keep-old-files -xzf ../snapshot-1.6.tar.gz"
+[ -r Makefile ] && make distclean
+tar --strip-path $tarargs 2>tarerrs
+result=$?  #cope with new and old gnu tar versions
+[ $result = 64 ] && {
+  tar --strip-components $tarargs 2>tarerrs
+  result=$?
+}
+[ $result != 0 -a $result != 2 ] && {  #we expect File exists errors
+  cat tarerrs >&2
+  exit $result
+}
 [ -n "$1" ] && target=$1
 echo "Making $target in $RUBYVERS:"
 make $target
