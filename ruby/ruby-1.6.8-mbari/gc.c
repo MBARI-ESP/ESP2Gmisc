@@ -54,12 +54,29 @@ static void run_final();
 #ifndef GC_MALLOC_LIMIT
 #if defined(MSDOS) || defined(__human68k__)
 #define GC_MALLOC_LIMIT 200000
+#elsif defined(__arm)
+#define GC_MALLOC_LIMIT 2000000
 #else
 #define GC_MALLOC_LIMIT 8000000
 #endif
 #endif
 
 static unsigned long malloc_memories = 0;
+static unsigned long malloc_limit = GC_MALLOC_LIMIT;
+
+static VALUE gc_getlimit(VALUE mod)
+{
+  return ULONG2NUM(malloc_limit);
+}
+
+static VALUE gc_setlimit(VALUE mod, VALUE newLimit)
+{
+  long limit = NUM2LONG(newLimit);
+  if (limit < 10000) return gc_getlimit(mod);
+  malloc_limit = limit;
+  return newLimit;
+}
+
 
 static void
 mem_error(mesg)
@@ -1600,6 +1617,8 @@ Init_GC()
     rb_define_singleton_method(rb_mGC, "start", gc_start, 0);
     rb_define_singleton_method(rb_mGC, "enable", gc_enable, 0);
     rb_define_singleton_method(rb_mGC, "disable", gc_disable, 0);
+    rb_define_singleton_method(rb_mGC, "limit", gc_getlimit, 0);
+    rb_define_singleton_method(rb_mGC, "limit=", gc_setlimit, 1);
     rb_define_method(rb_mGC, "garbage_collect", gc_start, 0);
 
 #ifdef DEBUG_REACHABILITY
