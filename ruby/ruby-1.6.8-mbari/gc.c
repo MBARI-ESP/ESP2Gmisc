@@ -54,8 +54,6 @@ static void run_final();
 #ifndef GC_MALLOC_LIMIT
 #if defined(MSDOS) || defined(__human68k__)
 #define GC_MALLOC_LIMIT 200000
-#elsif defined(__arm)
-#define GC_MALLOC_LIMIT 2000000
 #else
 #define GC_MALLOC_LIMIT 8000000
 #endif
