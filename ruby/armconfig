@@ -1,6 +1,6 @@
 #!/bin/bash
-# configure ruby 1.6.8 build for arm-linux -- 4/3/07 brent@mbari.org
-: ${CFLAGS:=-O2}
+# configure ruby 1.6.8 build for arm-linux -- 5/13/07 brent@mbari.org
+: ${CFLAGS:=-Os}
 : ${CXXFLAGS:=$CFLAGS}
 : ${ARMGCC:=/arm}
 : ${CC:=$ARMGCC/bin/gcc}
@@ -30,6 +30,8 @@ sed -e "s:\"$ARMGCC:\"$TARGETTOP:g" config.h >config.h.patched || {
   echo "Failed to patch config.h"
   exit 3
 }
+#collect the trash more often
+echo "#define GC_MALLOC_LIMIT 2000000" >> config.h.patched 
 mv -f config.h.patched config.h || exit 6
 echo Patching prefix in ext/extmk.rb for target
 cd ext &&
