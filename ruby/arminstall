@@ -49,6 +49,7 @@ sed -e "s:+ \"$ARMGCC\":+ \"$TARGETTOP\":" $rbcfg >$rbcfg.patched || {
   echo "Failed to patch $rbcfg"
   exit 2
 }
+rm -rf $HOSTTOP/bin/ruby $HOSTTOP/lib/ruby &&
 mv -f $rbcfg.patched $rbcfg && mkdir -p $HOSTTOP &&
 make -o miniruby all install || exit 1
 [ -n "$coreOnly" ] || {
