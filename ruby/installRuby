@@ -1,5 +1,0 @@
-#!/bin/bash
-#Install ruby and core utilities
-echo "Installing ruby"
-cd ruby-1.6.8
-exec make install
