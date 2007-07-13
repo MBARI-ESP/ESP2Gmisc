@@ -59,13 +59,14 @@ typedef int writeLineFn (void *file, struct CCDexp *exposure, uint16 *lineBuffer
 //note that options commented out in usage don't seem to work for SXV-H9 camera
 static void usage (void)
 {
-  printf ("%s revised 10/9/05 brent@mbari.org\n", progName);
+  printf ("%s revised 4/17/07 brent@mbari.org\n", progName);
   printf (
 "Snap a photo from a monochrome Starlight Xpress CCD camera. Usage:\n"
 "  %s {options} <exposure seconds> <output file>\n"
 "seconds may be specified in floating point for millisecond resolution\n"
 "options:  (may be abbriviated)\n"
-"  -autoexpose{=300} #auto duration with specified max duration in seconds\n"
+"  -autoexpose{=300,50000}  #auto exposure with optional max duration\n"
+"                           #in seconds and brightest pixel in counts\n"
 "  -binning=x{,y}    #x,y binning factors\n"
 "  -offset=x{,y}     #origin offset\n"
 "  -origin=x{,y}     #same as -offset=\n"
@@ -766,8 +767,8 @@ gotAllOpts: //on to arguments (exposure time and output file name)
     syntaxErr ("Pixel depth of %d bits is not currently supported!\n", exposure.dacBits);
 
   if (exposureSecs < 0.0) {
-    if (!maxAutoSignal)  //default to lower pixel saturation if no binning
-      maxAutoSignal = exposure.xbin==1&&exposure.ybin==1 ? 40000 : 50000;
+    if (!maxAutoSignal)
+      maxAutoSignal = 50000;
     exposureSecs = -exposureSecs;
     if (debug) printf(
       "Calibrating <= %g second exposure for %d max A/D counts...\n",
