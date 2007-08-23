@@ -29,6 +29,11 @@
 #define REMAINING " seconds remaining"
 #define NO_PREDICTOR 1
 
+//tweaks for optimizeExposure 
+//  one day, these should be made into settable parameters...
+#define adcBias 1000               //minimum pixel value observed
+#define minSignal (adcBias+1000)   //minimum signal for scaling exposure times
+
 static char *progName;
 static int progressFD = 3;
 
@@ -59,7 +64,7 @@ typedef int writeLineFn (void *file, struct CCDexp *exposure, uint16 *lineBuffer
 //note that options commented out in usage don't seem to work for SXV-H9 camera
 static void usage (void)
 {
-  printf ("%s revised 4/17/07 brent@mbari.org\n", progName);
+  printf ("%s revised 8/22/07 brent@mbari.org\n", progName);
   printf (
 "Snap a photo from a monochrome Starlight Xpress CCD camera. Usage:\n"
 "  %s {options} <exposure seconds> <output file>\n"
@@ -290,10 +295,17 @@ by the brightest pixel in this coarse image.  Scale exposure time so that this
   const double binAreaf = binArea;
   unsigned maxSignalTarget =  maxAutoSignal;
   struct CCDexp testExposure = *exposure;
-//testExposure.xbin = testExposure.ybin = 4;
-  testExposure.msec /= 151;
+//comment out next line if overexposing hires scenes containing points of light
+  testExposure.xbin = testExposure.ybin = 4;
+  testExposure.msec /= 128;  //((4*4)*16)/binArea;  //better, but takes too long
+  int tries = 20;
   
- tooBright:
+ retry:
+  if (--tries < 0) {
+    fprintf (stderr,
+        "Error:  Scene brightness changing too rapidly\n");
+    return 1;    
+  }
   {
     imageStats lightStats;
     unsigned testArea = testExposure.xbin * testExposure.ybin;
@@ -303,8 +315,8 @@ by the brightest pixel in this coarse image.  Scale exposure time so that this
     if (readOutImage (&testExposure, dummyWrite, NULL, &lightStats)) return -1;
 
     if (lightStats.filteredMax <= (testArea>1 ? 65000 : 60000)) {
-      unsigned brightPt = lightStats.filteredMax - 
-          (lightStats.minimum <= 1500 ? lightStats.minimum : 1500);
+        //subtract A/D analog bias estimate from brightest spot
+      unsigned brightPt = lightStats.filteredMax - adcBias;
       double exposureScaleFactor = testArea / binAreaf * 
         (double)maxSignalTarget/(double)brightPt;
       unsigned testms = testExposure.msec * exposureScaleFactor;
@@ -314,20 +326,25 @@ by the brightest pixel in this coarse image.  Scale exposure time so that this
 				testms/1000.0, exposure->msec/1000.0);
 	 return 0;
       }
+      if (!testms) testms=1;
+      if (lightStats.filteredMax < minSignal) {  //not enough signal
+        testExposure.msec *= 4;
+        goto retry;
+      }
       exposure->msec = testms;
       
     }else{  //overexposed!
     
       if (testExposure.msec > 1) { // 1st try short test exposure
-	testExposure.msec /= 128;
-	goto tooBright;
+	testExposure.msec /= 16;
+	goto retry;
       }
       if (testExposure.xbin != exposure->xbin || 
           testExposure.ybin != exposure->ybin) {
         testExposure.xbin = exposure->xbin;
         testExposure.ybin = exposure->ybin;
 	 //then try using the desired binning mode...
-	goto tooBright;	// as a last resort
+	goto retry;	// as a last resort
       }
       fprintf (stderr,
           "WARNING:  Too Bright -- required exposure time < 1ms\n");
