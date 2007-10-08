@@ -1,3 +1,9 @@
+Mon Oct  8 14:28:52 2006  Brent Roman  <brent@mbari.org>
+
+	* ext/readline/readline.c (readline_getc): supercedes readline_event 
+	  allows apps to process signals while awaiting keyboard input
+          [ruby-core:4039]
+          
 Tue Oct  2 20:16:55 2007  NAKAMURA Usaku  <usa@ruby-lang.org>
 
 	* win32/win32.c (init_env): refactoring. remove unused code.
