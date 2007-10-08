@@ -1,0 +1,27 @@
+Revised:  10/5/07 by brent@mbari.org
+to support Ruby v1.9
+
+gtkri (aka myri) is an obsolete, but very nice
+GUI for Pragmatic Programmers "Interactive Ruby" [ri] command.
+It also requires ruby binding to GTK v1.2 (not v2.x!)
+
+This version has been hack to operate until Ruby v1.9
+
+So, you need:
+/usr/lib/libgtk-1.2.so.*
+
+To build the patched bindings to GTK 1.2 for Ruby v1.9:
+
+$ tar xzf ruby-gtk-0.34.tar.gz
+$ cd ruby-gtk-0.34
+$ patch -p1 < ../ruby19-gtk-0.34.patch
+$ ruby19 extconf.rb
+$ make
+$ su
+# make install
+
+#to install the GUI script that uses them as the command gtkri:
+
+# cd ..  #back to top level dir
+# cp gtkri /usr/local/bin
+
