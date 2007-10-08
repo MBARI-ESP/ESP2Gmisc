@@ -29,6 +29,7 @@
 #endif
 
 static VALUE mReadline;
+static VALUE sysread;
 
 #define TOLOWER(c) (isupper(c) ? tolower(c) : c)
 
@@ -51,10 +52,10 @@ static char **readline_attempted_completion_function(const char *text,
                                                      int start, int end);
 
 static int
-readline_event()
+readline_getc(FILE *ignored)
 {
-    rb_thread_schedule();
-    return 0;
+   VALUE string = rb_funcall (rb_stdin, sysread, 1, INT2FIX(1));
+   return RSTRING(string)->ptr[0];  //single byte read
 }
 
 static VALUE
@@ -703,6 +704,9 @@ Init_readline()
 {
     VALUE history, fcomp, ucomp;
 
+    sysread = rb_intern("sysread");
+    rl_getc_function = readline_getc;
+    
     /* Allow conditional parsing of the ~/.inputrc file. */
     rl_readline_name = "Ruby";
 
