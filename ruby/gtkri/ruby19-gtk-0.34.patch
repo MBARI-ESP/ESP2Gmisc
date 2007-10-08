@@ -1,0 +1,239 @@
+diff -ruN ruby-gtk-0.34/extconf.rb ruby-gtk-0.34.v19/extconf.rb
+--- ruby-gtk-0.34/extconf.rb	2003-07-06 10:20:37.000000000 -0700
++++ ruby-gtk-0.34.v19/extconf.rb	2007-10-03 15:55:42.000000000 -0700
+@@ -4,6 +4,8 @@
+ 
+ require "mkmf"
+ 
++PLATFORM=RbConfig::CONFIG['host']
++
+ #
+ # detect GTK+ configurations
+ #
+diff -ruN ruby-gtk-0.34/src/init.c ruby-gtk-0.34.v19/src/init.c
+--- ruby-gtk-0.34/src/init.c	2003-07-06 10:20:37.000000000 -0700
++++ ruby-gtk-0.34.v19/src/init.c	2007-10-03 16:25:34.000000000 -0700
+@@ -28,7 +28,7 @@
+     argv[0] = STR2CSTR(rb_progname);
+     for (i = 0; i < argc; i++) {
+ 	if (TYPE(RARRAY(rb_argv)->ptr[i]) == T_STRING) {
+-	    argv[i+1] = RSTRING(RARRAY(rb_argv)->ptr[i])->ptr;
++	    argv[i+1] = RSTRING_PTR(RARRAY(rb_argv)->ptr[i]);
+ 	}
+ 	else {
+ 	    argv[i+1] = "";
+diff -ruN ruby-gtk-0.34/src/makedefconst.rb ruby-gtk-0.34.v19/src/makedefconst.rb
+--- ruby-gtk-0.34/src/makedefconst.rb	2003-07-06 10:20:37.000000000 -0700
++++ ruby-gtk-0.34.v19/src/makedefconst.rb	2007-10-03 16:50:21.000000000 -0700
+@@ -2,6 +2,8 @@
+ require 'rbconfig'
+ require 'ftools'
+ 
++PLATFORM=RbConfig::CONFIG['host']
++
+ Split="split -l 100"
+ 
+ def my_split(fname, split_lno, outname, sfx)
+diff -ruN ruby-gtk-0.34/src/rbgdkdraw.c ruby-gtk-0.34.v19/src/rbgdkdraw.c
+--- ruby-gtk-0.34/src/rbgdkdraw.c	2003-07-06 10:20:37.000000000 -0700
++++ ruby-gtk-0.34.v19/src/rbgdkdraw.c	2007-10-03 16:26:47.000000000 -0700
+@@ -92,7 +92,7 @@
+     Check_Type(str, T_STRING);
+     gdk_draw_text(get_gdkdrawable(self), get_gdkfont(font), get_gdkgc(gc),
+ 		  NUM2INT(x), NUM2INT(y),
+-		  RSTRING(str)->ptr, RSTRING(str)->len);
++		  RSTRING_PTR(str), RSTRING_LEN(str));
+     return self;
+ }
+ 
+diff -ruN ruby-gtk-0.34/src/rbgdkgc.c ruby-gtk-0.34.v19/src/rbgdkgc.c
+--- ruby-gtk-0.34/src/rbgdkgc.c	2003-07-06 10:20:37.000000000 -0700
++++ ruby-gtk-0.34.v19/src/rbgdkgc.c	2007-10-03 16:27:56.000000000 -0700
+@@ -107,7 +107,7 @@
+ 
+     if (rb_obj_is_instance_of(dash_list, rb_cString)) {
+         gdk_gc_set_dashes(get_gdkgc(self), NUM2INT(dash_offset),
+-                          RSTRING(dash_list)->ptr, RSTRING(dash_list)->len);
++                          RSTRING_PTR(dash_list), RSTRING_LEN(dash_list));
+         rb_warn("Gdk::GC.set_dashes(dash_offset, dash_list): dash_list with String is obsoleted. Use dash_list with Array.");
+     } else if (rb_obj_is_instance_of(dash_list, rb_cArray)) {
+         buf = ALLOCA_N(gchar, RARRAY(dash_list)->len);
+@@ -116,7 +116,7 @@
+             buf[i] = (gchar)NUM2CHR(RARRAY(dash_list)->ptr[i]);
+         }
+         gdk_gc_set_dashes(get_gdkgc(self), NUM2INT(dash_offset),
+-                          buf, RSTRING(dash_list)->len);
++                          buf, RSTRING_LEN(dash_list));
+     } else {
+         Check_Type(dash_list, T_ARRAY);
+     }
+diff -ruN ruby-gtk-0.34/src/rbgdkimage.c ruby-gtk-0.34.v19/src/rbgdkimage.c
+--- ruby-gtk-0.34/src/rbgdkimage.c	2003-07-06 10:20:37.000000000 -0700
++++ ruby-gtk-0.34.v19/src/rbgdkimage.c	2007-10-03 16:28:35.000000000 -0700
+@@ -48,11 +48,11 @@
+     int width = NUM2INT(w);
+     int height = NUM2INT(h);
+     Check_Type(data, T_STRING);
+-    if (RSTRING(data)->len < (width * height)) {
++    if (RSTRING_LEN(data) < (width * height)) {
+         rb_raise(rb_eArgError, "data too short");
+     }
+     return make_gdkimage(gdk_image_new_bitmap(get_gdkvisual(visual),
+-                         RSTRING(data)->ptr,
++                         RSTRING_PTR(data),
+                          width, height));
+ }
+ 
+diff -ruN ruby-gtk-0.34/src/rbgdkpixmap.c ruby-gtk-0.34.v19/src/rbgdkpixmap.c
+--- ruby-gtk-0.34/src/rbgdkpixmap.c	2003-07-06 10:20:37.000000000 -0700
++++ ruby-gtk-0.34.v19/src/rbgdkpixmap.c	2007-10-03 16:29:11.000000000 -0700
+@@ -38,7 +38,7 @@
+ 
+     Check_Type(data, T_STRING);
+     new = gdk_pixmap_create_from_data(window,
+-				      RSTRING(data)->ptr,
++				      RSTRING_PTR(data),
+ 				      NUM2INT(w), NUM2INT(h),
+ 				      NUM2INT(depth),
+ 				      get_gdkcolor(fg),
+@@ -161,7 +161,7 @@
+ 
+     Check_Type(data, T_STRING);
+     new = gdk_bitmap_create_from_data(window,
+-				      RSTRING(data)->ptr,
++				      RSTRING_PTR(data),
+ 				      NUM2INT(w), NUM2INT(h));
+     return new_gdkbitmap(new);
+ }
+diff -ruN ruby-gtk-0.34/src/rbgdkwindow.c ruby-gtk-0.34.v19/src/rbgdkwindow.c
+--- ruby-gtk-0.34/src/rbgdkwindow.c	2003-07-06 10:20:37.000000000 -0700
++++ ruby-gtk-0.34.v19/src/rbgdkwindow.c	2007-10-03 16:30:18.000000000 -0700
+@@ -541,12 +541,12 @@
+ 
+ #endif
+ 	} else if(ntype == GDK_SELECTION_TYPE_STRING) {
+-		dat = RSTRING(src)->ptr;
++		dat = RSTRING_PTR(src);
+ 		fmt = 8;
+-		len = RSTRING(src)->len;
++		len = RSTRING_LEN(src);
+ 
+ 	} else if(ntype == gdk_atom_intern("COMPOUND_TEXT", FALSE)){
+-		gdk_string_to_compound_text(RSTRING(src)->ptr,
++		gdk_string_to_compound_text(RSTRING_PTR(src),
+ 									&ntype, &fmt, (guchar**)&dat, &len);
+ 
+ 	} else {
+diff -ruN ruby-gtk-0.34/src/rbgtk.c ruby-gtk-0.34.v19/src/rbgtk.c
+--- ruby-gtk-0.34/src/rbgtk.c	2003-07-06 10:20:37.000000000 -0700
++++ ruby-gtk-0.34.v19/src/rbgtk.c	2007-10-03 16:41:58.000000000 -0700
+@@ -12,7 +12,7 @@
+ ************************************************/
+ 
+ #include "global.h"
+-#include "st.h"
++//#include "st.h"
+ #ifdef HAVE_SYS_TIME_H
+ # include <sys/time.h>
+ #endif
+@@ -741,12 +741,12 @@
+ /*
+  * Gtk module
+  */
+-#include <version.h>
+-#if RUBY_VERSION_CODE >= 154
++//#include <version.h>
++//#if RUBY_VERSION_CODE >= 154
+ # define USE_POLL_FUNC 1
+-#else
+-# undef USE_POLL_FUNC /* rb_thread_select() may cause busy wait */
+-#endif
++//#else
++//# undef USE_POLL_FUNC /* rb_thread_select() may cause busy wait */
++//#endif
+ 
+ /* We can't use rbgtk_poll() on native Win32.
+    Because GPollFD doesn't have file descriptor but HANDLE. */
+diff -ruN ruby-gtk-0.34/src/rbgtkeditable.c ruby-gtk-0.34.v19/src/rbgtkeditable.c
+--- ruby-gtk-0.34/src/rbgtkeditable.c	2003-07-06 10:20:37.000000000 -0700
++++ ruby-gtk-0.34.v19/src/rbgtkeditable.c	2007-10-03 16:44:13.000000000 -0700
+@@ -33,8 +33,8 @@
+ 
+     Check_Type(new_text, T_STRING);
+     gtk_editable_insert_text(GTK_EDITABLE(get_widget(self)),
+-			     RSTRING(new_text)->ptr,
+-			     RSTRING(new_text)->len,
++			     RSTRING_PTR(new_text),
++			     RSTRING_LEN(new_text),
+ 			     &p);
+     return INT2NUM(p);
+ }
+diff -ruN ruby-gtk-0.34/src/rbgtkpreview.c ruby-gtk-0.34.v19/src/rbgtkpreview.c
+--- ruby-gtk-0.34/src/rbgtkpreview.c	2003-07-06 10:20:37.000000000 -0700
++++ ruby-gtk-0.34.v19/src/rbgtkpreview.c	2007-10-03 16:45:29.000000000 -0700
+@@ -52,11 +52,11 @@
+ 	dlen *= 3;
+     }
+     Check_Type(data, T_STRING);
+-    if (RSTRING(data)->len < dlen) {
++    if (RSTRING_LEN(data) < dlen) {
+ 	rb_raise(rb_eArgError, "data too short");
+     }
+ 
+-    gtk_preview_draw_row(GTK_PREVIEW(get_widget(self)), RSTRING(data)->ptr,
++    gtk_preview_draw_row(GTK_PREVIEW(get_widget(self)), RSTRING_PTR(data),
+ 			 NUM2INT(x), NUM2INT(y), width);
+     return self;
+ }
+diff -ruN ruby-gtk-0.34/src/rbgtkradiobutton.c ruby-gtk-0.34.v19/src/rbgtkradiobutton.c
+--- ruby-gtk-0.34/src/rbgtkradiobutton.c	2003-07-06 10:20:37.000000000 -0700
++++ ruby-gtk-0.34.v19/src/rbgtkradiobutton.c	2007-10-03 16:46:18.000000000 -0700
+@@ -26,7 +26,7 @@
+     
+     if (rb_scan_args(argc, argv, "02", &arg1, &arg2) == 1 &&
+ 	TYPE(arg1) == T_STRING) {
+-	label = RSTRING(arg1)->ptr;
++	label = RSTRING_PTR(arg1);
+     }
+     else {
+ 	if (!NIL_P(arg2)) {
+diff -ruN ruby-gtk-0.34/src/rbgtkradiomenuitem.c ruby-gtk-0.34.v19/src/rbgtkradiomenuitem.c
+--- ruby-gtk-0.34/src/rbgtkradiomenuitem.c	2003-07-06 10:20:37.000000000 -0700
++++ ruby-gtk-0.34.v19/src/rbgtkradiomenuitem.c	2007-10-03 16:47:05.000000000 -0700
+@@ -27,7 +27,7 @@
+     
+     if (rb_scan_args(argc, argv, "02", &arg1, &arg2) == 1 &&
+ 	TYPE(arg1) == T_STRING) {
+-	label = RSTRING(arg1)->ptr;
++	label = RSTRING_PTR(arg1);
+     }
+     else {
+ 	if (!NIL_P(arg2)) {
+diff -ruN ruby-gtk-0.34/src/rbgtkselectiondata.c ruby-gtk-0.34.v19/src/rbgtkselectiondata.c
+--- ruby-gtk-0.34/src/rbgtkselectiondata.c	2003-07-06 10:20:37.000000000 -0700
++++ ruby-gtk-0.34.v19/src/rbgtkselectiondata.c	2007-10-03 16:47:54.000000000 -0700
+@@ -55,8 +55,8 @@
+     VALUE self, type, format, data;
+ {
+     gtk_selection_data_set(get_gtkselectiondata(self), get_gdkatom(type),
+-						   NUM2INT(format), RSTRING(data)->ptr, 
+-						   RSTRING(data)->len);
++			 NUM2INT(format), RSTRING_PTR(data), 
++			 RSTRING_LEN(data));
+     return self;
+ }
+ 
+diff -ruN ruby-gtk-0.34/src/rbgtktext.c ruby-gtk-0.34.v19/src/rbgtktext.c
+--- ruby-gtk-0.34/src/rbgtktext.c	2003-07-06 10:20:37.000000000 -0700
++++ ruby-gtk-0.34.v19/src/rbgtktext.c	2007-10-03 16:48:34.000000000 -0700
+@@ -109,8 +109,8 @@
+ 		    get_gdkfont(font),
+ 		    get_gdkcolor(fore),
+ 		    get_gdkcolor(back),
+-		    RSTRING(str)->ptr,
+-		    RSTRING(str)->len);
++		    RSTRING_PTR(str),
++		    RSTRING_LEN(str));
+ 
+     return self;
+ }
