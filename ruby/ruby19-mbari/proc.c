@@ -470,6 +470,53 @@ rb_proc_arity(VALUE proc)
     return FIX2INT(proc_arity(proc));
 }
 
+
+static rb_iseq_t *
+get_proc_iseq(VALUE self)
+{
+    rb_proc_t *proc;
+    rb_iseq_t *iseq;
+    GetProcPtr(self, proc);
+    iseq = proc->block.iseq;
+    if (RUBY_VM_NORMAL_ISEQ_P(iseq))
+        return iseq;
+    rb_raise(rb_eTypeError, "(Native?) Proc has no Ruby source");
+}
+
+
+/*
+ * call-seq:
+ *    prc.__file__  => String  
+ *
+ * returns the ruby source filename containing this proc
+ * raises TypeError if this proc was not defined in ruby (i.e. native)
+ */
+ 
+static VALUE
+proc_filename(VALUE self)
+{
+    return get_proc_iseq(self)->filename;
+}
+
+
+/*
+ * call-seq:
+ *    prc.__line__  => Fixnum  
+ *
+ * returns the starting ruby source lineno of this proc or nil if none known
+ * raises TypeError if this proc was not defined in ruby (i.e. native)
+ */
+ 
+static VALUE
+proc_line_no(VALUE self)
+{
+    rb_iseq_t *iseq = get_proc_iseq(self);
+    if (!iseq->insn_info_table)
+        return Qnil;
+    return INT2FIX(iseq->insn_info_table[0].line_no);
+}
+
+
 /*
  * call-seq:
  *   prc == other_proc   =>  true or false
@@ -1256,6 +1303,57 @@ rb_obj_method_arity(VALUE obj, ID id)
     return rb_mod_method_arity(CLASS_OF(obj), id);
 }
 
+
+
+static rb_iseq_t *
+get_method_iseq(VALUE method)
+{
+    struct METHOD *data;
+    NODE *body;
+    Data_Get_Struct(method, struct METHOD, data);
+    body=data->body;
+    if (nd_type(body) == RUBY_VM_METHOD_NODE) {
+        rb_iseq_t *iseq;
+        GetISeqPtr((VALUE)body->nd_body, iseq);
+        if (RUBY_VM_NORMAL_ISEQ_P(iseq))
+          return iseq;
+    }
+    rb_raise(rb_eTypeError, "(Native?) Method has no Ruby source");
+}
+
+/*
+ * call-seq:
+ *    meth.__file__  => String  
+ *
+ * returns the ruby source filename containing this method's definition
+ * raises TypeError if this method was not defined in ruby (i.e. native)
+ */
+ 
+static VALUE
+method_filename(VALUE method)
+{
+    return get_method_iseq(method)->filename;
+}
+
+
+/*
+ * call-seq:
+ *    meth.__line__  => Fixnum  
+ *
+ * returns the starting ruby source lineno of this method of nil if unknown
+ * raises TypeError if this method was not defined in ruby (i.e. native)
+ */
+ 
+static VALUE
+method_line_no(VALUE method)
+{
+    rb_iseq_t *iseq = get_method_iseq(method);
+    if (!iseq->insn_info_table)
+        return Qnil;  
+    return INT2FIX(iseq->insn_info_table[0].line_no);
+}
+
+
 /*
  *  call-seq:
  *   meth.to_s      =>  string
@@ -1450,6 +1548,8 @@ Init_Proc(void)
     rb_define_method(rb_cProc, "hash", proc_hash, 0);
     rb_define_method(rb_cProc, "to_s", proc_to_s, 0);
     rb_define_method(rb_cProc, "lambda?", proc_lambda_p, 0);
+    rb_define_method(rb_cProc, "__file__", proc_filename, 0);
+    rb_define_method(rb_cProc, "__line__", proc_line_no, 0);
 
     /* Exceptions */
     rb_eLocalJumpError = rb_define_class("LocalJumpError", rb_eStandardError);
@@ -1484,6 +1584,8 @@ Init_Proc(void)
     rb_define_method(rb_cMethod, "owner", method_owner, 0);
     rb_define_method(rb_cMethod, "unbind", method_unbind, 0);
     rb_define_method(rb_mKernel, "method", rb_obj_method, 1);
+    rb_define_method(rb_cMethod, "__file__", method_filename, 0);
+    rb_define_method(rb_cMethod, "__line__", method_line_no, 0);    
 
     /* UnboundMethod */
     rb_cUnboundMethod = rb_define_class("UnboundMethod", rb_cObject);
@@ -1499,6 +1601,8 @@ Init_Proc(void)
     rb_define_method(rb_cUnboundMethod, "name", method_name, 0);
     rb_define_method(rb_cUnboundMethod, "owner", method_owner, 0);
     rb_define_method(rb_cUnboundMethod, "bind", umethod_bind, 1);
+    rb_define_method(rb_cUnboundMethod, "__file__", method_filename, 0);
+    rb_define_method(rb_cUnboundMethod, "__line__", method_line_no, 0);    
 
     /* Module#*_method */
     rb_define_method(rb_cModule, "instance_method", rb_mod_method, 1);
