@@ -1,4 +1,9 @@
-Mon Oct  8 14:28:52 2006  Brent Roman  <brent@mbari.org>
+Mon Oct 11 16:45:19 2007  Brent Roman  <brent@mbari.org>
+
+	* added __file__ and __line__ methods to Method and Proc classes
+          [ruby-core:872]
+
+Mon Oct  8 14:28:52 2007  Brent Roman  <brent@mbari.org>
 
 	* ext/readline/readline.c (readline_getc): supercedes readline_event 
 	  allows apps to process signals while awaiting keyboard input
