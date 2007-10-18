@@ -313,6 +313,9 @@ typedef struct rb_vm_struct {
     VALUE thgroup_default;
     VALUE last_status; /* $? */
 
+#if RUBY_VM_THREAD_MODEL < 3
+    int thread_critical;
+#endif
     int thread_abort_on_exception;
     unsigned long trace_flag;
 
@@ -651,7 +654,7 @@ extern rb_vm_t *ruby_current_vm;
 void rb_thread_execute_interrupts(rb_thread_t *);
 
 #define RUBY_VM_CHECK_INTS_TH(th) do { \
-  if(th->interrupt_flag){ \
+  if(th->interrupt_flag && !th->vm->thread_critical){ \
     /* TODO: trap something event */ \
     rb_thread_execute_interrupts(th); \
   } \
