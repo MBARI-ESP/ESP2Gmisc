@@ -203,6 +203,7 @@ set_unblock_function(rb_thread_t *th, rb_unblock_function_t *func, void *arg,
     native_mutex_lock(&th->interrupt_lock);
     if (th->interrupt_flag) {
 	native_mutex_unlock(&th->interrupt_lock);
+        th->vm->thread_critical = 0;  /* we're about to block */
 	goto check_ints;
     }
     else {
@@ -654,12 +655,48 @@ rb_thread_schedule(void)
 
 int rb_thread_critical; /* TODO: dummy variable */
 
+/* Implement Thread.critical only if the selected Threading Model allows it */
+#if RUBY_VM_THREAD_MODEL < 3
+
+/*
+ *  call-seq:
+ *     Thread.critical   => true or false
+ *
+ *  Returns the status of the global ``critical'' condition.  The
+ *  default is <code>false</code>. When set to <code>true</code>, the 
+ *  current thread will execute uninterrupted until this flag is cleared
+ *  or the thread performs a blocking operation.
+ */
+
 static VALUE
-rb_thread_s_critical(VALUE self)
+rb_thread_s_critical(void)
 {
-    rb_warn("Thread.critical is unsupported.  Use Mutex instead.");
-    return Qnil;
+    return GET_THREAD()->vm->thread_critical ? Qtrue : Qfalse;
 }
+
+
+/*
+ *  call-seq:
+ *     Thread.critical= boolean   => true or false
+ *
+ *  Enter or exit a critical section for the current thread.
+ *  The default is <code>false</code>. When set to <code>true</code>, the 
+ *  current thread will execute uninterrupted until it performs a blocking 
+ *  operation or clears this flag. Note the it is often not necessary to
+ *  clear this flag explicitly as any attempt to wait on I/O or schedule
+ *  a new thread will also clear it.
+ */
+
+static VALUE
+rb_thread_s_critical_set(VALUE self, VALUE val)
+{
+    rb_secure(4);
+    GET_THREAD()->vm->thread_critical = RTEST(val);
+    return val;
+}
+
+#endif
+
 
 VALUE
 rb_thread_blocking_region(
@@ -714,7 +751,7 @@ thread_s_pass(VALUE klass)
 void
 rb_thread_execute_interrupts(rb_thread_t *th)
 {
-    while (th->interrupt_flag) {
+    while (th->interrupt_flag && !th->vm->thread_critical) {
 	int status = th->status;
 	th->status = THREAD_RUNNABLE;
 	th->interrupt_flag = 0;
@@ -1862,6 +1899,7 @@ rb_gc_set_stack_end(VALUE **stack_end_p)
 void
 rb_gc_save_machine_context(rb_thread_t *th)
 {
+    th->vm->thread_critical = 0;    /* don't let next thread scheduled become "critical" */
     SET_MACHINE_STACK_END(&th->machine_stack_end);
 #ifdef __ia64
     th->machine_register_stack_end = rb_ia64_bsp();
@@ -2965,8 +3003,11 @@ Init_Thread(void)
     rb_define_singleton_method(rb_cThread, "exit", rb_thread_exit, 0);
     rb_define_singleton_method(rb_cThread, "pass", thread_s_pass, 0);
     rb_define_singleton_method(rb_cThread, "list", rb_thread_list, 0);
+
+#if RUBY_VM_THREAD_MODEL < 3
     rb_define_singleton_method(rb_cThread, "critical", rb_thread_s_critical, 0);
-    rb_define_singleton_method(rb_cThread, "critical=", rb_thread_s_critical, 1);
+    rb_define_singleton_method(rb_cThread, "critical=", rb_thread_s_critical_set, 1);
+#endif
     rb_define_singleton_method(rb_cThread, "abort_on_exception", rb_thread_s_abort_exc, 0);
     rb_define_singleton_method(rb_cThread, "abort_on_exception=", rb_thread_s_abort_exc_set, 1);
 #if THREAD_DEBUG < 0
