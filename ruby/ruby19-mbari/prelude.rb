@@ -1,6 +1,3 @@
-
-# Mutex
-
 class Mutex
   def synchronize
     self.lock
@@ -12,14 +9,14 @@ class Mutex
   end
 end
 
-# Thread
-
 class Thread
-  MUTEX_FOR_THREAD_EXCLUSIVE = Mutex.new
   def self.exclusive
-    MUTEX_FOR_THREAD_EXCLUSIVE.synchronize{
+    return yield if self.critical
+    begin
+      self.critical = true
       yield
-    }
+    ensure
+      self.critical = false
+    end
   end
 end
-
