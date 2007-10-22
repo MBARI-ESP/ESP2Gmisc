@@ -11,7 +11,43 @@
 #
 ########################################################################
 
-require 'mbarilib'  #sundry 'C' extensions including Kernel.doze method
+if defined? Mutex and Mutex.instance_methods.include? :sleep
+
+  module Kernel  #v1.9-mbari sleep clears Thread.critical
+    alias_method :doze, :sleep
+  end
+
+  class String
+    def /(index)
+      (i=self[index]) && i.ord
+    end
+  end
+  
+  class Hash
+    def index value
+      key value
+    end
+  end
+
+else  #need our 'C' extension for older ruby versions
+
+  begin
+    require 'mbarilib'  #sundry 'C' extensions including Kernel.doze method
+  rescue LoadError
+    STDOUT.puts "Warning:  missing mbarilib extension"
+  end
+  
+  class String
+    def ord
+      self[0]
+    end
+    def /(index)
+      self[index]
+    end
+  end
+  
+end
+
 
 class Module
   unless defined? constants_at
@@ -46,6 +82,8 @@ class Hash
 end
 
 class Object
+  rename_method :type, :class
+  
   def intern  #Symbol class overrides this. All classes respond to it
     self
   end
@@ -92,4 +130,13 @@ class Struct
     true
   end
 end
+
+
+class Fixnum
+  def ord
+  #this is for compatibility with Ruby v1.9
+    self
+  end
+end
+
 
