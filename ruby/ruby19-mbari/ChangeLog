@@ -1,3 +1,8 @@
+Mon Oct 24 17:45:00 2007  Brent Roman  <brent@mbari.org>
+
+        * restored Thread.critical(=) to their original function
+          for threading model < 3.  Also restored Thread.exclusive
+
 Mon Oct 11 16:45:19 2007  Brent Roman  <brent@mbari.org>
 
 	* added __file__ and __line__ methods to Method and Proc classes
