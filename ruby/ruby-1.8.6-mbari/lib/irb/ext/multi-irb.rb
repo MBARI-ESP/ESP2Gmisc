@@ -148,7 +148,7 @@ module IRB
   def IRB.irb(file = nil, *main)
     workspace = WorkSpace.new(*main)
     parent_thread = Thread.current
-    Thread.start do
+    @CONF[:IRB_THREAD].new do
       begin
 	irb = Irb.new(workspace, file)
       rescue 
@@ -164,7 +164,12 @@ module IRB
       begin
 	system_exit = false
 	catch(:IRB_EXIT) do
-	  irb.eval_input
+          begin
+            irb.eval_input
+          rescue Exception
+            irb.log_exception
+            retry
+          end
 	end
       rescue SystemExit
 	system_exit = true

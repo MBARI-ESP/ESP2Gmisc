@@ -49,10 +49,9 @@ module IRB
       
       self.prompt_mode = IRB.conf[:PROMPT_MODE]
 
-      if IRB.conf[:SINGLE_IRB] or !defined?(JobManager)
-	@irb_name = IRB.conf[:IRB_NAME]
-      else
-	@irb_name = "irb#"+IRB.JobManager.n_jobs.to_s
+      @irb_name = IRB.conf[:IRB_NAME]
+      unless IRB.conf[:SINGLE_IRB] or !defined?(JobManager)
+        @irb_name += "#"+IRB.JobManager.n_jobs.to_s
       end
       @irb_path = "(" + @irb_name + ")"
 
@@ -182,7 +181,7 @@ module IRB
     end
     
     def inspect?
-      @inspect_mode.nil? or @inspect_mode
+      @inspect_mode == :inspect
     end
 
     def file_input?
@@ -190,12 +189,13 @@ module IRB
     end
 
     def inspect_mode=(opt)
-      if opt
-	@inspect_mode = opt
-      else
-	@inspect_mode = !@inspect_mode
-      end
-      print "Switch to#{unless @inspect_mode; ' non';end} inspect mode.\n" if verbose?
+      @inspect_mode = 
+        if opt == true
+          :inspect
+        else
+          opt || :to_s
+        end
+      print "Display method is #{opt}\n" if verbose?
       @inspect_mode
     end
 
