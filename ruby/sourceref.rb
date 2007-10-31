@@ -48,7 +48,7 @@ class String
   # parse a source reference from string of form fn:line#
     strip!
     a = split(':')
-    return SourceRef.new (self, 0) if a.length < 2
+    return SourceRef.new(self, 0) if a.length < 2
     sym=nil
     if a.length > 2 and a[-1][0,3] == 'in '
       s=a.pop
@@ -56,7 +56,7 @@ class String
       s="" unless s
       sym=s.intern
     end
-    SourceRef.new (a[0..-2].join(':'), a[-1].to_i, sym)
+    SourceRef.new(a[0..-2].join(':'), a[-1].to_i, sym)
   end
 end
 
@@ -101,13 +101,13 @@ class SourceRef   #combines source file name and line number
     self
   end
   
-  def list(lineCount=24, lineOffset=-8)
+  def list(lineCount=20, lineOffset=0)
   # return the next lineCount lines of source text
   # or "" if no source is available
     text = ""; lineno=0
     firstLine=line || 1
     begin
-      File.open (file) {|f|
+      File.open(file) {|f|
         2.upto(firstLine+lineOffset) { f.readline; lineno+=1 }
         1.upto(lineCount) { text += f.readline; lineno+=1 }
       }
@@ -123,7 +123,7 @@ class SourceRef   #combines source file name and line number
 
   class <<@@remoteStub = Object.new
     def system localCmd
-      Kernel.system (localCmd)
+      Kernel.system(localCmd)
     end
     def remap localPath
       localPath
@@ -152,13 +152,13 @@ class SourceRef   #combines source file name and line number
   # If X-windows display available, try nedit client, then nedit directly
     hasLine=line && line>1
     if disp=ENV["DISPLAY"]
-      path = @@remote.remap(File.expand_path (file))
+      path = @@remote.remap(File.expand_path(file))
       if disp.length>1
         neditArgs = ""
         neditArgs<< "-read " if readonly
         neditArgs<< "-line #{line} " if hasLine
         neditArgs<< "-lm Ruby #{options} \"#{path}\""
-        return self if sys (
+        return self if sys(
    "PATH=~/bin:$PATH nohup redit #{neditArgs} >/dev/null || nedit #{neditArgs}")
       end
       return self if
@@ -172,7 +172,7 @@ class SourceRef   #combines source file name and line number
   
   def view (options=nil)
   # start a read-only editor session on file at line
-    edit (options, true)
+    edit(options, true)
   end
   
   def reload
@@ -198,7 +198,7 @@ class SourceRef   #combines source file name and line number
   def self.from_back_trace (trace, level=0)
   # return sourceref at level in backtace
   #  or return level if no such level found
-    return find_in_back_trace (trace, level) if level.kind_of? Symbol    
+    return find_in_back_trace(trace, level) if level.kind_of? Symbol    
     return unless lvl = trace[level]
     lvl.to_srcRef
   end
@@ -304,13 +304,13 @@ class Module
 
   def singleton_source
   # return hash on receiver's singleton methods to corresponding SourceRefs
-    sourceHash (:method, singleton_methods)
+    sourceHash(:method, singleton_methods)
   end
   
   def instance_source(includeAncestors=false)
   # return hash on receiver's instance methods to corresponding SourceRefs
   #        optionally include accessible methods in ancestor classes
-    sourceHash (:instance_method,
+    sourceHash(:instance_method,
                 private_instance_methods+
                 protected_instance_methods(includeAncestors)+
                 public_instance_methods(includeAncestors))
