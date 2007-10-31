@@ -24,7 +24,7 @@
 #include <unistd.h>
 #endif
 
-static VALUE mReadline;
+static VALUE mReadline, sysread;
 
 #define TOLOWER(c) (isupper(c) ? tolower(c) : c)
 
@@ -42,17 +42,21 @@ static ID completion_proc, completion_case_fold;
 # define rl_completion_matches completion_matches
 #endif
 
-static int readline_event(void);
 static char **readline_attempted_completion_function(const char *text,
                                                      int start, int end);
 
 static int
-readline_event()
+readline_getc(FILE *ignored)
+/*
+  single byte read from STDIN via the Ruby I/O libraries
+  This approach allows signals to be handled while awaiting (keyboard) input
+*/
 {
-    CHECK_INTS;
-    rb_thread_schedule();
-    return 0;
+   VALUE string = rb_funcall (rb_stdin, sysread, 1, INT2FIX(1));
+   return RSTRING(string)->ptr[0];
 }
+
+
 
 static VALUE
 readline_readline(argc, argv, self)
@@ -734,6 +738,9 @@ Init_readline()
 {
     VALUE history, fcomp, ucomp;
 
+    sysread = rb_intern("sysread");
+    rl_getc_function = readline_getc;
+    
     /* Allow conditional parsing of the ~/.inputrc file. */
     rl_readline_name = "Ruby";
 
@@ -815,9 +822,6 @@ Init_readline()
 #endif
 
     rl_attempted_completion_function = readline_attempted_completion_function;
-#ifdef HAVE_RL_EVENT_HOOK
-    rl_event_hook = readline_event;
-#endif
 #ifdef HAVE_RL_CLEAR_SIGNALS
     rl_clear_signals();
 #endif
