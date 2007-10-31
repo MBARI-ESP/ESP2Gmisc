@@ -11,7 +11,43 @@
 #
 ########################################################################
 
-require 'mbarilib'  #sundry 'C' extensions including Kernel.doze method
+if defined? Mutex and Mutex.instance_methods.include? :sleep
+
+  module Kernel  #v1.9-mbari sleep clears Thread.critical
+    alias_method :doze, :sleep
+  end
+
+  class String
+    def /(index)
+      (i=self[index]) && i.ord
+    end
+  end
+  
+  class Hash
+    def index value
+      key value
+    end
+  end
+
+else  #need our 'C' extension for older ruby versions
+
+  begin
+    require 'mbarilib'  #sundry 'C' extensions including Kernel.doze method
+  rescue LoadError
+    STDOUT.puts "Warning:  missing mbarilib extension"
+  end
+  
+  class String
+    def ord
+      self[0]
+    end
+    def /(index)
+      self[index]
+    end
+  end
+  
+end
+
 
 class Module
   unless defined? constants_at
@@ -46,6 +82,8 @@ class Hash
 end
 
 class Object
+#  alias_method :type, :class
+  
   def intern  #Symbol class overrides this. All classes respond to it
     self
   end
@@ -55,7 +93,7 @@ class Object
   end
   
   def deepCopy
-    Marshal::load(Marshal::dump(self))
+    Marshal::load(Marshal::dump(dup))
   end
   
   def reallyEqual? other  #for recursive equality tests
@@ -65,17 +103,20 @@ class Object
   def with hash
   #assign instance variables specified in given hash
     hash.each do |parameter, value|
-      send ((parameter.to_s<<?=).intern, value)
+      send((parameter.to_s<<?=).intern, value)
     end
     self
   end  
 end
 
-class Class  #create an uninitialized class instance
-#see http://whytheluckystiff.net/articles/rubyOneEightOh.html
-  def allocate
-    class_name = to_s
-    Marshal.load "\004\006o:"+(class_name.length+5).chr+class_name+"\000"
+
+unless Class.respond_to? :allocate
+  class Class  #create an uninitialized class instance
+  #see http://whytheluckystiff.net/articles/rubyOneEightOh.html
+    def allocate
+      class_name = to_s
+      Marshal.load "\004\006o:"+(class_name.length+5).chr+class_name+"\000"
+    end
   end
 end
 
@@ -83,8 +124,8 @@ class Struct
   def reallyEqual? other
   #built-in Struct#== gets confused when a singleton
   #method is associated with the Struct.  This version does not.
-    unless equal? other.id
-      return false unless type.name == other.type.name
+    unless equal? other.__id__
+      return false unless self.class.name.eql? other.class.name
       for i in 0...length
         return false unless self[i].reallyEqual? other[i]
       end
@@ -92,4 +133,13 @@ class Struct
     true
   end
 end
+
+
+class Fixnum
+  def ord
+  #this is for compatibility with Ruby v1.9
+    self
+  end
+end
+
 
