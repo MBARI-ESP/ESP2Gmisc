@@ -51,7 +51,7 @@ module IRB
   def IRB.start(ap_path = nil)
     $0 = File::basename(ap_path, ".rb") if ap_path
 
-    IRB.setup(ap_path)
+    IRB.setup(ap_path) unless IRB.conf[:PROMPT]
 
     if @CONF[:SCRIPT]
       irb = Irb.new(nil, @CONF[:SCRIPT])
@@ -67,7 +67,12 @@ module IRB
     end
     
     catch(:IRB_EXIT) do
-      irb.eval_input
+      begin
+        irb.eval_input
+      rescue Exception
+        irb.log_exception
+        retry
+      end
     end
 #    print "\n"
   end
@@ -76,12 +81,8 @@ module IRB
     throw :IRB_EXIT, ret
   end
 
-  def IRB.irb_abort(irb, exception = Abort)
-    if defined? Thread
-      irb.context.thread.raise exception, "abort then interrupt!!"
-    else
-      raise exception, "abort then interrupt!!"
-    end
+  def IRB.irb_abort(irb, exception = Abort.new("User Abort!!"))
+    irb.raise exception 
   end
 
   #
@@ -99,6 +100,18 @@ module IRB
     attr_reader :context
     attr_accessor :scanner
 
+
+    if defined? Thread
+      def raise exception
+        @context.thread.raise exception
+      end
+    end
+  
+    def log_exception    
+      @context.thread.exception=$! if @context.thread.respond_to? :exception
+      print $!.type, ": ", $!, "\n" 
+    end
+    
     def eval_input
       @scanner.set_prompt do
 	|ltype, indent, continue, line_no|
@@ -150,8 +163,7 @@ module IRB
 	    @context.evaluate(line, line_no)
 	    output_value if @context.echo?
 	  rescue StandardError, ScriptError, Abort
-	    $! = RuntimeError.new("unknown exception raised") unless $!
-	    print $!.class, ": ", $!, "\n"
+            log_exception
 	    if  $@[0] =~ /irb(2)?(\/.*|-.*|\.rb)?:/ && $!.class.to_s !~ /^IRB/
 	      irb_bug = true 
 	    else
@@ -293,12 +305,12 @@ module IRB
       p
     end
 
-    def output_value
-      if @context.inspect?
-        printf @context.return_format, @context.last_value.inspect
-      else
-        printf @context.return_format, @context.last_value
-      end
+
+    def output_value      
+      displayMethod = @context.inspect_mode
+      displayMethod = :inspect unless 
+                      (lastVal = @context.last_value).respond_to?(displayMethod)
+      printf(@context.return_format, @context.last_value.send(displayMethod))
     end
 
     def inspect

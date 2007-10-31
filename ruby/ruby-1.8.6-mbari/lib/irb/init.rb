@@ -42,10 +42,11 @@ module IRB
     @CONF[:RC] = true
     @CONF[:LOAD_MODULES] = []
     @CONF[:IRB_RC] = nil
+    @CONF[:IRB_THREAD] = Thread   #class of new threads
 
     @CONF[:MATH_MODE] = false
     @CONF[:USE_READLINE] = false unless defined?(ReadlineInputMethod)
-    @CONF[:INSPECT_MODE] = nil
+    @CONF[:INSPECT_MODE] = :to_s
     @CONF[:USE_TRACER] = false
     @CONF[:USE_LOADER] = false
     @CONF[:IGNORE_SIGINT] = true
@@ -143,9 +144,9 @@ module IRB
       when /^-K(.)/
 	$KCODE = $1
       when "--inspect"
-	@CONF[:INSPECT_MODE] = true
+	@CONF[:INSPECT_MODE] = :inspect
       when "--noinspect"
-	@CONF[:INSPECT_MODE] = false
+	@CONF[:INSPECT_MODE] = :to_s
       when "--readline"
 	@CONF[:USE_READLINE] = true
       when "--noreadline"
