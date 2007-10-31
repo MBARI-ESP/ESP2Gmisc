@@ -9660,6 +9660,92 @@ rb_mod_define_method(argc, argv, mod)
     return body;
 }
 
+
+/*
+ * call-seq:
+ *    meth.__file__  => String  
+ *
+ * returns the ruby source filename containing this method's definition
+ * raises TypeError if this method was not defined in ruby (i.e. native)
+ */
+ 
+static VALUE
+method_source_file_name(VALUE method)
+{
+    struct METHOD *data;
+    const char *filename;
+
+    Data_Get_Struct(method, struct METHOD, data);   
+    if (filename = data->body->nd_file)
+      return rb_str_new2(filename);
+    rb_raise(rb_eTypeError, "No Ruby source for Method");
+}
+
+/*
+ * call-seq:
+ *    meth.__line__  => Fixnum  
+ *
+ * returns the starting ruby source lineno of this method of nil if unknown
+ * raises TypeError if this method was not defined in ruby (i.e. native)
+ */
+ 
+
+static VALUE
+method_source_line(VALUE method)
+{
+    struct METHOD *data;
+    int lineno;
+
+    Data_Get_Struct(method, struct METHOD, data);
+    if (lineno = nd_line(data->body)) 
+      return INT2FIX(lineno);
+    rb_raise(rb_eTypeError, "No Ruby source for Method");
+}
+
+
+
+/*
+ * call-seq:
+ *    prc.__file__  => String  
+ *
+ * returns the ruby source filename containing this proc
+ * raises TypeError if this proc was not defined in ruby (i.e. native)
+ */
+ 
+static VALUE
+proc_source_file_name(VALUE block)
+{
+    struct BLOCK *data;
+    const char *filename;
+
+    Data_Get_Struct(block, struct BLOCK, data);
+    if (filename = data->body->nd_file)
+      return rb_str_new2(filename);
+    rb_raise(rb_eTypeError, "No Ruby source for Proc");
+}
+
+
+/*
+ * call-seq:
+ *    prc.__line__  => Fixnum  
+ *
+ * returns the starting ruby source lineno of this proc or nil if none known
+ * raises TypeError if this proc was not defined in ruby (i.e. native)
+ */
+ 
+static VALUE
+proc_source_line(VALUE block)
+{
+    struct BLOCK *data;
+    int   lineno;
+    
+    Data_Get_Struct(block, struct BLOCK, data);
+    if (lineno = nd_line(data->body))
+      return INT2FIX( lineno );
+    rb_raise(rb_eTypeError, "No Ruby source for Proc");
+}
+
+
 /*
  *  <code>Proc</code> objects are blocks of code that have been bound to
  *  a set of local variables. Once bound, the code may be called in
@@ -9706,6 +9792,8 @@ Init_Proc()
     rb_define_method(rb_cProc, "to_s", proc_to_s, 0);
     rb_define_method(rb_cProc, "to_proc", proc_to_self, 0);
     rb_define_method(rb_cProc, "binding", proc_binding, 0);
+    rb_define_method(rb_cProc, "__file__", proc_source_file_name, 0);
+    rb_define_method(rb_cProc, "__line__", proc_source_line, 0);
 
     rb_define_global_function("proc", proc_lambda, 0);
     rb_define_global_function("lambda", proc_lambda, 0);
@@ -9722,6 +9810,8 @@ Init_Proc()
     rb_define_method(rb_cMethod, "to_s", method_inspect, 0);
     rb_define_method(rb_cMethod, "to_proc", method_proc, 0);
     rb_define_method(rb_cMethod, "unbind", method_unbind, 0);
+    rb_define_method(rb_cMethod, "__file__", method_source_file_name, 0);
+    rb_define_method(rb_cMethod, "__line__", method_source_line, 0);
     rb_define_method(rb_mKernel, "method", rb_obj_method, 1);
 
     rb_cUnboundMethod = rb_define_class("UnboundMethod", rb_cObject);
@@ -9733,6 +9823,8 @@ Init_Proc()
     rb_define_method(rb_cUnboundMethod, "inspect", method_inspect, 0);
     rb_define_method(rb_cUnboundMethod, "to_s", method_inspect, 0);
     rb_define_method(rb_cUnboundMethod, "bind", umethod_bind, 1);
+    rb_define_method(rb_cUnboundMethod, "__file__", method_source_file_name, 0);
+    rb_define_method(rb_cUnboundMethod, "__line__", method_source_line, 0);
     rb_define_method(rb_cModule, "instance_method", rb_mod_method, 1);
 }
 
