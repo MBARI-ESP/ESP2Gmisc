@@ -1,0 +1,754 @@
+#!/bin/env ruby
+#
+# GtkRi 0.3.1 -- GTK-based visual version of ri
+# by Filip Pizlo
+#
+# INSTALL GUIDE
+#
+# Make sure you have the following software installed:
+# Ruby 1.6.4 - http://www.ruby-lang.org/
+# Ruby/GTK 0.25 - http://www.ruby-lang.org/gtk/
+# ri 0.7 - http://www.pragmaticprogrammer.com/ruby/downloads/ri.html
+#
+# After that, just put this script in your path and make sure that we're
+# pointing at the right binary above.
+#
+# HISTORY
+
+# September 2007, v 0.3.1: brent@mbari.org
+#   made to work with ruby 1.9.0 patchlevel 0
+#   search hyperlinks in the current class
+#   
+# September 2001, v 0.2.9: simple structural fixes, fixed more hyperlink
+#   peculiarities, changed New behavior
+#
+# August 2001, v 0.2.8: made 'aBlah' and 'anBlah' be searched as 'Blah' and
+#   also added some other small hyperlink fixes
+#
+# August 2001, v 0.2.7: improved the structure of some internal stuff, and
+#   added 'Home' both to the list and to the toolbar; also made
+#   it so that the list can be flipped
+#
+# August 2001, v 0.2.6: added better hyperlink support, put in hooks for
+#   faster searching, and fixed a minor bug in treeSet
+#
+# August 2001, v 0.2.5: turned this thing inside-out and made the code much
+#   prettier; this should help in bug hunting later on
+#
+# August 2001, v 0.2.4: lots of bugs fixed!
+#
+# August 2001, v 0.2.3: two cool hacks added: back/forward buttons, and
+#   link capability!
+#
+# August 2001, v 0.2.2: made appropriate changes necessary to merge with
+#   ri (and renamed from myri -> GtkRi)
+#
+# August 2001, v 0.2.1: fixed class method bug
+#
+# August 2001, v 0.2: got rid of the vbox/label/hsep display, replaced it
+#   with GtkText (thereby adding copy-paste support)
+#
+# August 2001, v 0.1.1: simple performance issues resolved
+#
+# August 2001, v 0.1: it works!
+#
+# ORIGINAL NOTES, INCLUDING LICENSING AND CREDITS:
+#
+# This proggie requires that you have the original ri by Dave Thomas
+# installed.  It is not a modification or copy of Dave's code, but rather
+# a script which taps into ri's already present features.
+#
+# Please note that this code was badly planned and ended up being quite
+# a hack.  But it works.
+#
+# And, oh, by the way, this code is free, I guess.
+#
+# CONTACT
+#
+# You can reach Filip Pizlo at pizlo@purdue.edu or view his page at
+# http://bocks.psych.purdue.edu/
+#
+# The 'official' page for this proggie is at
+# http://bocks.psych.purdue.edu/~pizman/myri/
+#
+#
+
+require 'rdoc/ri/ri_reader'
+require 'rdoc/ri/ri_cache'
+require 'rdoc/ri/ri_display'
+require 'rdoc/ri/ri_util'
+
+module RI  #should have been there in the first place
+  class MethodEntry
+    def nameSpace
+      @in_class
+    end
+  end
+end
+
+require 'singleton'
+require 'gtk'
+
+$GTKRI_DEFAULT_SIZE=[780,330]
+$GTKRI_DEFAULT_SPLIT_POS=200
+$GTKRI_DISP_FONT="-adobe-courier-medium-r-normal--*-120-*-*-*-*-*-*"
+$GTKRI_DISP_FONT="-monotype-andale mono-medium-r-normal--12-120-*-*-*-*-*-*"
+$GTKRI_TRY_RI_DEFINED=true
+$GTKRI_OUR_TOPICS_USE_SINGLETON=true
+$GTKRI_UGLYPATTERN=/^[-A-Za-z0-9#:.!%^&*?|`=\[\]~_+<>]+/
+
+$GTKRI_HOME=<<EOF
+Enter a class, module, or method name above or
+click on a any word in this pane to search for it.
+
+Or, browse the topic list on the left.
+
+Click on 'Topics' on the left to toggle between presenting
+the topic list sorted by class or method name.
+
+Classes and Modules:
+
+!MODULE_LIST!
+
+EOF
+
+$GTKRI_ABOUT=<<EOF
+GtkRi 0.3.1 -- GTK-based visual version of ri
+by Filip Pizlo, hacked for Ruby 1.9 by Brent Roman
+
+This software is public domain.  Use it as you wish.
+
+Check out http://bocks.psych.purdue.edu/~pizman/myri/ for
+more info.
+
+This program uses the internal routines of ri, originally
+written by Dave Thomas.  For more info about that, check out
+http://www.pragmaticprogrammer.com/ruby/downloads/ri.html
+EOF
+
+  def wrap(prefix, txt, linelen)
+    work = txt.dup
+    textLen = linelen - prefix.length
+    patt = Regexp.new("^(.{0,#{textLen}})[ \n]")
+    next_prefix = prefix.tr "^ ", " "
+
+    res = []
+
+    while work.length > textLen
+      if work =~ patt
+        res << $1
+        work.slice!(0, $&.length)
+      else
+        res << work.slice!(0, textLen)
+      end
+    end
+    res << work if work.length.nonzero?
+    prefix +  res.join("\n" + next_prefix)
+  end
+
+
+class GtkRiWin < Gtk::Window
+  
+  # class init
+  @@cnt=0 if __FILE__ == $0
+
+  # low-level routines
+  attr_reader :curText, :curName
+  def textPrint(text=nil)
+    @text.freeze
+    @text.set_point(0)
+    @text.forward_delete(@text.get_length)
+    @text.insert(nil,nil,nil,text) if text
+    yield if block_given?
+    @curText=@text.get_chars(0,-1)
+    @text.thaw
+  end
+  def nameSet(what)
+    @curName=what
+  end
+  def inputSet(what)
+    @input.set_text(what.to_s)
+  end
+  def treeSet(what)
+    unless what
+      @classes.each_value {|x| @ctree.collapse(x) }
+      @ctree.unselect_all
+      return
+    end
+    cl=nil
+    if what=~/^[A-Z]\w*(::[A-Z]\w*)?/
+      clName=$&.tr(':','_')
+      #p clName
+      classes=$classIndex.grep(/^#{Regexp.escape(clName)}/)
+      if classes.length==1
+        cl=classes.first
+      elsif classes.include? clName
+        cl=clName
+      else
+        classes.each {
+          | x |
+          if what=~/^#{x}/
+            cl=x
+            break
+          end
+        }
+      end
+    else
+      if (result=can_handle?(what)).respond_to? :first      
+        unless result.first.kind_of? RI::ClassEntry
+          methods=result[1]
+          cl=$& if methods.length==1 and methods.first=~/^[A-Z]\w*(::[A-Z]\w+)?/
+        end
+      end
+    end
+    if cl and @classes[cl]
+      @classes.each_value {|x| @ctree.collapse(x) }
+      @ctree.expand(@classes[cl])
+      @listen_to_sel=false
+      @ctree.select(@classes[cl])
+      @listen_to_sel=true
+      @ctree.node_moveto(@classes[cl],0,0,0)
+    end
+  end
+  def tree2Set(what)
+    unless what
+      @methods.each_value {|x| @ctree2.collapse(x) }
+      @ctree2.unselect_all
+      return
+    end
+    meth=nil
+    if what =~ /^([A-Z]\w*(?:::(?:[A-Z]\w*)?)?)(\.|\#|::)(.+)/
+      meth=$3
+    elsif what !~ /^[A-Z]\w*(::[A-Z]\w*)?/
+      meth=what
+    end
+    if meth
+      unless @methods[meth]
+        possibilities=@methods.keys
+        possibilities.delete_if {
+          | x |
+          x !~ /^#{Regexp.escape(meth)}/
+        }
+        meth=possibilities[0] if possibilities.length==1
+      end
+      if @methods[meth]
+        @methods.each_value {|x| @ctree2.collapse(x) }
+        @ctree2.expand(@methods[meth])
+        @listen_to_sel=false
+        @ctree2.select(@methods[meth])
+        @listen_to_sel=true
+        @ctree2.node_moveto(@methods[meth],0,0,0)
+      end
+    end
+  end
+  def manageButts
+    @backs.shift if @backs.size>10
+    @fores.shift if @fores.size>10
+    @back.set_sensitive(@backs.size>0)
+    @fore.set_sensitive(@fores.size>0)
+  end
+  def backsSet
+    if @curText
+      @backs.push [@curName,@curText]
+      @fores.clear
+    end
+    manageButts
+  end
+  
+  # our own database of help topics
+  class OurTopics
+    if $GTKRI_OUR_TOPICS_USE_SINGLETON
+      include Singleton
+      def OurTopics.make
+        instance
+      end
+    else
+      def OurTopics.make
+        new
+      end
+    end
+    def initialize
+      @db={}
+    end
+    def add(what)
+      # adds whatever is yielded *only* if it's not already defined
+      @db[what]=yield unless @db[what]
+    end
+    def attempt(what)
+      @db[what]
+    end
+    def each
+      @db.each_key {|x| yield x }
+    end
+  end
+
+  # higher-level targetting routines
+  def goByRaw(text)
+    backsSet
+    textPrint(text)
+    nameSet(nil)
+    inputSet(nil)
+    treeSet(nil)
+    tree2Set(nil)
+  end
+  def goByTreeRaw(text)
+    backsSet
+    textPrint(text)
+    nameSet(nil)
+    inputSet(nil)
+    tree2Set(nil)
+  end
+  def goByTree2Raw(text)
+    backsSet
+    textPrint(text)
+    nameSet(nil)
+    inputSet(nil)
+    treeSet(nil)
+  end
+  def doSearch(what, context=nil)
+    backsSet
+    text=@our.attempt(what)
+    nameSet(what)
+    if text
+      textPrint(text)
+    else
+      textPrint { handle(what, context) }
+    end
+  end
+  def searchSuccessful?(what)
+    @our.attempt(what) or can_handle?(what)
+  end
+  def goByLink(what, context=nil)
+    doSearch(what, context)
+    inputSet(what)
+    treeSet(what)
+    tree2Set(what)
+  end
+  def goByTree(what)
+    doSearch(what)
+    inputSet(what)
+    tree2Set(what)
+  end
+  def goByTree2(what)
+    doSearch(what)
+    inputSet(what)
+    treeSet(what)
+  end
+  def goByInput(what)
+    doSearch(what)
+    treeSet(what)
+    tree2Set(what)
+  end
+  def goByBackFore(what,text)
+    textPrint(text)
+    nameSet(what)
+    inputSet(what)
+    treeSet(what)
+    tree2Set(what)
+    manageButts
+  end
+  def goByBack
+    @fores.push [@curName,@curText]
+    x=@backs.pop
+    goByBackFore(*x)
+  end
+  def goByFore
+    @backs.push [@curName,@curText]
+    x=@fores.pop
+    goByBackFore(*x)
+  end
+  
+  # ri wrappers
+  class NilPane
+    def tty?
+      false
+    end
+    def puts(*msg)
+    end
+    alias_method :print, :puts
+  end
+  class GtkPane < NilPane
+    # stream is a GtkText
+    def GtkPane::desc
+      "GTK-based visual output"
+    end
+    def initialize text
+      @stream = text
+    end
+    def write(str)
+      @stream.insert(nil,nil,nil,str)
+    end
+  end
+
+    
+  def get_info_for(arg)
+#STDERR.puts "get_info_for #{arg}"
+    desc = NameDescriptor.new(arg)
+
+    namespaces = @ri_reader.top_level_namespace
+
+    for class_name in desc.class_names
+      namespaces = @ri_reader.lookup_namespace_in(class_name, namespaces)
+      raise RiError.new("Unknown class/namespace #{arg}") if namespaces.empty?
+    end
+
+    # at this point, if we have multiple possible namespaces, but one
+    # is an exact match for our requested class, prune down to just it
+
+    full_class_name = desc.full_class_name
+    entries = namespaces.find_all {|m| m.full_name == full_class_name}
+    namespaces = entries if entries.size == 1
+    return namespaces if desc.method_name.nil?
+
+    methods = @ri_reader.find_methods(desc.method_name, 
+                                      desc.is_class_method,
+                                      namespaces)
+                                      
+    raise RiError.new("Nothing known about method #{arg}") if methods.empty?
+    [desc, methods, namespaces]
+  end
+
+
+  def can_handle?(arg)
+#STDERR.puts "can_handle? #{arg}"
+    begin
+      result = get_info_for arg
+    rescue RiError => err
+      result=nil
+    end
+    result
+  end
+  
+  
+  
+  def handle(arg, context=nil)
+    result=nil
+    if context
+      begin        
+        result = get_info_for(probe=context+arg)
+        nameSet probe
+      rescue RiError
+      end
+    end
+    unless result
+      begin
+        result = get_info_for arg
+      rescue RiError => err
+       puts err.message
+       return
+      end
+    end
+    if result.first.kind_of? RI::ClassEntry
+      report_class_stuff(result)
+    else
+      report_method_stuff(result[0].method_name, result[1])
+    end
+  end
+
+  
+  # If the list of matching methods contains exactly one entry, or
+  # if it contains an entry that exactly matches the requested method,
+  # then display that entry, otherwise display the list of
+  # matching method names
+  
+  def report_method_stuff(requested_method_name, methods)
+    entries = methods.find_all {|m| m.name == requested_method_name and (
+      !@onlyLoadedClasses or 
+        Object.class_eval "defined? #{m.nameSpace.full_name}" ) }
+    case entries.size
+    when 1
+      method = @ri_reader.get_method(entries.first)
+      @display.display_method_info(method)
+    when 0
+      puts "No loaded methods matched your request"
+    else
+      @display.display_method_list(entries)
+    end
+  end
+  
+  
+  def report_class_stuff(namespaces)
+    entries = namespaces.find_all {|m| 
+      !@onlyLoadedClasses or Object.class_eval "defined? #{m.full_name}"
+    }
+    case entries.size
+    when 1
+      klass = @ri_reader.get_class(entries.first)
+      @display.display_class_info(klass, @ri_reader)
+    when 0
+      puts "No loaded classes or modules matched your request"
+    else
+      @display.display_class_list(entries)
+    end
+  end
+  
+  
+  # ok, time for the initializer!
+  def initialize
+    super
+    
+    @@cnt+=1 if defined? @@cnt
+
+    set_title('GtkRi')
+    signal_connect('delete_event') { destroy }
+    signal_connect('destroy') {
+      if defined? @@cnt
+        @@cnt-=1
+        exit if @@cnt==0
+      end
+    }
+    top_vbox=Gtk::VBox.new(false,10); top_vbox.show
+    top_vbox.border_width=10
+    top_vbox.pack_start(butts=Gtk::HButtonBox.new,false,false,0)
+    butts.show
+    butts.set_layout(Gtk::BUTTONBOX_START)
+    butts.set_spacing(0)
+    butts.set_child_size(0,0)
+    butts.pack_start(quit=Gtk::Button.new('Close'))
+    quit.signal_connect('clicked') { destroy }
+    quit.show
+    butts.pack_start(crnew=Gtk::Button.new('New'))
+    crnew.signal_connect('clicked') {
+      friend=GtkRiWin.new
+      friend.show
+      friend.goByLink(@curName) if @curName
+    }
+    crnew.show
+    butts.pack_start(@back=Gtk::Button.new('< Back')); @back.show
+    butts.pack_start(@fore=Gtk::Button.new('Forward >')); @fore.show
+    butts.pack_start(gohome=Gtk::Button.new('Help'))
+    gohome.signal_connect('clicked') { goByTree('help#Home') }
+    gohome.show
+    n_box=Gtk::HBox.new(false,5)
+    top_vbox.pack_start(n_box,false,false,0); top_vbox.show
+    s_box=Gtk::HPaned.new; s_box.show
+    ctscroll=Gtk::ScrolledWindow.new; ctscroll.show
+    ctscroll.set_policy(Gtk::POLICY_NEVER,Gtk::POLICY_ALWAYS)
+    ctscroll.add(@ctree=Gtk::CTree.new(['Topics'],0)); @ctree.show
+    pre_ct=Gtk::HBox.new(false,0); pre_ct.show
+    s_box.pack1(pre_ct,true,false)
+    pre_ct.pack_start(ctscroll)
+    ct2scroll=Gtk::ScrolledWindow.new
+    ct2scroll.set_policy(Gtk::POLICY_NEVER,Gtk::POLICY_ALWAYS)
+    ct2scroll.add(@ctree2=Gtk::CTree.new(['Topics'],0)); @ctree2.show
+    pre_ct.pack_start(ct2scroll)
+    txscroll=Gtk::ScrolledWindow.new; txscroll.show
+    txscroll.set_policy(Gtk::POLICY_NEVER,Gtk::POLICY_ALWAYS)
+    txscroll.add(@text=Gtk::Text.new(nil,nil))
+    s_box.pack2(txscroll,true,false)
+    @text.set_editable(true); @text.show
+    @text.signal_connect('insert_text') {
+      @text.signal_emit_stop('insert_text') }
+    @text.signal_connect('delete_text') {
+      @text.signal_emit_stop('delete_text') }
+    top_vbox.pack_start(s_box,true,true,0)
+    n_box.pack_start(Gtk::Label.new('Search for:'),false,false,0)
+    n_box.pack_start(@input=Gtk::Entry.new,true,true,0)
+    n_box.pack_start(butt=Gtk::Button.new('Find'),false,false,0)
+    n_box.show_all
+    s_box.set_position($GTKRI_DEFAULT_SPLIT_POS)
+    style=Gtk::Style.new
+    style.set_font(Gdk::Font::font_load($GTKRI_DISP_FONT))
+    @text.set_style(style)
+
+    @options=RI::Options.instance
+    newARGV = ARGV - ['--only-loaded','-o']
+    @onlyLoadedClasses = newARGV != ARGV
+    @options.parse newARGV
+    @options.use_stdout=true
+    @ri_reader=RI::RiReader.new(RI::RiCache.new(@options.path))
+    @display = @options.displayer
+    $stdout=GtkPane.new(@text)  #evil hack allows use of default displayers
+    
+    @our=OurTopics.make
+    $classIndex=@ri_reader.full_class_names
+    if @onlyLoadedClasses
+      $classIndex.delete_if {|clName| !Object.class_eval "defined? #{clName}"}
+    end
+        
+    $methodIndex=@ri_reader.all_names - $classIndex
+    @our.add('help#Home') {
+      $GTKRI_HOME.gsub('!MODULE_LIST!',wrap('   ',
+        $classIndex.sort.collect {|x|
+          x.tr('_',':') }.join(', '), @options.width))
+    }
+    @our.add('help#About GtkRi') { $GTKRI_ABOUT }
+    
+    last=nil; last2=nil
+    @our.each {
+      | name |
+      last=@ctree.insert_node(nil,last,[name.gsub(/^help#/,'')],0,nil,
+        nil,nil,nil,true,false)
+      @ctree.node_set_row_data(last,'help')
+      last2=@ctree2.insert_node(nil,last2,[name.gsub(/^help#/,'')],0,nil,
+        nil,nil,nil,true,false)
+      @ctree2.node_set_row_data(last2,[false,'help'])
+    }
+    
+    @classes={}
+    meth_temp={}
+    $classIndex.sort {|a,b| b<=>a}.each {| x |
+      nx=x.gsub('_',':')
+      last=@ctree.insert_node(nil,last,[nx],0,
+        nil,nil,nil,nil,false,false)
+      cl=@ri_reader.find_class_by_name(x)
+      mlast=nil
+      cl.instance_methods.sort{|a,b| b.name<=>a.name }.each {| y |
+        arr=meth_temp[nm=y.name]
+        unless arr
+          arr=[]
+          meth_temp[nm]=arr
+        end
+        arr<<nx
+        mlast=@ctree.insert_node(last,mlast,
+          [nm],0,nil,nil,nil,nil,true,false)
+        @ctree.node_set_row_data(mlast,nx)
+      }
+      cl.class_methods.sort{|a,b| b.name<=>a.name }.each {| y |
+        arr=meth_temp[nm=y.name]
+        unless arr
+          arr=[]
+          meth_temp[nm]=arr
+        end
+        arr<<nx+'::'
+        mlast=@ctree.insert_node(last,mlast,
+          [nx+'.'+nm],0,nil,nil,nil,nil,true,false)
+        @ctree.node_set_row_data(mlast,nx)
+      }
+      @classes[x]=last
+    }
+    @ctree.set_column_resizeable(0,false)
+    
+    @methods={}
+    meth_temp.keys.sort {|a,b| b<=>a }.each {| meth |
+      klass=meth_temp[meth]
+      methName=meth.to_s
+      last2=@ctree2.insert_node(nil,last2,[methName],0,
+        nil,nil,nil,nil,false,false)
+      klast=nil
+      klass.sort {|a,b| b<=>a }.each {| x |
+        klast=@ctree2.insert_node(last2,klast,
+          [x],0,nil,nil,nil,nil,true,false)
+        @ctree2.node_set_row_data(klast,[true,methName])
+      }
+      @methods[meth]=last2
+    }
+    @ctree2.set_column_resizeable(0,false)
+
+    @curText=nil
+    @curName=nil
+    @backs=[]
+    @fores=[]
+
+    goByTree('help#Home')
+    
+    @listen_to_sel=true
+
+    @text.signal_connect_after('button_press_event') { @lpt=@text.position }
+    @text.signal_connect_after('button_release_event') {
+      pt=@text.position
+      if pt==@lpt
+        pt-=1 while @curText[pt-1,1] =~ $GTKRI_UGLYPATTERN and pt>0
+        cut=@curText[pt..-1]
+        if cut =~ $GTKRI_UGLYPATTERN
+          # the tts array contains all the patterns that need to be searched
+          # the first one is what we matched through uglypattern
+          tts=[$&]
+          # punctuation at the end of sentences suck. so we strip them.
+          tts<<$` if tts[0] =~ /[.:\]\+]*$/
+          # next, we add just the method name. example: user clicks on
+          # 'dave_var_name.match' - dave_var_name is *obviously* not a
+          # class, so we strip it off, and just use match
+          2.times {|i| tts<<$' if tts[i] =~ /^[^A-Z]?.*\./ }
+          # hashes at the beginning *really* suck
+          4.times {|i| tts<<$' if tts[i] =~ /^[:\+#\[]/ }
+          # get those articles out of here!
+          tts<<$' if tts[0] =~ /^(an|a)/
+          # some fun stuff...
+          #p tts
+          tts.uniq!
+          tts.delete_if {|x| x.empty? }
+          # we try all of the patterns in the array, in order of descending
+          # difficulty, until we get one that works (blank ones don't count)
+          prefix = if curName
+            methodStart=curName.rindex(/(::)|#|\./)
+            (methodStart ? curName[0,methodStart] : curName.dup)<<'.'
+          end
+          tts.each {
+            | the |
+            if searchSuccessful? the
+              goByLink(the, prefix)
+              break
+            end
+          }
+        end
+      end
+    }
+    @fore.signal_connect('clicked') { goByFore }
+    @back.signal_connect('clicked') { goByBack }
+    @input.signal_connect('activate') { goByInput(@input.get_text) }
+    butt.signal_connect('clicked') { goByInput(@input.get_text) }
+    @ctree.signal_connect('tree_select_row') {
+      | w, node, col |
+      if @listen_to_sel
+        #p node
+        if name=@ctree.node_get_row_data(node)
+          ni=@ctree.get_node_info(node)[0]
+          if ni =~ /^#{name}\./
+            if ni =~ /^#{name}\.[A-Z]/
+              name=ni
+            else
+              name=ni.gsub(/\./,'::')
+            end
+          else
+            name+='#'
+            name<<ni
+          end
+        else
+          name=@ctree.get_node_info(node)[0]
+        end
+        goByTree(name)
+      end
+    }
+    
+    @ctree2.signal_connect('tree_select_row') {
+      | w, node, col |
+      if @listen_to_sel
+        #p node
+        if meth=@ctree2.node_get_row_data(node)
+          klass=@ctree2.get_node_info(node)[0]
+          if meth[0]
+            name=klass+'#'+meth[1]
+            name.sub!(/#/,'') if klass =~ /::$/
+          else
+            name=meth[1]+'#'+klass
+          end
+        else
+          name=@ctree.get_node_info(node)[0]
+        end
+        goByTree2(name)
+      end
+    }
+    
+    @ctree.signal_connect('click_column') {
+      ctscroll.hide
+      ct2scroll.show
+      tree2Set(@curName)
+    }
+    @ctree2.signal_connect('click_column') {
+      ct2scroll.hide
+      ctscroll.show
+      treeSet(@curName)
+    }
+    
+    set_usize(*$GTKRI_DEFAULT_SIZE)
+    add(top_vbox)
+  end
+end
+
+
+if __FILE__ == $0
+  me=GtkRiWin.new
+  me.show
+  Gtk::main
+end
