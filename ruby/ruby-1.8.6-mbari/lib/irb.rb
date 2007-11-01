@@ -109,7 +109,7 @@ module IRB
   
     def log_exception    
       @context.thread.exception=$! if @context.thread.respond_to? :exception
-      print $!.type, ": ", $!, "\n" 
+      print $!.class, ": ", $!, "\n" 
     end
     
     def eval_input
