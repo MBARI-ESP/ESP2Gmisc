@@ -82,7 +82,7 @@ class Hash
 end
 
 class Object
-#  alias_method :type, :class
+  alias_method :klass, :class
   
   def intern  #Symbol class overrides this. All classes respond to it
     self
@@ -106,7 +106,8 @@ class Object
       send((parameter.to_s<<?=).intern, value)
     end
     self
-  end  
+  end
+  
 end
 
 
