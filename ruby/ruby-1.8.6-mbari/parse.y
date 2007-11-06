@@ -3166,6 +3166,99 @@ parse_string(quote)
     return tSTRING_CONTENT;
 }
 
+
+static int
+trailing_uc(int nondigit)
+{
+   char tmp[30];
+   sprintf(tmp, "trailing `%c' in number", nondigit);
+   yyerror(tmp);
+}
+
+static int
+parse_decimal(int c)
+{
+    int is_float, seen_point, seen_e, nondigit;
+
+    is_float = seen_point = seen_e = nondigit = 0;
+    for (;;) {
+	switch (c) {
+	  case '0': case '1': case '2': case '3': case '4':
+	  case '5': case '6': case '7': case '8': case '9':
+	    nondigit = 0;
+	    tokadd(c);
+	    break;
+
+	  case '.':
+	    if (nondigit)
+              trailing_uc(nondigit);
+	    if (seen_point || seen_e) {
+		goto decode_num;
+	    }
+	    else {
+		int c0 = nextc();
+		if (!ISDIGIT(c0)) {
+		    pushback(c0);
+		    goto decode_num;
+		}
+		c = c0;
+	    }
+	    tokadd('.');
+	    tokadd(c);
+	    is_float++;
+	    seen_point++;
+	    nondigit = 0;
+	    break;
+
+	  case 'e':
+	  case 'E':
+	    if (nondigit) {
+		pushback(c);
+		c = nondigit;
+		goto decode_num;
+	    }
+	    if (seen_e) {
+		goto decode_num;
+	    }
+	    tokadd(c);
+	    seen_e++;
+	    is_float++;
+	    nondigit = c;
+	    c = nextc();
+	    if (c != '-' && c != '+') continue;
+	    tokadd(c);
+	    nondigit = c;
+	    break;
+
+	  case '_':	/* `_' in number just ignored */
+	    if (nondigit) goto decode_num;
+	    nondigit = c;
+	    break;
+
+	  default:
+	    goto decode_num;
+	}
+	c = nextc();
+    }
+
+  decode_num:
+    pushback(c);
+    tokfix();
+    if (nondigit) 
+      trailing_uc(nondigit);
+    if (is_float) {
+	double d = strtod(tok(), 0);
+	if (errno == ERANGE) {
+	    rb_warn("Float %s out of range", tok());
+	    errno = 0;
+	}
+	yylval.node = NEW_LIT(rb_float_new(d));
+	return tFLOAT;
+    }
+    yylval.node = NEW_LIT(rb_cstr_to_inum(tok(), 10, Qfalse));
+    return tINTEGER;
+}
+
 static int
 heredoc_identifier()
 {
@@ -3772,7 +3865,8 @@ yylex()
 	}
 	pushback(c);
 	if (ISDIGIT(c)) {
-	    yyerror("no .<digit> floating literal anymore; put 0 before dot");
+	    newtok();
+            return parse_decimal('.');
 	}
 	lex_state = EXPR_DOT;
 	return '.';
@@ -3781,9 +3875,8 @@ yylex()
       case '0': case '1': case '2': case '3': case '4':
       case '5': case '6': case '7': case '8': case '9':
 	{
-	    int is_float, seen_point, seen_e, nondigit;
+	    int nondigit = 0;
 
-	    is_float = seen_point = seen_e = nondigit = 0;
 	    lex_state = EXPR_END;
 	    newtok();
 	    if (c == '-' || c == '+') {
@@ -3813,7 +3906,8 @@ yylex()
 		    if (toklen() == start) {
 			yyerror("numeric literal without digits");
 		    }
-		    else if (nondigit) goto trailing_uc;
+		    else if (nondigit)
+                      trailing_uc(nondigit);
 		    yylval.node = NEW_LIT(rb_cstr_to_inum(tok(), 16, Qfalse));
 		    return tINTEGER;
 		}
@@ -3837,7 +3931,8 @@ yylex()
 		    if (toklen() == start) {
 			yyerror("numeric literal without digits");
 		    }
-		    else if (nondigit) goto trailing_uc;
+		    else if (nondigit)
+                      trailing_uc(nondigit);
 		    yylval.node = NEW_LIT(rb_cstr_to_inum(tok(), 2, Qfalse));
 		    return tINTEGER;
 		}
@@ -3861,7 +3956,8 @@ yylex()
 		    if (toklen() == start) {
 			yyerror("numeric literal without digits");
 		    }
-		    else if (nondigit) goto trailing_uc;
+		    else if (nondigit)
+                      trailing_uc(nondigit);
 		    yylval.node = NEW_LIT(rb_cstr_to_inum(tok(), 10, Qfalse));
 		    return tINTEGER;
 		}
@@ -3892,13 +3988,14 @@ yylex()
 		    if (toklen() > start) {
 			pushback(c);
 			tokfix();
-			if (nondigit) goto trailing_uc;
+			if (nondigit)
+                          trailing_uc(nondigit);
 			yylval.node = NEW_LIT(rb_cstr_to_inum(tok(), 8, Qfalse));
 			return tINTEGER;
 		    }
 		    if (nondigit) {
 			pushback(c);
-			goto trailing_uc;
+			trailing_uc(nondigit);
 		    }
 		}
 		if (c > '7' && c <= '9') {
@@ -3913,87 +4010,8 @@ yylex()
 		    return tINTEGER;
 		}
 	    }
-
-	    for (;;) {
-		switch (c) {
-		  case '0': case '1': case '2': case '3': case '4':
-		  case '5': case '6': case '7': case '8': case '9':
-		    nondigit = 0;
-		    tokadd(c);
-		    break;
-
-		  case '.':
-		    if (nondigit) goto trailing_uc;
-		    if (seen_point || seen_e) {
-			goto decode_num;
-		    }
-		    else {
-			int c0 = nextc();
-			if (!ISDIGIT(c0)) {
-			    pushback(c0);
-			    goto decode_num;
-			}
-			c = c0;
-		    }
-		    tokadd('.');
-		    tokadd(c);
-		    is_float++;
-		    seen_point++;
-		    nondigit = 0;
-		    break;
-
-		  case 'e':
-		  case 'E':
-		    if (nondigit) {
-			pushback(c);
-			c = nondigit;
-			goto decode_num;
-		    }
-		    if (seen_e) {
-			goto decode_num;
-		    }
-		    tokadd(c);
-		    seen_e++;
-		    is_float++;
-		    nondigit = c;
-		    c = nextc();
-		    if (c != '-' && c != '+') continue;
-		    tokadd(c);
-		    nondigit = c;
-		    break;
-
-		  case '_':	/* `_' in number just ignored */
-		    if (nondigit) goto decode_num;
-		    nondigit = c;
-		    break;
-
-		  default:
-		    goto decode_num;
-		}
-		c = nextc();
-	    }
-
-	  decode_num:
-	    pushback(c);
-	    tokfix();
-	    if (nondigit) {
-		char tmp[30];
-	      trailing_uc:
-		sprintf(tmp, "trailing `%c' in number", nondigit);
-		yyerror(tmp);
-	    }
-	    if (is_float) {
-		double d = strtod(tok(), 0);
-		if (errno == ERANGE) {
-		    rb_warn("Float %s out of range", tok());
-		    errno = 0;
-		}
-		yylval.node = NEW_LIT(rb_float_new(d));
-		return tFLOAT;
-	    }
-	    yylval.node = NEW_LIT(rb_cstr_to_inum(tok(), 10, Qfalse));
-	    return tINTEGER;
-	}
+            return parse_decimal(c);
+         }
 
       case ']':
       case '}':
