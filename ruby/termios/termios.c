@@ -5,9 +5,13 @@
  
   $Id$
   
+  Revised:  2007/11/7 brent@mbari.org
+    initialize [iocl]flags instance vars to zero -- not nil
+    improve type checking
+
   Revised:  2006/2/1 brent@mbari.org
     Don't assume that all termios constants can be represented by a FIXNUM
-    CRTSCTS under Linux, for example, is a BIGNUM
+    CRTSCTS under Linux, for example, is typically a BIGNUM
 
  */
 
@@ -100,15 +104,13 @@ termios_initialize(argc, argv, self)
     for (i = 0; i < NCCS; i++) {
 	rb_ary_store(cc_ary, i, INT2FIX(0));
     }
-
-    rb_ivar_set(self, id_iflag,  Qnil);
-    rb_ivar_set(self, id_oflag,  Qnil);
-    rb_ivar_set(self, id_cflag,  Qnil);
-    rb_ivar_set(self, id_lflag,  Qnil);
     rb_ivar_set(self, id_cc,     cc_ary);
-    rb_ivar_set(self, id_ispeed, Qnil);
-    rb_ivar_set(self, id_ospeed, Qnil);
 
+    rb_ivar_set(self, id_iflag,  INT2FIX(0));
+    rb_ivar_set(self, id_oflag,  INT2FIX(0));
+    rb_ivar_set(self, id_cflag,  INT2FIX(0));
+    rb_ivar_set(self, id_lflag,  INT2FIX(0));
+    
     rb_scan_args(argc, argv, "07", 
 		 &c_iflag, &c_oflag, &c_cflag, &c_lflag, 
 		 &c_cc, &c_ispeed, &c_ospeed);
@@ -153,7 +155,7 @@ termios_to_Termios(t)
 
     cc_ary = rb_ary_new2(NCCS);
     for (i = 0; i < NCCS; i++) {
-	rb_ary_store(cc_ary, i, UINT2NUM(t->c_cc[i]));
+	rb_ary_store(cc_ary, i, INT2FIX(t->c_cc[i]));
     }
     termios_set_cc(obj, cc_ary);
 
@@ -177,14 +179,8 @@ Termios_to_termios(obj, t)
     t->c_lflag = NUM2UINT(rb_ivar_get(obj, id_lflag));
 
     cc_ary = rb_ivar_get(obj, id_cc);
-    for (i = 0; i < NCCS; i++) {
-	if (TYPE(RARRAY(cc_ary)->ptr[i]) == T_FIXNUM) {
+    for (i = 0; i < NCCS; i++)
 	    t->c_cc[i] = NUM2UINT(RARRAY(cc_ary)->ptr[i]);
-	}
-	else {
-	    t->c_cc[i] = 0;
-	}
-    }
 
     cfsetispeed(t, NUM2UINT(rb_ivar_get(obj, id_ispeed)));
     cfsetospeed(t, NUM2UINT(rb_ivar_get(obj, id_ospeed)));
@@ -269,7 +265,7 @@ termios_tcsendbreak(io, duration)
     GetOpenFile(io, fptr);
     if (tcsendbreak(fileno(fptr->f), FIX2INT(duration)) < 0) {
 	rb_raise(rb_eRuntimeError, 
-		 "can't transmits break (%s)", strerror(errno));
+		 "can't transmit BREAK (%s)", strerror(errno));
     }
 
     return Qtrue;
