@@ -59,7 +59,7 @@ static void run_final();
 #endif
 #endif
 
-static unsigned long malloc_memories = 0;
+static unsigned long malloc_increase = 0;
 static unsigned long malloc_limit = GC_MALLOC_LIMIT;
 
 static VALUE gc_getlimit(VALUE mod)
@@ -73,6 +73,12 @@ static VALUE gc_setlimit(VALUE mod, VALUE newLimit)
   if (limit < 10000) return gc_getlimit(mod);
   malloc_limit = limit;
   return newLimit;
+}
+
+
+static VALUE gc_increase(VALUE mod)
+{
+  return ULONG2NUM(malloc_increase);
 }
 
 
@@ -103,9 +109,9 @@ ruby_xmalloc(size)
 	rb_raise(rb_eNoMemError, "negative allocation size (or too big)");
     }
     if (size == 0) size = 1;
-    malloc_memories += size;
+    malloc_increase += size;
 
-    if (malloc_memories > GC_MALLOC_LIMIT) {
+    if (malloc_increase > malloc_limit) {
 	rb_gc();
     }
     RUBY_CRITICAL(mem = malloc(size));
@@ -147,15 +153,12 @@ ruby_xrealloc(ptr, size)
     }
     if (!ptr) return xmalloc(size);
     if (size == 0) size = 1;
-    malloc_memories += size;
+    malloc_increase += size;
     RUBY_CRITICAL(mem = realloc(ptr, size));
     if (!mem) {
 	rb_gc();
 	RUBY_CRITICAL(mem = realloc(ptr, size));
 	if (!mem) {
-	    if (size >= 50 * 1024 * 1024) {
-		rb_raise(rb_eNoMemError, "tried to re-allocate too big memory");
-	    }
 	    mem_error("failed to allocate memory(realloc)");
 	}
     }
@@ -1224,14 +1227,14 @@ rb_gc()
 #endif
 
     if (dont_gc || during_gc) {
-	if (!freelist || malloc_memories > GC_MALLOC_LIMIT) {
-	    malloc_memories = 0;
+	if (!freelist || malloc_increase > malloc_limit) {
+	    malloc_increase = 0;
 	    add_heap();
 	}
 	return;
     }
 
-    malloc_memories = 0;
+    malloc_increase = 0;
 
     if (during_gc) return;
     during_gc++;
@@ -1617,6 +1620,7 @@ Init_GC()
     rb_define_singleton_method(rb_mGC, "disable", gc_disable, 0);
     rb_define_singleton_method(rb_mGC, "limit", gc_getlimit, 0);
     rb_define_singleton_method(rb_mGC, "limit=", gc_setlimit, 1);
+    rb_define_singleton_method(rb_mGC, "increase", gc_increase, 0);
     rb_define_method(rb_mGC, "garbage_collect", gc_start, 0);
 
 #ifdef DEBUG_REACHABILITY
