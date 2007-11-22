@@ -74,6 +74,55 @@ static void run_final();
 static VALUE nomem_error;
 static void garbage_collect();
 
+
+/*
+ *  call-seq:
+ *     GC.limit    => increase limit in bytes
+ *
+ *  Get the # of bytes that may be allocated before triggering
+ *  a mark and sweep by the garbarge collector to reclaim unused storage.
+ *
+ */
+static VALUE gc_getlimit(VALUE mod)
+{
+  return ULONG2NUM(malloc_limit);
+}
+
+/*
+ *  call-seq:
+ *     GC.limit=   => updated increase limit in bytes
+ *
+ *  Set the # of bytes that may be allocated before triggering
+ *  a mark and sweep by the garbarge collector to reclaim unused storage.
+ *  Attempts to set the GC.limit= less than 0 will be ignored.
+ *
+ *     GC.limit=5000000   #=> 5000000
+ *     GC.limit           #=> 5000000
+ *     GC.limit=-50       #=> 5000000
+ *     GC.limit=0         #=> 0
+ *
+ */
+static VALUE gc_setlimit(VALUE mod, VALUE newLimit)
+{
+  long limit = NUM2LONG(newLimit);
+  if (limit < 0) return gc_getlimit(mod);
+  malloc_limit = limit;
+  return newLimit;
+}
+
+
+/*
+ *  call-seq:
+ *     GC.increase
+ *
+ *  Get # of bytes that have been allocated since the last mark & sweep
+ *
+ */
+static VALUE gc_increase(VALUE mod)
+{
+  return ULONG2NUM(malloc_increase);
+}
+
 void
 rb_memerror()
 {
@@ -373,10 +422,14 @@ add_heap()
 }
 #define RANY(o) ((RVALUE*)(o))
 
+extern void chkblks(void);
+
 VALUE
 rb_newobj()
 {
     VALUE obj;
+    
+chkblks();
 
     if (!freelist) garbage_collect();
 
@@ -1042,7 +1095,6 @@ gc_sweep()
     RVALUE *p, *pend, *final_list;
     int freed = 0;
     int i;
-    unsigned long live = 0;
     unsigned long free_min = 0;
 
     for (i = 0; i < heaps_used; i++) {
@@ -1102,7 +1154,6 @@ gc_sweep()
 	    }
 	    else {
 		RBASIC(p)->flags &= ~FL_MARK;
-		live++;
 	    }
 	    p++;
 	}
@@ -1118,10 +1169,6 @@ gc_sweep()
 	else {
 	    freed += n;
 	}
-    }
-    if (malloc_increase > malloc_limit) {
-	malloc_limit += (malloc_increase - malloc_limit) * (double)live / (live + freed);
-	if (malloc_limit < GC_MALLOC_LIMIT) malloc_limit = GC_MALLOC_LIMIT;
     }
     malloc_increase = 0;
     if (freed < free_min) {
@@ -2062,6 +2109,9 @@ Init_GC()
     rb_define_singleton_method(rb_mGC, "start", rb_gc_start, 0);
     rb_define_singleton_method(rb_mGC, "enable", rb_gc_enable, 0);
     rb_define_singleton_method(rb_mGC, "disable", rb_gc_disable, 0);
+    rb_define_singleton_method(rb_mGC, "limit", gc_getlimit, 0);
+    rb_define_singleton_method(rb_mGC, "limit=", gc_setlimit, 1);
+    rb_define_singleton_method(rb_mGC, "increase", gc_increase, 0);
     rb_define_method(rb_mGC, "garbage_collect", rb_gc_start, 0);
 
     rb_mObSpace = rb_define_module("ObjectSpace");
