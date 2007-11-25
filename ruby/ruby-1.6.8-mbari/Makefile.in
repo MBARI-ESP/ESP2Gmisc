@@ -86,7 +86,7 @@ OBJS	      = array.@OBJEXT@ \
 MANTYPE	      = @MANTYPE@
 
 all:		miniruby$(EXEEXT) @PREP@ rbconfig.rb $(LIBRUBY)
-		@@MINIRUBY@ -Cext extmk.rb @EXTSTATIC@
+		@./miniruby -Cext extmk.rb @EXTSTATIC@
 
 miniruby$(EXEEXT):	config.status $(LIBRUBY_A) $(MAINOBJ) dmyext.@OBJEXT@
 		@rm -f $@
@@ -102,15 +102,15 @@ $(LIBRUBY_A):	$(OBJS) dmyext.@OBJEXT@
 
 $(LIBRUBY_SO):	$(OBJS) dmyext.@OBJEXT@ miniruby$(EXEEXT)
 		$(LDSHARED) $(DLDFLAGS) $(OBJS) dmyext.@OBJEXT@ $(SOLIBS) -o $@
-		@-@MINIRUBY@ -e 'ARGV.each{|link| File.delete link if File.exist? link; \
+		@-./miniruby -e 'ARGV.each{|link| File.delete link if File.exist? link; \
 						  File.symlink "$(LIBRUBY_SO)", link}' \
 				$(LIBRUBY_ALIASES) || true
 
 install:	rbconfig.rb
-		@MINIRUBY@ $(srcdir)/instruby.rb --mantype=$(MANTYPE) $(DESTDIR)
+		@./miniruby $(srcdir)/instruby.rb --mantype=$(MANTYPE) $(DESTDIR)
 
 clean-ext:
-		@-@MINIRUBY@ -Cext extmk.rb clean 2> /dev/null || true
+		@-./miniruby -Cext extmk.rb clean 2> /dev/null || true
 
 clean: clean-ext
 		@rm -f $(OBJS) $(MAINOBJ) $(LIBRUBY_A) $(LIBRUBY_SO) $(LIBRUBY_ALIASES)
@@ -118,10 +118,10 @@ clean: clean-ext
 		@rm -f $(PROGRAM) miniruby$(EXEEXT)
 
 distclean-ext:
-		@-@MINIRUBY@ -Cext extmk.rb distclean 2> /dev/null || true
+		@-./miniruby -Cext extmk.rb distclean 2> /dev/null || true
 
 distclean: distclean-ext clean
-		@rm -f Makefile ext/extmk.rb config.h rbconfig.rb
+		@rm -f Makefile ext/extmk.rb config.h rbconfig.rb fake.rb
 		@rm -f ext/config.cache config.cache config.log config.status
 		@rm -f *~ core *.core gmon.out y.tab.c y.output ruby.imp
 
@@ -130,18 +130,16 @@ realclean:	distclean
 		@rm -f lex.c
 
 test:		miniruby$(EXEEXT) rbconfig.rb
-		@./miniruby$(EXEEXT) $(srcdir)/rubytest.rb
+		@./miniruby $(srcdir)/rubytest.rb
 
 rbconfig.rb:	miniruby$(EXEEXT) $(srcdir)/mkconfig.rb config.status
-		@@MINIRUBY@ $(srcdir)/mkconfig.rb rbconfig.rb
+		@./miniruby $(srcdir)/mkconfig.rb rbconfig.rb
 
 fake.rb:	miniruby$(EXEEXT)
 		@echo ' \
 		class Object; \
 		  remove_const :RUBY_PLATFORM; \
-		  remove_const :RUBY_VERSION; \
 		  RUBY_PLATFORM = "@arch@"; \
-		  RUBY_VERSION = "@MAJOR@.@MINOR@.@TEENY@"; \
 		  CROSS_COMPILING = true; \
 		end \
 		' > $@
