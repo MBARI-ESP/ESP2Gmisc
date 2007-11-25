@@ -41,9 +41,7 @@ else  #need our 'C' extension for older ruby versions
     def ord
       self[0]
     end
-    def /(index)
-      self[index]
-    end
+    alias_method :/, :[]
   end
   
 end
