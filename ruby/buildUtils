@@ -7,11 +7,12 @@
 
 toolDirs='mbarilib termios'
 top=$PWD
-ruby=`which ruby 2>/dev/null` || ruby=../ruby-1.6.8/miniruby
+defdir=$PWD/ruby-1.6.8-mbari
+: ${RUBY:="$defdir/miniruby -I$defdir/lib"}
 for d in $toolDirs; do
   echo "Making $d:"
   cd $d
-  $ruby extconf.rb || exit 1
+  $RUBY extconf.rb || exit 1
   make $@ || exit 1
   cd ..
 done
@@ -19,9 +20,9 @@ done
 for mktarget; do  #for things that don't have an explicit "build" operation
   [ "$mktarget" = "install" ] && {  #install IRB and MBARI misc extensions
     echo "Installing IRB and MBARI extensions..."
-    (cd irb-0.9-02.09.03; ./instirb.rb $DESTDIR)
-    (cd irbtools-0.9; ./inst-irbtools.rb $DESTDIR)
-    ./inst-mbari.rb $DESTDIR || exit 32
+    (cd irb-0.9-02.09.03; $RUBY instirb.rb $DESTDIR)
+    (cd irbtools-0.9; $RUBY inst-irbtools.rb $DESTDIR)
+    $RUBY inst-mbari.rb $DESTDIR || exit 32
     break
   }
 done
