@@ -1,5 +1,5 @@
 #!/bin/sh
-# install ruby 1.6.8 build for arm-linux -- 2/17/05 brent@mbari.org
+# install ruby 1.6.8 build for arm-linux -- 11/25/05 brent@mbari.org
 # also install modules needed for ESP unless 
 #   coreOnly environment variable is set
 #
@@ -36,11 +36,16 @@ export DESTDIR=${3:-$HOME/armHost}
 echo "Installing in $HOSTTOP"
 echo "  for execution at $TARGETTOP on the ARM target"
 PATH=`remove . : $PATH`  #remove current directory from PATH
-cd ${RUBYVERS:=ruby-1.6.8-mbari} &&
-  ln -sf `which ruby --skip-dot` miniruby || {
-    echo "ruby must be already installed on the build machine"
+cd ${RUBYVERS:=ruby-1.6.8-mbari} || exit 98
+if [ ! -x miniruby ]; then
+  echo Building miniruby for this machine
+  rm -f *.o && make CC=gcc miniruby || {
+    echo "could not build miniruby"
     exit 8
   }
+  rm *.o
+  echo Building ruby for ARM target
+fi
 export RUBYLIB=$PWD
 rbcfg=rbconfig.rb
 make -o miniruby fake.rb $rbcfg
