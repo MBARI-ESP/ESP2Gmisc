@@ -574,6 +574,7 @@ struct BLOCK {
 #define BLOCK_D_SCOPE 1
 #define BLOCK_DYNAMIC 2
 #define BLOCK_ORPHAN  4
+#define BLOCK_KEEP    8
 
 static struct BLOCK *ruby_block;
 
@@ -6137,12 +6138,17 @@ blk_mark(data)
     }
 }
 
+//static int resizing_stack = 0;
+
 static void
 blk_free(data)
     struct BLOCK *data;
 {
     struct FRAME *frame;
     void *tmp;
+
+//if (resizing_stack)
+//  fprintf(stderr, " blk @%p ", data);
 
     frame = data->frame.prev;
     while (frame) {
@@ -6188,6 +6194,8 @@ blk_copy_prev(block)
     }
 }
 
+static VALUE *freed_argv = (VALUE *)-1;
+
 static void
 frame_dup(frame)
     struct FRAME *frame;
@@ -6195,8 +6203,13 @@ frame_dup(frame)
     VALUE *argv;
     struct FRAME *tmp;
 
-    for (;;) {
+    for (;;) {    
 	if (frame->argc > 0) {
+
+if (frame->argv == freed_argv)
+  fprintf(stderr,
+    "***Duping frame @%p from %s:%d\n", frame, frame->file, frame->line);
+
 	    argv = ALLOC_N(VALUE, frame->argc);
 	    MEMCPY(argv, frame->argv, VALUE, frame->argc);
 	    frame->argv = argv;
@@ -7394,7 +7407,11 @@ thread_mark(th)
     /* mark data in copied stack */
     if (th == curr_thread) return;
     if (th->status == THREAD_KILLED) return;
-    if (th->stk_len == 0) return;  /* stack not active, no need to mark. */
+    if (th->stk_len == 0) {
+//if (resizing_stack)
+//  fprintf(stderr, "*** Mark thread @%p ", th);
+      return;  /* stack not active, no need to mark. */
+}
     if (th->stk_ptr) {
 	rb_gc_mark_locations(th->stk_ptr, th->stk_ptr+th->stk_len);
 #if defined(THINK_C) || defined(__human68k__)
@@ -7439,6 +7456,9 @@ static void
 thread_free(th)
     rb_thread_t th;
 {
+//if (resizing_stack)
+//  fprintf(stderr, "*** Free thread @%p", th);
+
     if (th->stk_ptr) free(th->stk_ptr);
     th->stk_ptr = 0;
     if (th->locals) st_free_table(th->locals);
@@ -7490,8 +7510,10 @@ rb_thread_save_context(th)
     th->stk_pos = (rb_gc_stack_start<pos)?rb_gc_stack_start
 				         :rb_gc_stack_start - len;
     if (len > th->stk_max) {
+//resizing_stack++;
 	REALLOC_N(th->stk_ptr, VALUE, len);
 	th->stk_max = len;
+//resizing_stack--;
     }
     th->stk_len = len;
     FLUSH_REGISTER_WINDOWS; 
@@ -8588,6 +8610,7 @@ rb_thread_start_0(fn, arg, th_arg)
     PUSH_TAG(PROT_THREAD);
     if ((state = EXEC_TAG()) == 0) {
 	if (THREAD_SAVE_CONTEXT(th) == 0) {
+            ruby_frame->prev = top_frame;  /* hide parent thread's frames */
 	    curr_thread = th;
 	    th->result = (*fn)(arg, th);
 	}
@@ -8595,11 +8618,23 @@ rb_thread_start_0(fn, arg, th_arg)
     POP_TAG();
     status = th->status;
 
-    while (saved_block) {
+    while (saved_block) { // && !(saved_block->flags & BLOCK_KEEP)) {
 	struct BLOCK *tmp = saved_block;
 
+if (saved_block->flags & BLOCK_KEEP) {
+  fprintf (stderr, "**** keeping blocks marked BLOCK_KEEP\n");
+  break;
+}
 	if (tmp->frame.argc > 0)
+{
+  if (tmp->frame.argc == 3 && tmp->frame.line==129) {
+   fprintf(stderr,
+     "***freeing block @%p from %s:%d\n", 
+                          tmp, tmp->frame.file, tmp->frame.line);
+   freed_argv = tmp->frame.argv;
+  }
 	    free(tmp->frame.argv);
+}
 	saved_block = tmp->prev;
 	free(tmp);
     }
@@ -9027,6 +9062,7 @@ rb_callcc(self)
 
 	while (block) {
 	    block->tag->flags |= BLOCK_DYNAMIC;
+            block->flags |= BLOCK_KEEP;
 	    block = block->prev;
 	}
     }
