@@ -1,3 +1,12 @@
+Mon Dec  3 17:56:00 2007  Brent Roman  <brent@mbari.org>
+
+        * eval.c:  Hide parent's frames when creating a new thread
+          Added BLOCK_KEEP flag as a hack to prevent
+          blocks in use by continuations from being prematurely
+          freed when parent thread dies.  This avoids invalid
+          memory accesses at the cost of a small memory leak
+          in this case.  Hoping someone can find a better fix...
+
 Sun Nov 11 22:44:50 2007  Brent Roman  <brent@mbari.org>
 
         * gc.c:  added limit=, limit and increase methods
