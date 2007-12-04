@@ -574,7 +574,6 @@ struct BLOCK {
 #define BLOCK_D_SCOPE 1
 #define BLOCK_DYNAMIC 2
 #define BLOCK_ORPHAN  4
-#define BLOCK_KEEP    8
 
 static struct BLOCK *ruby_block;
 
@@ -7425,6 +7424,14 @@ thread_mark(th)
     }
 }
 
+static void
+cc_mark(cc)
+    rb_thread_t cc;
+{  /* mark this continuation only if it could still be called */
+    rb_thread_t parent_th = DATA_PTR(cc->thread);
+    thread_mark(parent_th->status != THREAD_KILLED ? cc : parent_th);
+}
+
 void
 rb_gc_mark_threads()
 {
@@ -7654,7 +7661,7 @@ rb_thread_remove(th)
     th->next->prev = th->prev;
 }
 
-static int
+static inline int
 rb_thread_dead(th)
     rb_thread_t th;
 {
@@ -8597,7 +8604,7 @@ rb_thread_start_0(fn, arg, th_arg)
     POP_TAG();
     status = th->status;
 
-    while (saved_block && !(saved_block->flags & BLOCK_KEEP)) {
+    while (saved_block) {
 	struct BLOCK *tmp = saved_block;
 
 	if (tmp->frame.argc > 0)
@@ -9018,7 +9025,7 @@ rb_callcc(self)
     struct RVarmap *vars;
 
     THREAD_ALLOC(th);
-    cont = Data_Wrap_Struct(rb_cCont, thread_mark, thread_free, th);
+    cont = Data_Wrap_Struct(rb_cCont, cc_mark, thread_free, th);
 
     scope_dup(ruby_scope);
     for (tag=prot_tag; tag; tag=tag->prev) {
@@ -9029,7 +9036,6 @@ rb_callcc(self)
 
 	while (block) {
 	    block->tag->flags |= BLOCK_DYNAMIC;
-            block->flags |= BLOCK_KEEP;
 	    block = block->prev;
 	}
     }
