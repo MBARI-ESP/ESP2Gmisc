@@ -1,15 +1,17 @@
-Mon Dec  3 17:56:00 2007  Brent Roman  <brent@mbari.org>
+Sat Dec  8 00:26:32 2007  Brent Roman  <brent@mbari.org>
 
         * eval.c:  Hide parent's frames when creating a new thread
-          Added BLOCK_KEEP flag as a hack to prevent
-          blocks in use by continuations from being prematurely
-          freed when parent thread dies.  This avoids invalid
-          memory accesses at the cost of a small memory leak
-          in this case.  Hoping someone can find a better fix...
+          Do not bother clearing stklen when REALLOC'ing current stack
+          Added cc_mark for GC marking Continuations to prevent
+          BLOCKs in use by those continuations from being prematurely
+          freed when their parent thread dies
+          inlined rb_thread_dead()
+
 
 Sun Nov 11 22:44:50 2007  Brent Roman  <brent@mbari.org>
 
         * gc.c:  added limit=, limit and increase methods
+
 
 Sat Feb 10 22:44:50 2006  Brent Roman  <brent@mbari.org>
 

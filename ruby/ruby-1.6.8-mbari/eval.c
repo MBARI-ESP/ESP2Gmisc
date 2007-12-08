@@ -7427,9 +7427,16 @@ thread_mark(th)
 static void
 cc_mark(cc)
     rb_thread_t cc;
-{  /* mark this continuation only if it could still be called */
-    rb_thread_t parent_th = DATA_PTR(cc->thread);
-    thread_mark(parent_th->status != THREAD_KILLED ? cc : parent_th);
+{  /* mark this continuation's stack only if its parent thread is still alive */
+    if (cc->status != THREAD_KILLED) {
+      rb_thread_t parent = DATA_PTR(cc->thread);
+      if (parent->status == THREAD_KILLED)
+        cc->status = THREAD_KILLED;
+/*    else                   
+        thread_mark(parent); //skip this because active list is already marked
+*/
+    }
+    thread_mark(cc);
 }
 
 void
@@ -7494,16 +7501,14 @@ rb_thread_save_context(th)
     static VALUE tval;
 
     len = stack_length(&pos);
-    th->stk_len = 0;
-    th->stk_pos = (rb_gc_stack_start<pos)?rb_gc_stack_start
+    pos = (rb_gc_stack_start<pos)?rb_gc_stack_start
 				         :rb_gc_stack_start - len;
     if (len > th->stk_max) {
 	REALLOC_N(th->stk_ptr, VALUE, len);
 	th->stk_max = len;
     }
-    th->stk_len = len;
     FLUSH_REGISTER_WINDOWS; 
-    MEMCPY(th->stk_ptr, th->stk_pos, VALUE, th->stk_len);
+    MEMCPY(th->stk_ptr, th->stk_pos=pos, VALUE, th->stk_len=len);
 #ifdef SAVE_WIN32_EXCEPTION_LIST
     th->win32_exception_list = win32_get_exception_list();
 #endif
