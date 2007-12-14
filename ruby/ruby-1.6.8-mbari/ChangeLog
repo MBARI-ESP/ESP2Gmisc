@@ -1,3 +1,8 @@
+Fri Dec 14 21:11:36 2007  Brent Roman  <brent@mbari.org>
+
+        * eval.c:  rb_thread_check compares dmark rather than dfree
+                   to prevent adding Continuations to ThreadGroups
+
 Sat Dec  8 00:26:32 2007  Brent Roman  <brent@mbari.org>
 
         * eval.c:  Hide parent's frames when creating a new thread
