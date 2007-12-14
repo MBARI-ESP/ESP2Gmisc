@@ -1123,21 +1123,18 @@ typedef struct event_hook {
 
 static rb_event_hook_t *event_hooks;
 
-void chkblks(void);
-
 #define EXEC_EVENT_HOOK(event, node, self, id, klass) \
-   do { \
+    do { \
 	rb_event_hook_t *hook = event_hooks; \
         rb_event_hook_func_t hook_func; \
         rb_event_t events; \
 	\
- 	while (hook) { \
+	while (hook) { \
             hook_func = hook->func; \
             events = hook->events; \
             hook = hook->next; \
-	    if (events & event) { \
+	    if (events & event) \
 		(*hook_func)(event, node, self, id, klass); \
-            } \
 	} \
     } while (0)
 
@@ -2659,7 +2656,7 @@ set_trace_func(obj, trace)
     return trace;
 }
 
-char *
+static char *
 get_event_name(rb_event_t event)
 {
     switch (event) {
@@ -10140,7 +10137,6 @@ timeofday()
     return (double)tv.tv_sec + (double)tv.tv_usec * 1e-6;
 }
 
-
 #define STACK(addr) (th->stk_pos<(VALUE*)(addr) && (VALUE*)(addr)<th->stk_pos+th->stk_len)
 #define ADJ(addr) (void*)(STACK(addr)?(((VALUE*)(addr)-th->stk_pos)+th->stk_ptr):(VALUE*)(addr))
 static void
@@ -10149,7 +10145,7 @@ thread_mark(th)
 {
     struct FRAME *frame;
     struct BLOCK *block;
-    
+
     rb_gc_mark(th->result);
     rb_gc_mark(th->thread);
     if (th->join) rb_gc_mark(th->join->thread);
@@ -10206,21 +10202,20 @@ thread_mark(th)
     }
 }
 
-
-void chkblks(void)
-{
-    rb_thread_t th;
-
-    if (!curr_thread) return;
-    FOREACH_THREAD(th) {
-      struct BLOCK *block = th->block;
-      while (block) {
-	  block = ADJ(block);
-	  block = block->prev;
-      }
-    } END_FOREACH(th);
+static void
+cc_mark(cc)
+    rb_thread_t cc;
+{  /* mark this continuation's stack only if its parent thread is still alive */
+    if (cc->status != THREAD_KILLED) {
+      rb_thread_t parent = DATA_PTR(cc->thread);
+      if (parent->status == THREAD_KILLED)
+        cc->status = THREAD_KILLED;
+/*    else                   
+        thread_mark(parent); //skip this because active list is already marked
+*/
+    }
+    thread_mark(cc);
 }
-
 
 static int
 mark_loading_thread(key, value, lev)
@@ -12887,7 +12882,7 @@ rb_callcc(self)
     struct RVarmap *vars;
 
     THREAD_ALLOC(th);
-    cont = Data_Wrap_Struct(rb_cCont, thread_mark, thread_free, th);
+    cont = Data_Wrap_Struct(rb_cCont, cc_mark, thread_free, th);
 
     scope_dup(ruby_scope);
     for (tag=prot_tag; tag; tag=tag->prev) {
