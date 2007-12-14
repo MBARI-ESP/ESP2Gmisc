@@ -422,15 +422,12 @@ add_heap()
 }
 #define RANY(o) ((RVALUE*)(o))
 
-extern void chkblks(void);
 
 VALUE
 rb_newobj()
 {
     VALUE obj;
     
-chkblks();
-
     if (!freelist) garbage_collect();
 
     obj = (VALUE)freelist;
