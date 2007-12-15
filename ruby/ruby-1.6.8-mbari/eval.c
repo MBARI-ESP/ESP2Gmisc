@@ -7468,7 +7468,7 @@ static rb_thread_t
 rb_thread_check(data)
     VALUE data;
 {
-    if (TYPE(data) != T_DATA || RDATA(data)->dfree != (RUBY_DATA_FUNC)thread_free) {
+    if (TYPE(data) != T_DATA || RDATA(data)->dmark != (RUBY_DATA_FUNC)thread_mark) {
 	rb_raise(rb_eTypeError, "wrong argument type %s (expected Thread)",
 		 rb_class2name(CLASS_OF(data)));
     }
