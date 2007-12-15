@@ -1,3 +1,11 @@
+Fri Dec 14 01:03:59 2007  Brent Roman  <brent@mbari.org>
+
+        * eval.c:  fixes bug described in [ruby-core:597825]
+          Added cc_mark for GC marking Continuations to prevent
+          BLOCKs in use by those continuations from being prematurely
+          freed when their parent thread dies
+
+
 Mon Oct 24 17:45:19 2007  Brent Roman  <brent@mbari.org>
 
 	* added __file__ and __line__ methods to Method and Proc classes
