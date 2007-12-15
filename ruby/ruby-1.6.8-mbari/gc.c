@@ -70,7 +70,7 @@ static VALUE gc_getlimit(VALUE mod)
 static VALUE gc_setlimit(VALUE mod, VALUE newLimit)
 {
   long limit = NUM2LONG(newLimit);
-  if (limit < 10000) return gc_getlimit(mod);
+  if (limit < 0) return gc_getlimit(mod);
   malloc_limit = limit;
   return newLimit;
 }
