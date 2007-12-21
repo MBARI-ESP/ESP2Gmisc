@@ -1,5 +1,5 @@
 #!/bin/bash
-# configure ruby 1.6.8 build for arm-linux -- 5/13/07 brent@mbari.org
+# configure ruby 1.6.8 build for arm-linux -- 12/20/07 brent@mbari.org
 : ${CFLAGS:=-Os}
 : ${CXXFLAGS:=$CFLAGS}
 : ${ARMGCC:=/arm}
@@ -22,7 +22,8 @@ result=$?  #cope with new and old gnu tar versions
 rm -rf disabled_ext &&
 mkdir -p disabled_ext &&
 mv ext/tk ext/tcltklib ext/curses disabled_ext &&
-rm -f config.cache &&
+rm -f config.cache &&  #TODO don't assume stack grows down.  Test it!
+ac_cv_c_stack_direction=-1 \
 ac_cv_func_getpgrp_void=yes ac_cv_func_setpgrp_void=yes \
 configure --host=arm-unknown-linux --prefix=$ARMGCC $@ || exit 2
 echo 'Patching RUBY_*_LIB* in config.h for target'
