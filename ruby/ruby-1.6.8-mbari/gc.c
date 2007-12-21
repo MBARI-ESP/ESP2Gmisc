@@ -533,7 +533,7 @@ rbx_reachability_paths(mod, obj)
     int i;
     VALUE result;
     struct gc_list *list;
-    struct FRAME * volatile frame; /* gcc 2.7.2.3 -O2 bug??  */
+    struct FRAME * volatile frame;
     jmp_buf save_regs_gc_mark;
 #ifdef C_ALLOCA
     VALUE stack_end;
@@ -1211,7 +1211,7 @@ void
 rb_gc()
 {
     struct gc_list *list;
-    struct FRAME * volatile frame; /* gcc 2.7.2.3 -O2 bug??  */
+    struct FRAME * volatile frame;
     jmp_buf save_regs_gc_mark;
 #ifdef C_ALLOCA
     VALUE stack_end;
