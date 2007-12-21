@@ -9676,6 +9676,9 @@ fi
   done
 fi
 
+fi
+
+
 echo "$as_me:$LINENO: checking stack direction for C alloca" >&5
 echo $ECHO_N "checking stack direction for C alloca... $ECHO_C" >&6
 if test "${ac_cv_c_stack_direction+set}" = set; then
@@ -9739,9 +9742,6 @@ echo "${ECHO_T}$ac_cv_c_stack_direction" >&6
 cat >>confdefs.h <<_ACEOF
 #define STACK_DIRECTION $ac_cv_c_stack_direction
 _ACEOF
-
-
-fi
 
 echo "$as_me:$LINENO: checking for working memcmp" >&5
 echo $ECHO_N "checking for working memcmp... $ECHO_C" >&6
