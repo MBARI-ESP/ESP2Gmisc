@@ -107,6 +107,10 @@ struct timeval {
 
 #include <sys/stat.h>
 
+#if !STACK_DIRECTION
+#error STACK_DIRECTION must be predetermined.  Set it to -1 or 1
+#endif
+
 VALUE rb_cProc;
 static VALUE rb_cBinding;
 static VALUE proc_call _((VALUE,VALUE));
@@ -4222,9 +4226,9 @@ static unsigned int STACK_LEVEL_MAX = 655300;
 #endif
 
 extern VALUE *rb_gc_stack_start;
-static int
-stack_length(p)
-    VALUE **p;
+static size_t
+stack_length(start)
+    VALUE *start;
 {
 #ifdef C_ALLOCA
     VALUE stack_end;
@@ -4238,13 +4242,11 @@ stack_length(p)
 # endif
 # define STACK_END (stack_end)
 #endif
-    if (p) *p = STACK_END;
 
 #if defined(sparc) || defined(__sparc__)
-    return rb_gc_stack_start - STACK_END + 0x80;
+    return start - STACK_END + 0x80;
 #else
-    return (STACK_END < rb_gc_stack_start) ? rb_gc_stack_start - STACK_END
-	                                   : STACK_END - rb_gc_stack_start;
+    return (STACK_END < start) ? start - STACK_END : STACK_END - start;
 #endif
 }
 
@@ -4252,7 +4254,7 @@ void
 rb_stack_check()
 {
     static int overflowing = 0;
-    if (!overflowing && stack_length(0) > STACK_LEVEL_MAX) {
+    if (!overflowing && stack_length(rb_gc_stack_start) > STACK_LEVEL_MAX) {
 	int state;
 	overflowing = 1;
 	PUSH_TAG(PROT_NONE);
@@ -4975,6 +4977,7 @@ eval(self, src, scope, file, line)
 
            scope_dup(ruby_scope);
 	   for (tag=prot_tag; tag; tag=tag->prev) {
+               if (tag->tag == PROT_THREAD) break;
 	       scope_dup(tag->scope);
 	   }
 	   if (ruby_block) {
@@ -7171,10 +7174,8 @@ struct thread {
 
     VALUE result;
 
-    int   stk_len;
-    int   stk_max;
-    VALUE*stk_ptr;
-    VALUE*stk_pos;
+    size_t stk_len, stk_max;
+    VALUE *stk_ptr, *stk_start;
 
     struct FRAME *frame;
     struct SCOPE *scope;
@@ -7366,8 +7367,8 @@ timeofday()
     return (double)tv.tv_sec + (double)tv.tv_usec * 1e-6;
 }
 
-#define STACK(addr) (th->stk_pos<(VALUE*)(addr) && (VALUE*)(addr)<th->stk_pos+th->stk_len)
-#define ADJ(addr) (void*)(STACK(addr)?(((VALUE*)(addr)-th->stk_pos)+th->stk_ptr):(VALUE*)(addr))
+#define ADJ(addr) \
+   if ((size_t)((void *)addr - stkBase) < stkSize) addr=(void *)addr + stkShift
 
 static void
 thread_mark(th)
@@ -7375,6 +7376,9 @@ thread_mark(th)
 {
     struct FRAME *frame;
     struct BLOCK *block;
+    void *stkBase;
+    ptrdiff_t stkShift;
+    size_t stkSize;
 
     rb_gc_mark(th->result);
     rb_gc_mark(th->thread);
@@ -7401,15 +7405,23 @@ thread_mark(th)
 	rb_gc_mark_locations(th->stk_ptr+2, th->stk_ptr+th->stk_len+2);
 #endif
     }
+    
+    stkBase = (void *)th->stk_start;
+    stkSize = th->stk_len * sizeof(VALUE);
+#if STACK_DIRECTION < 0
+    stkBase -= stkSize;
+#endif
+    stkShift = (void *)th->stk_ptr - stkBase;
+    
     frame = th->frame;
     while (frame && frame != top_frame) {
-	frame = ADJ(frame);
+        ADJ(frame);
 	rb_gc_mark_frame(frame);
 	if (frame->tmp) {
 	    struct FRAME *tmp = frame->tmp;
 
 	    while (tmp && tmp != top_frame) {
-		tmp = ADJ(tmp);
+		ADJ(tmp);
 		rb_gc_mark_frame(tmp);
 		tmp = tmp->prev;
 	    }
@@ -7418,7 +7430,7 @@ thread_mark(th)
     }
     block = th->block;
     while (block) {
-	block = ADJ(block);
+	ADJ(block);
 	rb_gc_mark_frame(&block->frame);
 	block = block->prev;
     }
@@ -7496,19 +7508,21 @@ static void
 rb_thread_save_context(th)
     rb_thread_t th;
 {
-    VALUE *pos;
-    int len;
+    VALUE *pos=th->stk_start;
+    size_t len;
     static VALUE tval;
 
-    len = stack_length(&pos);
-    pos = (rb_gc_stack_start<pos)?rb_gc_stack_start
-				         :rb_gc_stack_start - len;
+    len = stack_length(pos);
+#if STACK_DIRECTION < 0
+    pos -= len;
+#endif
     if (len > th->stk_max) {
 	REALLOC_N(th->stk_ptr, VALUE, len);
 	th->stk_max = len;
     }
+//fprintf(stderr,"SAVE pos=%p, stk_ptr=%p, len=%d\n", pos, th->stk_ptr, len);
     FLUSH_REGISTER_WINDOWS; 
-    MEMCPY(th->stk_ptr, th->stk_pos=pos, VALUE, th->stk_len=len);
+    MEMCPY(th->stk_ptr, pos, VALUE, th->stk_len=len);
 #ifdef SAVE_WIN32_EXCEPTION_LIST
     th->win32_exception_list = win32_get_exception_list();
 #endif
@@ -7578,13 +7592,12 @@ thread_switch(n)
 static void rb_thread_restore_context _((rb_thread_t,int));
 
 static void
-stack_extend(th, exit)
+stack_extend(values, th, exit)
+    size_t values;
     rb_thread_t th;
     int exit;
 {
-    VALUE space[1024];
-
-    memset(space, 0, 1);	/* prevent array from optimization */
+    volatile VALUE *dummy = ALLOCA_N(VALUE, values);
     rb_thread_restore_context(th, exit);
 }
 
@@ -7594,21 +7607,21 @@ rb_thread_restore_context(th, exit)
     int exit;
 {
     VALUE v;
+    VALUE *pos = th->stk_start;
     static rb_thread_t tmp;
     static int ex;
     static VALUE tval;
 
     if (!th->stk_ptr) rb_bug("unsaved context");
 
-    if (&v < rb_gc_stack_start) {
-	/* Stack grows downward */
-	if (&v > th->stk_pos) stack_extend(th, exit);
-    }
-    else {
-	/* Stack grows upward */
-	if (&v < th->stk_pos + th->stk_len) stack_extend(th, exit);
-    }
+#if STACK_DIRECTION > 0  /* stack grows upward */
+    if (&v < pos + th->stk_len) stack_extend(pos+stk_len - &v, th, exit);
+#else /* stack grows downward */
+    pos -= th->stk_len;
+    if (&v > pos) stack_extend(&v-pos, th, exit);
+#endif
 
+//fprintf(stderr,"RSTR pos=%p, stk_ptr=%p, len=%d\n", pos, th->stk_ptr, th->stk_len);
     ruby_frame = th->frame;
     ruby_scope = th->scope;
     ruby_class = th->klass;
@@ -7634,7 +7647,7 @@ rb_thread_restore_context(th, exit)
     tmp = th;
     ex = exit;
     FLUSH_REGISTER_WINDOWS;
-    MEMCPY(tmp->stk_pos, tmp->stk_ptr, VALUE, tmp->stk_len);
+    MEMCPY(pos, tmp->stk_ptr, VALUE, tmp->stk_len);
 
     tval = rb_lastline_get();
     rb_lastline_set(tmp->last_line);
@@ -8455,6 +8468,7 @@ rb_thread_abort_exc_set(thread, val)
 \
     th->stk_ptr = 0;\
     th->stk_len = 0;\
+    th->stk_start = rb_gc_stack_start;\
     th->stk_max = 0;\
     th->wait_for = 0;\
     FD_ZERO(&th->readfds);\
@@ -8561,6 +8575,8 @@ rb_thread_start_0(fn, arg, th_arg)
     enum thread_status status;
     int state;
 
+    th_arg->stk_start = (VALUE *)(ruby_frame+(STACK_DIRECTION<0));
+
 #if defined(HAVE_SETITIMER)
     if (!thread_init) {
 #ifdef POSIX_SIGNAL
@@ -8601,7 +8617,8 @@ rb_thread_start_0(fn, arg, th_arg)
     PUSH_TAG(PROT_THREAD);
     if ((state = EXEC_TAG()) == 0) {
 	if (THREAD_SAVE_CONTEXT(th) == 0) {
-            ruby_frame->prev = top_frame;  /* hide parent thread's frames */
+            ruby_frame->prev = top_frame;     /* hide parent thread's frames */
+            ruby_frame->tmp = 0;
 	    curr_thread = th;
 	    th->result = (*fn)(arg, th);
 	}
@@ -8650,6 +8667,7 @@ rb_thread_start_0(fn, arg, th_arg)
     return 0;			/* not reached */
 }
 
+
 VALUE
 rb_thread_create(fn, arg)
     VALUE (*fn)();
@@ -8658,6 +8676,7 @@ rb_thread_create(fn, arg)
     Init_stack((VALUE*)&arg);
     return rb_thread_start_0(fn, arg, rb_thread_alloc(rb_cThread));
 }
+
 
 int
 rb_thread_scope_shared_p()
@@ -8681,11 +8700,8 @@ rb_thread_s_new(argc, argv, klass)
     VALUE klass;
 {
     rb_thread_t th = rb_thread_alloc(klass);
-    volatile VALUE *pos;
-
-    pos = th->stk_pos;
     rb_obj_call_init(th->thread, argc, argv);
-    if (th->stk_pos == 0) {
+    if (!th->stk_ptr) {
 	rb_raise(rb_eThreadError, "uninitialized thread - check `%s#initialize'",
 		 rb_class2name(klass));
     }
