@@ -9050,6 +9050,7 @@ rb_callcc(self)
 
     scope_dup(ruby_scope);
     for (tag=prot_tag; tag; tag=tag->prev) {
+        if (tag->tag == PROT_THREAD) break;
 	scope_dup(tag->scope);
     }
     if (ruby_block) {
