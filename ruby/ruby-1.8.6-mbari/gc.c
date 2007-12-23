@@ -500,14 +500,14 @@ stack_end_address(void)
 # define STACK_END (stack_end)
 #endif
 #if defined(sparc) || defined(__sparc__)
-# define STACK_LENGTH  (rb_gc_stack_start - STACK_END + 0x80)
+# define STACK_LENGTH(start)  ((start) - STACK_END + 0x80)
 #elif STACK_GROW_DIRECTION < 0
-# define STACK_LENGTH  (rb_gc_stack_start - STACK_END)
+# define STACK_LENGTH(start)  ((start) - STACK_END)
 #elif STACK_GROW_DIRECTION > 0
-# define STACK_LENGTH  (STACK_END - rb_gc_stack_start + 1)
+# define STACK_LENGTH  (STACK_END - (start) + 1)
 #else
-# define STACK_LENGTH  ((STACK_END < rb_gc_stack_start) ? rb_gc_stack_start - STACK_END\
-                                           : STACK_END - rb_gc_stack_start + 1)
+# define STACK_LENGTH  ((STACK_END < (start)) ? \
+                         (start) - STACK_END  :  STACK_END - (start) + 1)
 #endif
 #if STACK_GROW_DIRECTION > 0
 # define STACK_UPPER(x, a, b) a
@@ -531,17 +531,17 @@ stack_grow_direction(addr)
 #define GC_WATER_MARK 512
 
 #define CHECK_STACK(ret) do {\
-    SET_STACK_END;\
-    (ret) = (STACK_LENGTH > STACK_LEVEL_MAX + GC_WATER_MARK);\
+  SET_STACK_END;\
+  (ret) = (STACK_LENGTH(rb_gc_stack_start) > STACK_LEVEL_MAX + GC_WATER_MARK);\
 } while (0)
 
 int
-ruby_stack_length(p)
-    VALUE **p;
+ruby_stack_length(start, base)
+    VALUE *start, **base;
 {
     SET_STACK_END;
-    if (p) *p = STACK_UPPER(STACK_END, rb_gc_stack_start, STACK_END);
-    return STACK_LENGTH;
+    if (base) *base = STACK_UPPER(STACK_END, start, STACK_END);
+    return STACK_LENGTH(start);
 }
 
 int
@@ -1365,7 +1365,7 @@ static void
 garbage_collect()
 {
     struct gc_list *list;
-    struct FRAME * volatile frame; /* gcc 2.7.2.3 -O2 bug??  */
+    struct FRAME * volatile frame;
     jmp_buf save_regs_gc_mark;
     SET_STACK_END;
 
