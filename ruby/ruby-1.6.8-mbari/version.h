@@ -1,4 +1,4 @@
-#define RUBY_VERSION "1.6.8-mbari"
+#define RUBY_VERSION "1.6.8-mbari-r5"
 #define RUBY_RELEASE_DATE "2007-12-23"
 #define RUBY_VERSION_CODE 168
 #define RUBY_RELEASE_CODE 20071223
