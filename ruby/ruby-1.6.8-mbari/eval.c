@@ -7445,7 +7445,7 @@ cc_mark(cc)
       if (parent->status == THREAD_KILLED)
         cc->status = THREAD_KILLED;
 /*    else                   
-        thread_mark(parent); //skip this because active list is already marked
+        thread_mark(parent);  //no need as active threads always marked anyway
 */
     }
     thread_mark(cc);
@@ -7476,6 +7476,8 @@ thread_free(th)
     if (th != main_thread) free(th);
 }
 
+#define THREAD_DATA(threadObject)  ((rb_thread_t)RDATA(threadObject)->data)
+
 static rb_thread_t
 rb_thread_check(data)
     VALUE data;
@@ -7484,7 +7486,7 @@ rb_thread_check(data)
 	rb_raise(rb_eTypeError, "wrong argument type %s (expected Thread)",
 		 rb_class2name(CLASS_OF(data)));
     }
-    return (rb_thread_t)RDATA(data)->data;
+    return THREAD_DATA(data);
 }
 
 static VALUE rb_thread_raise _((int, VALUE*, rb_thread_t));
@@ -8194,7 +8196,7 @@ static VALUE
 rb_thread_join(thread)
     VALUE thread;
 {
-    rb_thread_t th = rb_thread_check(thread);
+    rb_thread_t th = THREAD_DATA(thread);
     enum thread_status last_status = THREAD_RUNNABLE;
 
     if (rb_thread_critical) rb_thread_deadlock();
@@ -8262,7 +8264,7 @@ VALUE
 rb_thread_wakeup(thread)
     VALUE thread;
 {
-    rb_thread_t th = rb_thread_check(thread);
+    rb_thread_t th = THREAD_DATA(thread);
 
     if (th->status == THREAD_KILLED)
 	rb_raise(rb_eThreadError, "killed thread");
@@ -8285,7 +8287,7 @@ static VALUE
 rb_thread_kill(thread)
     VALUE thread;
 {
-    rb_thread_t th = rb_thread_check(thread);
+    rb_thread_t th = THREAD_DATA(thread);
 
     if (th != curr_thread && th->safe < 4) {
 	rb_secure(4);
@@ -8393,7 +8395,7 @@ static VALUE
 rb_thread_priority(thread)
     VALUE thread;
 {
-    return INT2NUM(rb_thread_check(thread)->priority);
+    return INT2NUM(THREAD_DATA(thread)->priority);
 }
 
 static VALUE
@@ -8403,7 +8405,7 @@ rb_thread_priority_set(thread, prio)
     rb_thread_t th;
 
     rb_secure(4);
-    th = rb_thread_check(thread);
+    th = THREAD_DATA(thread);
 
     th->priority = NUM2INT(prio);
     rb_thread_schedule();
@@ -8416,7 +8418,7 @@ rb_thread_safe_level(thread)
 {
     rb_thread_t th;
 
-    th = rb_thread_check(thread);
+    th = THREAD_DATA(thread);
     if (th == curr_thread) {
 	return INT2NUM(rb_safe_level());
     }
@@ -8444,7 +8446,7 @@ static VALUE
 rb_thread_abort_exc(thread)
     VALUE thread;
 {
-    return rb_thread_check(thread)->abort?Qtrue:Qfalse;
+    return THREAD_DATA(thread)->abort?Qtrue:Qfalse;
 }
 
 static VALUE
@@ -8452,7 +8454,7 @@ rb_thread_abort_exc_set(thread, val)
     VALUE thread, val;
 {
     rb_secure(4);
-    rb_thread_check(thread)->abort = RTEST(val);
+    THREAD_DATA(thread)->abort = RTEST(val);
     return val;
 }
 
@@ -8716,7 +8718,7 @@ rb_thread_initialize(thread, args)
     if (!rb_block_given_p()) {
 	rb_raise(rb_eThreadError, "must be called with a block");
     }
-    return rb_thread_start_0(rb_thread_yield, args, rb_thread_check(thread));
+    return rb_thread_start_0(rb_thread_yield, args, THREAD_DATA(thread));
 }
 
 static VALUE
@@ -8733,18 +8735,15 @@ static VALUE
 rb_thread_value(thread)
     VALUE thread;
 {
-    rb_thread_t th = rb_thread_check(thread);
-
     rb_thread_join(thread);
-
-    return th->result;
+    return THREAD_DATA(thread)->result;
 }
 
 static VALUE
 rb_thread_status(thread)
     VALUE thread;
 {
-    rb_thread_t th = rb_thread_check(thread);
+    rb_thread_t th = THREAD_DATA(thread);
 
     if (rb_thread_dead(th)) {
 	if (!NIL_P(th->errinfo) && (th->flags & THREAD_RAISED))
@@ -8759,7 +8758,7 @@ static VALUE
 rb_thread_alive_p(thread)
     VALUE thread;
 {
-    rb_thread_t th = rb_thread_check(thread);
+    rb_thread_t th = THREAD_DATA(thread);
 
     if (rb_thread_dead(th)) return Qfalse;
     return Qtrue;
@@ -8769,7 +8768,7 @@ static VALUE
 rb_thread_stop_p(thread)
     VALUE thread;
 {
-    rb_thread_t th = rb_thread_check(thread);
+    rb_thread_t th = THREAD_DATA(thread);
 
     if (rb_thread_dead(th)) return Qtrue;
     if (th->status == THREAD_STOPPED) return Qtrue;
@@ -8919,7 +8918,7 @@ rb_thread_raise_m(argc, argv, thread)
     VALUE *argv;
     VALUE thread;
 {
-    rb_thread_t th = rb_thread_check(thread);
+    rb_thread_t th = THREAD_DATA(thread);
 
     if (ruby_safe_level > th->safe) {
 	rb_secure(4);
@@ -8936,7 +8935,7 @@ rb_thread_local_aref(thread, id)
     rb_thread_t th;
     VALUE val;
 
-    th = rb_thread_check(thread);
+    th = THREAD_DATA(thread);
     if (rb_safe_level() >= 4 && th != curr_thread) {
 	rb_raise(rb_eSecurityError, "Insecure: thread locals");
     }
@@ -8960,7 +8959,7 @@ rb_thread_local_aset(thread, id, val)
     ID id;
     VALUE val;
 {
-    rb_thread_t th = rb_thread_check(thread);
+    rb_thread_t th = THREAD_DATA(thread);
 
     if (rb_safe_level() >= 4 && th != curr_thread) {
 	rb_raise(rb_eSecurityError, "Insecure: can't modify thread locals");
@@ -8990,7 +8989,7 @@ static VALUE
 rb_thread_key_p(thread, id)
     VALUE thread, id;
 {
-    rb_thread_t th = rb_thread_check(thread);
+    rb_thread_t th = THREAD_DATA(thread);
 
     if (!th->locals) return Qfalse;
     if (st_lookup(th->locals, rb_to_id(id), 0))
@@ -9003,7 +9002,7 @@ rb_thread_inspect(thread)
     VALUE thread;
 {
     char *cname = rb_class2name(CLASS_OF(thread));
-    rb_thread_t th = rb_thread_check(thread);
+    rb_thread_t th = THREAD_DATA(thread);
     const char *status = thread_status_name(th->status);
     VALUE str;
 
@@ -9082,7 +9081,7 @@ rb_cont_call(argc, argv, cont)
     VALUE *argv;
     VALUE cont;
 {
-    rb_thread_t th = rb_thread_check(cont);
+    rb_thread_t th = THREAD_DATA(cont);
 
     if (th->thread != curr_thread->thread) {
 	rb_raise(rb_eRuntimeError, "continuation called across threads");
