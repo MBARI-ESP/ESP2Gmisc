@@ -213,7 +213,7 @@ class SourceRef   #combines source file name and line number
     
     # can't use define_method because in ruby 1.6 self would be SourceRef::Code
     (OPS = [ :list, :edit, :view, :reload ]).each {|m|
-      eval "def #{m}; source.#{m}; end"
+      eval "def #{m}(*args); source.#{m}(*args); end"
     }
     
   end #module SourceRef::Code
