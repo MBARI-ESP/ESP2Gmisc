@@ -64,7 +64,7 @@ typedef int writeLineFn (void *file, struct CCDexp *exposure, uint16 *lineBuffer
 //note that options commented out in usage don't seem to work for SXV-H9 camera
 static void usage (void)
 {
-  printf ("%s revised 8/22/07 brent@mbari.org\n", progName);
+  printf ("%s revised 5/30/08 brent@mbari.org\n", progName);
   printf (
 "Snap a photo from a monochrome Starlight Xpress CCD camera. Usage:\n"
 "  %s {options} <exposure seconds> <output file>\n"
@@ -574,14 +574,14 @@ static int saveTIFF(TIFF *tif, struct CCDexp *exposure)
     char binning[30];
     binning[0] = '\0';
     if (exposure->xbin != 1 || exposure->xbin != 1) 
-      sprintf (binning, "with %dx%d binning", exposure->xbin, exposure->ybin);
+      sprintf (binning, " with %dx%d binning", exposure->xbin, exposure->ybin);
 
     if (comment) {
       strncat (description, comment, 1800);
       cursor += strlen(description);
-      *cursor++ = '\n';
+      *cursor++ = ' ';
     }
-    sprintf (cursor, "Exposed %g seconds %s",
+    sprintf (cursor, "exposed %g seconds%s",
                         (double)exposure->msec/1000.0, binning);			    
     setTiff (tif, TIFFTAG_IMAGEDESCRIPTION, description);
   }
