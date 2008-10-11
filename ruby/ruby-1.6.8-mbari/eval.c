@@ -9045,6 +9045,7 @@ rb_callcc(self)
     struct RVarmap *vars;
 
     THREAD_ALLOC(th);
+    th->thread = curr_thread->thread;
     cont = Data_Wrap_Struct(rb_cCont, cc_mark, thread_free, th);
 
     scope_dup(ruby_scope);
@@ -9060,7 +9061,6 @@ rb_callcc(self)
 	    block = block->prev;
 	}
     }
-    th->thread = curr_thread->thread;
 
     for (vars = th->dyna_vars; vars; vars = vars->next) {
 	if (FL_TEST(vars, DVAR_DONT_RECYCLE)) break;
