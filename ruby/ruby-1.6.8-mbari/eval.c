@@ -7440,12 +7440,18 @@ static void
 cc_mark(cc)
     rb_thread_t cc;
 {  /* mark this continuation's stack only if its parent thread is still alive */
-    if (cc->status != THREAD_KILLED) {
+    if (cc->thread != Qnil) {
       rb_thread_t parent = DATA_PTR(cc->thread);
-      if (parent->status == THREAD_KILLED)
-        cc->status = THREAD_KILLED;
+      if (parent->status == THREAD_KILLED) {
+        cc->thread = Qnil;
+        if (cc->stk_ptr) {  //can't possibly activate this stack, so free it.
+          free(cc->stk_ptr);
+          cc->stk_ptr = 0;
+          cc->stk_len = 0;
+        }
+      }   
 /*    else                   
-        thread_mark(parent);  //no need as active threads always marked anyway
+        thread_mark(parent);  //no need:  active threads are marked elsewhere
 */
     }
     thread_mark(cc);
@@ -7467,7 +7473,6 @@ thread_free(th)
     rb_thread_t th;
 {
     if (th->stk_ptr) free(th->stk_ptr);
-    th->stk_ptr = 0;
     if (th->locals) st_free_table(th->locals);
     if (th->status != THREAD_KILLED) {
 	if (th->prev) th->prev->next = th->next;
@@ -9076,6 +9081,13 @@ rb_callcc(self)
 }
 
 static VALUE
+rb_cont_thread(cont)
+  VALUE cont;
+{
+  return THREAD_DATA(cont)->thread;  //nil if parent thread is dead
+}
+
+static VALUE
 rb_cont_call(argc, argv, cont)
     int argc;
     VALUE *argv;
@@ -9216,6 +9228,7 @@ Init_Thread()
 
     rb_cCont = rb_define_class("Continuation", rb_cObject);
     rb_undef_method(CLASS_OF(rb_cCont), "new");
+    rb_define_method(rb_cCont, "thread", rb_cont_thread, 0);
     rb_define_method(rb_cCont, "call", rb_cont_call, -1);
     rb_define_global_function("callcc", rb_callcc, 0);
 
