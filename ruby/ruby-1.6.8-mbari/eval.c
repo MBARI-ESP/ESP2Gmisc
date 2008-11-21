@@ -2039,22 +2039,906 @@ call_trace_func(event, file, line, self, id, klass)
     if (state) JUMP_TAG(state);
 }
 
+
 static void return_check _((void));
 #define return_value(v) prot_tag->retval = (v)
 
-static VALUE
-rb_eval(self, n)
-    VALUE self;
-    NODE *n;
-{
-    NODE * volatile node = n;
-    int state;
-    volatile VALUE result = Qnil;
 
-#define RETURN(v) { result = (v); goto finish; }
+static VALUE
+eval_match3(self, node)
+  VALUE self;
+  NODE *node;
+{
+  VALUE r = rb_eval(self,node->nd_recv);
+  VALUE l = rb_eval(self,node->nd_value);
+  return TYPE(l) == T_STRING ? rb_reg_match(r, l) : rb_funcall(l, match, 1, r);
+}
+
+
+static int
+eval_opt_n(self, node)
+  VALUE self;
+  NODE *node;
+{
+  int state;
+  PUSH_TAG(PROT_NONE);
+  switch (state = EXEC_TAG()) {
+    case 0:
+    opt_n_next:
+      while (!NIL_P(rb_gets())) {
+	opt_n_redo:
+	  rb_eval(self, node->nd_body);
+      }
+      break;
+
+    case TAG_REDO:
+      state = 0;
+      goto opt_n_redo;
+    case TAG_NEXT:
+      state = 0;
+      goto opt_n_next;
+    case TAG_BREAK:
+      state = 0;
+    default:
+      break;
+  }
+  POP_TAG();
+  return state;
+}
+
+
+static int
+eval_while(self, node)
+  VALUE self;
+  NODE *node;
+{
+  int state;
+  PUSH_TAG(PROT_NONE);
+  switch (state = EXEC_TAG()) {
+    case 0:
+      ruby_sourceline = nd_line(node);
+      if (node->nd_state && !RTEST(rb_eval(self, node->nd_cond)))
+	  goto while_out;
+      do {
+	while_redo:
+	  rb_eval(self, node->nd_body);
+	while_next:
+	  ;
+      } while (RTEST(rb_eval(self, node->nd_cond)));
+      break;
+
+    case TAG_REDO:
+      state = 0;
+      goto while_redo;
+    case TAG_NEXT:
+      state = 0;
+      goto while_next;
+    case TAG_BREAK:
+      state = 0;
+    default:
+      break;
+  }
+while_out:
+  POP_TAG();
+  return state;
+}
+
+
+static int
+eval_until(self, node)
+  VALUE self;
+  NODE *node;
+{
+  int state;
+  PUSH_TAG(PROT_NONE);
+  switch (state = EXEC_TAG()) {
+    case 0:
+      if (node->nd_state && RTEST(rb_eval(self, node->nd_cond)))
+	  goto until_out;
+      do {
+	until_redo:
+	  rb_eval(self, node->nd_body);
+	until_next:
+	  ;
+      } while (!RTEST(rb_eval(self, node->nd_cond)));
+      break;
+
+    case TAG_REDO:
+      state = 0;
+      goto until_redo;
+    case TAG_NEXT:
+      state = 0;
+      goto until_next;
+    case TAG_BREAK:
+      state = 0;
+    default:
+      break;
+  }
+until_out:
+  POP_TAG();
+  return state;
+}
+
+
+static NODE *
+eval_when(self, node)
+  VALUE self;
+  NODE *node;
+{
+  while (node) {
+      NODE *tag;
+      tag = node->nd_head;
+      while (tag) {
+	  if (trace_func) {
+	      call_trace_func("line", tag->nd_file, nd_line(tag), self,
+			      ruby_frame->last_func,
+			      ruby_frame->last_class);	
+	  }
+	  ruby_sourcefile = tag->nd_file;
+	  ruby_sourceline = nd_line(tag);
+	  if (nd_type(tag->nd_head) == NODE_WHEN) {
+	      VALUE v = rb_eval(self, tag->nd_head->nd_head);
+	      int i;
+
+	      if (TYPE(v) != T_ARRAY) v = rb_Array(v);
+	      for (i=0; i<RARRAY(v)->len; i++) {
+		  if (RTEST(RARRAY(v)->ptr[i])) return node->nd_body;
+	      }
+	      tag = tag->nd_next;
+	      continue;
+	  }
+	  if (RTEST(rb_eval(self, tag->nd_head))) return node->nd_body;
+	  tag = tag->nd_next;
+      }
+      node = node->nd_next;
+      if (nd_type(node) != NODE_WHEN) break;
+  }
+  return node;
+}
+
+
+static NODE *
+eval_case(self, node)
+  VALUE self;
+  NODE *node;
+{
+  VALUE val;
+
+  val = rb_eval(self, node->nd_head);
+  node = node->nd_body;
+  while (node) {
+      NODE *tag;
+
+      if (nd_type(node) != NODE_WHEN) break;
+      tag = node->nd_head;
+      while (tag) {
+	  if (trace_func) {
+	      call_trace_func("line", tag->nd_file, nd_line(tag), self,
+			      ruby_frame->last_func,
+			      ruby_frame->last_class);	
+	  }
+	  ruby_sourcefile = tag->nd_file;
+	  ruby_sourceline = nd_line(tag);
+	  if (nd_type(tag->nd_head) == NODE_WHEN) {
+	      VALUE v = rb_eval(self, tag->nd_head->nd_head);
+	      int i;
+
+	      if (TYPE(v) != T_ARRAY) v = rb_Array(v);
+	      for (i=0; i<RARRAY(v)->len; i++) {
+		  if (RTEST(rb_funcall2(RARRAY(v)->ptr[i], eqq, 1, &val)))
+		      return  node->nd_body;
+	      }
+	      tag = tag->nd_next;
+	      continue;
+	  }
+	  if (RTEST(rb_funcall2(rb_eval(self, tag->nd_head), eqq, 1, &val)))
+	      return node->nd_body;
+	  tag = tag->nd_next;
+      }
+      node = node->nd_next;
+  }
+  return node;
+}
+
+
+static VALUE
+eval_iter(self, node)
+  VALUE self;
+  NODE *node;
+{
+  int state = 0;
+  volatile VALUE result;
+  
+  iter_retry:
+    PUSH_TAG(PROT_FUNC);
+    PUSH_BLOCK(node->nd_var, node->nd_body);
+
+    state = EXEC_TAG();
+    if (state == 0) {
+	PUSH_ITER(ITER_PRE);
+	if (nd_type(node) == NODE_ITER) {
+	    result = rb_eval(self, node->nd_iter);
+	}
+	else 
+        {
+	    VALUE recv;
+	    char *file = ruby_sourcefile;
+	    int line = ruby_sourceline;
+
+	    _block.flags &= ~BLOCK_D_SCOPE;
+	    BEGIN_CALLARGS;
+	    recv = rb_eval(self, node->nd_iter);
+	    END_CALLARGS;
+	    ruby_sourcefile = file;
+	    ruby_sourceline = line;
+	    result = rb_call(CLASS_OF(recv),recv,each,0,0,0);
+	}
+	POP_ITER();
+    }
+    else if (_block.tag->dst == state) {
+	state &= TAG_MASK;
+	if (state == TAG_RETURN) {
+	    result = prot_tag->retval;
+	}
+    }
+    POP_BLOCK();
+    POP_TAG();
+    switch (state) {
+      case 0:
+	break;
+
+      case TAG_RETRY:
+	goto iter_retry;
+
+      case TAG_BREAK:
+	result = Qnil;
+	break;
+      case TAG_RETURN:
+	return_value(result);
+	/* fall through */
+      default:
+	JUMP_TAG(state);
+    }
+  return result;
+}
+
+
+static VALUE
+eval_rescue(self, node)
+  VALUE self;
+  NODE *node;
+{
+  int state = 0;
+  volatile VALUE result;
+  
+  retry_entry:
+  {
+      volatile VALUE e_info = ruby_errinfo;
+
+      PUSH_TAG(PROT_NONE);
+      if ((state = EXEC_TAG()) == 0) {
+	  result = rb_eval(self, node->nd_head);
+      }
+      POP_TAG();
+      if (state == TAG_RAISE) {
+	  NODE * volatile resq = node->nd_resq;
+
+	  ruby_sourceline = nd_line(node);
+	  while (resq) {
+	      if (handle_rescue(self, resq)) {
+		  state = 0;
+		  PUSH_TAG(PROT_NONE);
+		  if ((state = EXEC_TAG()) == 0) {
+		      result = rb_eval(self, resq->nd_body);
+		  }
+		  POP_TAG();
+		  if (state == TAG_RETRY) {
+		      state = 0;
+		      ruby_errinfo = Qnil;
+		      goto retry_entry;
+		  }
+		  if (state != TAG_RAISE) {
+		      ruby_errinfo = e_info;
+		  }
+		  break;
+	      }
+	      resq = resq->nd_head; /* next rescue */
+	  }
+      }
+      else if (node->nd_else) { /* else clause given */
+	  if (!state) {	/* no exception raised */
+	      result = rb_eval(self, node->nd_else);
+	  }
+      }
+      if (state) JUMP_TAG(state);
+  }
+  return result;
+}
+
+
+static VALUE
+eval_ensure(self, node)
+  VALUE self;
+  NODE *node;
+{
+  int state = 0;
+  volatile VALUE result;
+
+  PUSH_TAG(PROT_NONE);
+  if ((state = EXEC_TAG()) == 0) {
+      result = rb_eval(self, node->nd_head);
+  }
+  POP_TAG();
+  if (node->nd_ensr) {
+      VALUE retval = prot_tag->retval; /* save retval */
+      VALUE errinfo = ruby_errinfo;
+
+      rb_eval(self, node->nd_ensr);
+      return_value(retval);
+      ruby_errinfo = errinfo;
+  }
+  if (state) JUMP_TAG(state);
+  return result;
+}
+
+
+static VALUE
+eval_call(self, node)
+  VALUE self;
+  NODE *node;
+{
+    VALUE recv;
+    int argc; VALUE *argv; /* used in SETUP_ARGS */
+    TMP_PROTECT;
+
+    BEGIN_CALLARGS;
+    recv = rb_eval(self, node->nd_recv);
+    SETUP_ARGS(node->nd_args);
+    END_CALLARGS;
+
+    return rb_call(CLASS_OF(recv),recv,node->nd_mid,argc,argv,0);
+}
+
+
+static VALUE
+eval_fcall(self, node)
+  VALUE self;
+  NODE *node;      
+{
+    int argc; VALUE *argv; /* used in SETUP_ARGS */
+    TMP_PROTECT;
+
+    BEGIN_CALLARGS;
+    SETUP_ARGS(node->nd_args);
+    END_CALLARGS;
+
+    return rb_call(CLASS_OF(self),self,node->nd_mid,argc,argv,1);
+}
+
+
+static VALUE
+eval_super(self, node)
+  VALUE self;
+  NODE *node;      
+{
+  VALUE result;
+    int argc; VALUE *argv; /* used in SETUP_ARGS */
+    TMP_PROTECT;
+
+    if (ruby_frame->last_class == 0) {	
+	if (ruby_frame->last_func) {
+	    rb_raise(rb_eNameError, "superclass method `%s' disabled",
+		     rb_id2name(ruby_frame->last_func));
+	}
+	else {
+	    rb_raise(rb_eRuntimeError, "super called outside of method");
+	}
+    }
+    if (nd_type(node) == NODE_ZSUPER) {
+	argc = ruby_frame->argc;
+	argv = ruby_frame->argv;
+    }
+    else {
+	BEGIN_CALLARGS;
+	SETUP_ARGS(node->nd_args);
+	END_CALLARGS;
+    }
+
+    PUSH_ITER(ruby_iter->iter?ITER_PRE:ITER_NOT);
+    result = rb_call(RCLASS(ruby_frame->last_class)->super,
+		     ruby_frame->self, ruby_frame->last_func,
+		     argc, argv, 3);
+    POP_ITER();
+  return result;
+}
+
+
+static VALUE
+eval_scope(self, node)
+  VALUE self;
+  NODE *node;
+{
+  int state;
+  volatile VALUE result;
+    struct FRAME frame;
+    NODE *saved_cref = 0;
+
+    frame = *ruby_frame;
+    frame.tmp = ruby_frame;
+    ruby_frame = &frame;
+
+    PUSH_SCOPE();
+    PUSH_TAG(PROT_NONE);
+    if (node->nd_rval) {
+	saved_cref = ruby_cref;
+	ruby_cref = (NODE*)node->nd_rval;
+	ruby_frame->cbase = node->nd_rval;
+    }
+    ruby_scope->scope_node = (VALUE)node;
+    if (node->nd_tbl) {
+	VALUE *vars = ALLOCA_N(VALUE, node->nd_tbl[0]+1);
+	*vars++ = (VALUE)node;
+	ruby_scope->local_vars = vars;
+	rb_mem_clear(ruby_scope->local_vars, node->nd_tbl[0]);
+	ruby_scope->local_tbl = node->nd_tbl;
+    }
+    else {
+	ruby_scope->local_vars = 0;
+	ruby_scope->local_tbl  = 0;
+    }
+    if ((state = EXEC_TAG()) == 0) {
+	result = rb_eval(self, node->nd_next);
+    }
+    POP_TAG();
+    POP_SCOPE();
+    ruby_frame = frame.tmp;
+    if (saved_cref)
+	ruby_cref = saved_cref;
+    if (state) JUMP_TAG(state);
+  return result;
+}
+
+
+static VALUE
+eval_asgn1(self, node)
+  VALUE self;
+  NODE *node;
+{
+    int argc; VALUE *argv; /* used in SETUP_ARGS */
+    VALUE recv, val;
+    NODE *rval;
+    TMP_PROTECT;
+
+    recv = rb_eval(self, node->nd_recv);
+    rval = node->nd_args->nd_head;
+    SETUP_ARGS(node->nd_args->nd_next);
+    val = rb_funcall2(recv, aref, argc-1, argv);
+    switch (node->nd_mid) {
+    case 0: /* OR */
+	if (RTEST(val)) return val;
+	val = rb_eval(self, rval);
+	break;
+    case 1: /* AND */
+	if (!RTEST(val)) return val;
+	val = rb_eval(self, rval);
+	break;
+    default:
+	val = rb_funcall(val, node->nd_mid, 1, rb_eval(self, rval));
+    }
+    argv[argc-1] = val;
+    return rb_funcall2(recv, aset, argc, argv);
+}
+
+
+static VALUE
+eval_asgn2(self, node)
+  VALUE self;
+  NODE *node;
+{
+    ID id = node->nd_next->nd_vid;
+    VALUE recv, val;
+
+    recv = rb_eval(self, node->nd_recv);
+    val = rb_funcall(recv, id, 0);
+    switch (node->nd_next->nd_mid) {
+    case 0: /* OR */
+	if (RTEST(val)) return val;
+	val = rb_eval(self, node->nd_value);
+	break;
+    case 1: /* AND */
+	if (!RTEST(val)) return val;
+	val = rb_eval(self, node->nd_value);
+	break;
+    default:
+	val = rb_funcall(val, node->nd_next->nd_mid, 1,
+			 rb_eval(self, node->nd_value));
+    }
+
+    return rb_funcall2(recv, node->nd_next->nd_aid, 1, &val);
+}
+
+
+static VALUE
+eval_colon2(self, node)
+  VALUE self;
+  NODE *node;
+{
+    VALUE klass;
+
+    klass = rb_eval(self, node->nd_head);
+    switch (TYPE(klass)) {
+      case T_CLASS:
+      case T_MODULE:
+	break;
+      default:
+	return rb_funcall(klass, node->nd_mid, 0, 0);
+    }
+    return rb_const_get(klass, node->nd_mid);
+}
+
+
+static VALUE
+eval_hash(self, node)
+  VALUE self;
+  NODE *node;
+{
+    NODE *list;
+    VALUE hash = rb_hash_new();
+    VALUE key, val;
+
+    list = node->nd_head;
+    while (list) {
+	key = rb_eval(self, list->nd_head);
+	list = list->nd_next;
+	if (list == 0)
+	    rb_bug("odd number list for Hash");
+	val = rb_eval(self, list->nd_head);
+	list = list->nd_next;
+	rb_hash_aset(hash, key, val);
+    }
+    return hash;
+}
+
+
+static VALUE
+eval_array(self, node)
+  VALUE self;
+  NODE *node;
+{
+    VALUE ary;
+    int i;
+
+    i = node->nd_alen;
+    ary = rb_ary_new2(i);
+    for (i=0;node;node=node->nd_next) {
+        RARRAY(ary)->ptr[i++] = rb_eval(self, node->nd_head);
+        RARRAY(ary)->len = i;
+    }
+
+    return ary;
+}
+
+
+static VALUE
+eval_regx(self, node)
+  VALUE self;
+  NODE *node;
+{
+    VALUE str, str2, result;
+    NODE *list = node->nd_next;
+
+    str = rb_str_new3(node->nd_lit);
+    if (!ruby_dyna_vars) rb_dvar_push(0, 0);
+    while (list) {
+	if (list->nd_head) {
+	    switch (nd_type(list->nd_head)) {
+	      case NODE_STR:
+		str2 = list->nd_head->nd_lit;
+		break;
+	      case NODE_EVSTR:
+		result = ruby_errinfo;
+		ruby_errinfo = Qnil;
+		ruby_sourceline = nd_line(list->nd_head);
+		ruby_in_eval++;
+		list->nd_head = compile(list->nd_head->nd_lit,
+					ruby_sourcefile,
+					ruby_sourceline);
+		if (ruby_scope->local_tbl) {
+		    NODE *body = (NODE *)ruby_scope->scope_node;
+		    if (body && body->nd_tbl != ruby_scope->local_tbl) {
+			if (body->nd_tbl) free(body->nd_tbl);
+			ruby_scope->local_vars[-1] = (VALUE)body;
+			body->nd_tbl = ruby_scope->local_tbl;
+		    }
+		}
+		ruby_eval_tree = 0;
+		ruby_in_eval--;
+		if (ruby_nerrs > 0) {
+		    compile_error("string expansion");
+		}
+		if (!NIL_P(result)) ruby_errinfo = result;
+		/* fall through */
+	      default:
+		str2 = rb_obj_as_string(rb_eval(self, list->nd_head));
+		break;
+	    }
+	    rb_str_append(str, str2);
+	    OBJ_INFECT(str, str2);
+	}
+	list = list->nd_next;
+    }
+    switch (nd_type(node)) {
+      case NODE_DREGX:
+	result = rb_reg_new(RSTRING(str)->ptr, RSTRING(str)->len,
+			 node->nd_cflag);
+	break;
+      case NODE_DREGX_ONCE:	/* regexp expand once */
+	result = rb_reg_new(RSTRING(str)->ptr, RSTRING(str)->len,
+			 node->nd_cflag);
+	nd_set_type(node, NODE_LIT);
+	node->nd_lit = result;
+	break;
+      case NODE_DXSTR:
+	result = rb_funcall(self, '`', 1, str);
+	break;
+      default:
+	result = str;
+	break;
+    }
+  return result;
+}
+
+        
+static VALUE
+eval_defn(self, node)
+  VALUE self;
+  NODE *node;
+{
+    NODE *body,  *defn;
+    VALUE origin, symbol;
+    int noex;
+
+    if (NIL_P(ruby_class)) {
+	rb_raise(rb_eTypeError, "no class to add method");
+    }
+    if (ruby_class == rb_cObject && node->nd_mid == init) {
+	rb_warn("redefining Object#initialize may cause infinite loop");
+    }
+    if (node->nd_mid == __id__ || node->nd_mid == __send__) {
+	rb_warn("redefining `%s' may cause serious problem",
+		rb_id2name(node->nd_mid));
+    }
+    rb_frozen_class_p(ruby_class);
+    body = search_method(ruby_class, node->nd_mid, &origin);
+    if (body){
+	if (RTEST(ruby_verbose) && ruby_class == origin && body->nd_cnt == 0) {
+	    rb_warning("method redefined; discarding old %s", rb_id2name(node->nd_mid));
+	}
+    }
+
+    if (node->nd_noex == NOEX_PUBLIC) {
+	noex = NOEX_PUBLIC; 	/* means is is an attrset */
+    }
+    else if (SCOPE_TEST(SCOPE_PRIVATE) || node->nd_mid == init) {
+	noex = NOEX_PRIVATE;
+    }
+    else if (SCOPE_TEST(SCOPE_PROTECTED)) {
+	noex = NOEX_PROTECTED;
+    }
+    else {
+	noex = NOEX_PUBLIC;
+    }
+    if (body && origin == ruby_class && body->nd_noex & NOEX_UNDEF) {
+	noex |= NOEX_UNDEF;
+    }
+
+    defn = copy_node_scope(node->nd_defn, ruby_cref);
+    rb_add_method(ruby_class, node->nd_mid, defn, noex);
+    symbol = ID2SYM(node->nd_mid);
+    if (scope_vmode == SCOPE_MODFUNC) {
+	rb_add_method(rb_singleton_class(ruby_class),
+		      node->nd_mid, defn, NOEX_PUBLIC);
+	rb_funcall(ruby_class, singleton_added, 1, symbol);
+    }
+    if (FL_TEST(ruby_class, FL_SINGLETON)) {
+	rb_funcall(rb_iv_get(ruby_class, "__attached__"),
+		   singleton_added, 1, symbol);
+    }
+    else {
+	rb_funcall(ruby_class, added, 1, symbol);
+    }
+    return symbol;
+}
+
+
+static VALUE
+eval_defs(self, node)
+  VALUE self;
+  NODE *node;
+{
+    VALUE recv = rb_eval(self, node->nd_recv);
+    VALUE klass, symbol;
+    NODE *body = 0, *defn;
+
+    if (rb_safe_level() >= 4 && !OBJ_TAINTED(recv)) {
+	rb_raise(rb_eSecurityError, "Insecure: can't define singleton method");
+    }
+    if (FIXNUM_P(recv) || SYMBOL_P(recv)) {
+	rb_raise(rb_eTypeError,
+		 "can't define singleton method \"%s\" for %s",
+		 rb_id2name(node->nd_mid),
+		 rb_class2name(CLASS_OF(recv)));
+    }
+
+    if (OBJ_FROZEN(recv)) rb_error_frozen("object");
+    klass = rb_singleton_class(recv);
+    if (st_lookup(RCLASS(klass)->m_tbl, node->nd_mid, &body)) {
+	if (rb_safe_level() >= 4) {
+	    rb_raise(rb_eSecurityError, "redefining method prohibited");
+	}
+	if (RTEST(ruby_verbose)) {
+	    rb_warning("redefine %s", rb_id2name(node->nd_mid));
+	}
+    }
+    defn = copy_node_scope(node->nd_defn, ruby_cref);
+    defn->nd_rval = (VALUE)ruby_cref;
+    rb_add_method(klass, node->nd_mid, defn, 
+		  NOEX_PUBLIC|(body?body->nd_noex&NOEX_UNDEF:0));
+    rb_funcall(recv, singleton_added, 1, symbol=ID2SYM(node->nd_mid));
+    return symbol;
+}
+
+
+static VALUE
+eval_class(self, node)
+  VALUE self;
+  NODE *node;
+{
+    VALUE super, klass;
+
+    if (NIL_P(ruby_class)) {
+	rb_raise(rb_eTypeError, "no outer class/module");
+    }
+    if (node->nd_super) {
+	super = superclass(self, node->nd_super);
+    }
+    else {
+	super = 0;
+    }
+
+    if ((ruby_class == rb_cObject) && rb_autoload_defined(node->nd_cname)) {
+	rb_autoload_load(node->nd_cname);
+    }
+    if (rb_const_defined_at(ruby_class, node->nd_cname)) {
+	klass = rb_const_get(ruby_class, node->nd_cname);
+	if (TYPE(klass) != T_CLASS) {
+	    rb_raise(rb_eTypeError, "%s is not a class",
+		     rb_id2name(node->nd_cname));
+	}
+	if (super && rb_class_real(RCLASS(klass)->super) != super)
+	  goto override_class;
+	if (rb_safe_level() >= 4) {
+	    rb_raise(rb_eSecurityError, "extending class prohibited");
+	}
+	rb_clear_cache();
+    }
+    else {
+      override_class:
+	if (!super) super = rb_cObject;
+	klass = rb_define_class_id(node->nd_cname, super);
+	rb_set_class_path(klass,ruby_class,rb_id2name(node->nd_cname));
+	rb_class_inherited(super, klass);
+	rb_const_set(ruby_class, node->nd_cname, klass);
+    }
+    if (ruby_wrapper) {
+	rb_extend_object(klass, ruby_wrapper);
+	rb_include_module(klass, ruby_wrapper);
+    }
+
+    return module_setup(klass, node->nd_body);
+}
+
+
+static VALUE
+eval_sclass(self, node)
+  VALUE self;
+  NODE *node;
+{
+    VALUE klass, result;
+
+    result = rb_eval(self, node->nd_recv);
+    if (result == Qtrue) {
+	klass = rb_cTrueClass;
+    }
+    else if (result == Qfalse) {
+	klass = rb_cTrueClass;
+    }
+    else if (result == Qnil) {
+	klass = rb_cNilClass;
+    }
+    else {
+	if (rb_special_const_p(result)) {
+	    rb_raise(rb_eTypeError, "no virtual class for %s",
+		     rb_class2name(CLASS_OF(result)));
+	}
+	if (rb_safe_level() >= 4 && !OBJ_TAINTED(result))
+	    rb_raise(rb_eSecurityError, "Insecure: can't extend object");
+	if (FL_TEST(CLASS_OF(result), FL_SINGLETON)) {
+	    rb_clear_cache();
+	}
+	klass = rb_singleton_class(result);
+    }
+
+    if (ruby_wrapper) {
+	rb_extend_object(klass, ruby_wrapper);
+	rb_include_module(klass, ruby_wrapper);
+    }
+
+    return module_setup(klass, node->nd_body);
+}
+
+
+static VALUE
+eval_module(self, node)
+  VALUE self;
+  NODE *node;
+{
+    VALUE module;
+
+    if (NIL_P(ruby_class)) {
+	rb_raise(rb_eTypeError, "no outer class/module");
+    }
+    if ((ruby_class == rb_cObject) && rb_autoload_defined(node->nd_cname)) {
+	rb_autoload_load(node->nd_cname);
+    }
+    if (rb_const_defined_at(ruby_class, node->nd_cname)) {
+	module = rb_const_get(ruby_class, node->nd_cname);
+	if (TYPE(module) != T_MODULE) {
+	    rb_raise(rb_eTypeError, "%s is not a module",
+		     rb_id2name(node->nd_cname));
+	}
+	if (rb_safe_level() >= 4) {
+	    rb_raise(rb_eSecurityError, "extending module prohibited");
+	}
+    }
+    else {
+	module = rb_define_module_id(node->nd_cname);
+	rb_set_class_path(module,ruby_class,rb_id2name(node->nd_cname));
+	rb_const_set(ruby_class, node->nd_cname, module);
+    }
+    if (ruby_wrapper) {
+	rb_extend_object(module, ruby_wrapper);
+	rb_include_module(module, ruby_wrapper);
+    }
+
+    return module_setup(module, node->nd_body);
+}
+
+
+static VALUE
+eval_defined(self, node)
+  VALUE self;
+  NODE *node;
+{
+    char buf[20];
+    char *desc = is_defined(self, node->nd_head, buf);
+
+    return desc ? rb_str_new2(desc) : Qnil;
+}
+
+
+static VALUE
+rb_eval(self, node)
+    VALUE self;
+    NODE *node;
+{
+    int state = 0;
+    VALUE result;
 
   again:
-    if (!node) RETURN(Qnil);
+    result = Qnil;
+  again0:
+    if (!node) goto finish;
 
     switch (nd_type(node)) {
       case NODE_BLOCK:
@@ -2063,7 +2947,7 @@ rb_eval(self, n)
 	    node = node->nd_next;
 	}
 	node = node->nd_head;
-	goto again;
+	goto again0;
 
       case NODE_POSTEXE:
 	rb_f_END();
@@ -2074,7 +2958,7 @@ rb_eval(self, n)
 	/* begin .. end without clauses */
       case NODE_BEGIN:
 	node = node->nd_body;
-	goto again;
+	goto again0;
 
 	/* nodes for speed-up(default match) */
       case NODE_MATCH:
@@ -2089,211 +2973,50 @@ rb_eval(self, n)
 
 	/* nodes for speed-up(literal match) */
       case NODE_MATCH3:
-        {
-	    VALUE r = rb_eval(self,node->nd_recv);
-	    VALUE l = rb_eval(self,node->nd_value);
-	    if (TYPE(l) == T_STRING) {
-		result = rb_reg_match(r, l);
-	    }
-	    else {
-		result = rb_funcall(l, match, 1, r);
-	    }
-	}
+        result = eval_match3(self,node);
 	break;
 
 	/* node for speed-up(top-level loop for -n/-p) */
       case NODE_OPT_N:
-	PUSH_TAG(PROT_NONE);
-	switch (state = EXEC_TAG()) {
-	  case 0:
-	  opt_n_next:
-	    while (!NIL_P(rb_gets())) {
-	      opt_n_redo:
-		rb_eval(self, node->nd_body);
-	    }
-	    break;
-
-	  case TAG_REDO:
-	    state = 0;
-	    goto opt_n_redo;
-	  case TAG_NEXT:
-	    state = 0;
-	    goto opt_n_next;
-	  case TAG_BREAK:
-	    state = 0;
-	  default:
-	    break;
-	}
-	POP_TAG();
-	if (state) JUMP_TAG(state);
-	RETURN(Qnil);
+        if (!(state = eval_opt_n(self, node))) break;
+        JUMP_TAG(state);
 
       case NODE_SELF:
-	RETURN(self);
+	result = self;
+        break;
 
       case NODE_NIL:
-	RETURN(Qnil);
+	break;
 
       case NODE_TRUE:
-	RETURN(Qtrue);
+	result = Qtrue;
+        break;
 
       case NODE_FALSE:
-	RETURN(Qfalse);
+	result = Qfalse;
+        break;
 
       case NODE_IF:
 	ruby_sourceline = nd_line(node);
-	if (RTEST(rb_eval(self, node->nd_cond))) {
-	    node = node->nd_body;
-	}
-	else {
-	    node = node->nd_else;
-	}
-	goto again;
+	node = RTEST(rb_eval(self, node->nd_cond)) ? 
+                                     node->nd_body : node->nd_else;
+	goto again0;
 
       case NODE_WHEN:
-	while (node) {
-	    NODE *tag;
-
-	    if (nd_type(node) != NODE_WHEN) goto again;
-	    tag = node->nd_head;
-	    while (tag) {
-		if (trace_func) {
-		    call_trace_func("line", tag->nd_file, nd_line(tag), self,
-				    ruby_frame->last_func,
-				    ruby_frame->last_class);	
-		}
-		ruby_sourcefile = tag->nd_file;
-		ruby_sourceline = nd_line(tag);
-		if (nd_type(tag->nd_head) == NODE_WHEN) {
-		    VALUE v = rb_eval(self, tag->nd_head->nd_head);
-		    int i;
-
-		    if (TYPE(v) != T_ARRAY) v = rb_Array(v);
-		    for (i=0; i<RARRAY(v)->len; i++) {
-			if (RTEST(RARRAY(v)->ptr[i])) {
-			    node = node->nd_body;
-			    goto again;
-			}
-		    }
-		    tag = tag->nd_next;
-		    continue;
-		}
-		if (RTEST(rb_eval(self, tag->nd_head))) {
-		    node = node->nd_body;
-		    goto again;
-		}
-		tag = tag->nd_next;
-	    }
-	    node = node->nd_next;
-	}
-	RETURN(Qnil);
+        if (!(node = eval_when(self, node))) break;
+        goto again0;
 
       case NODE_CASE:
-	{
-	    VALUE val;
-
-	    val = rb_eval(self, node->nd_head);
-	    node = node->nd_body;
-	    while (node) {
-		NODE *tag;
-
-		if (nd_type(node) != NODE_WHEN) {
-		    goto again;
-		}
-		tag = node->nd_head;
-		while (tag) {
-		    if (trace_func) {
-			call_trace_func("line", tag->nd_file, nd_line(tag), self,
-					ruby_frame->last_func,
-					ruby_frame->last_class);	
-		    }
-		    ruby_sourcefile = tag->nd_file;
-		    ruby_sourceline = nd_line(tag);
-		    if (nd_type(tag->nd_head) == NODE_WHEN) {
-			VALUE v = rb_eval(self, tag->nd_head->nd_head);
-			int i;
-
-			if (TYPE(v) != T_ARRAY) v = rb_Array(v);
-			for (i=0; i<RARRAY(v)->len; i++) {
-			    if (RTEST(rb_funcall2(RARRAY(v)->ptr[i], eqq, 1, &val))){
-				node = node->nd_body;
-				goto again;
-			    }
-			}
-			tag = tag->nd_next;
-			continue;
-		    }
-		    if (RTEST(rb_funcall2(rb_eval(self, tag->nd_head), eqq, 1, &val))) {
-			node = node->nd_body;
-			goto again;
-		    }
-		    tag = tag->nd_next;
-		}
-		node = node->nd_next;
-	    }
-	}
-	RETURN(Qnil);
+        if (!(node = eval_case(self, node))) break;
+        goto again0;
 
       case NODE_WHILE:
-	PUSH_TAG(PROT_NONE);
-	switch (state = EXEC_TAG()) {
-	  case 0:
-	    ruby_sourceline = nd_line(node);
-	    if (node->nd_state && !RTEST(rb_eval(self, node->nd_cond)))
-		goto while_out;
-	    do {
-	      while_redo:
-		rb_eval(self, node->nd_body);
-	      while_next:
-		;
-	    } while (RTEST(rb_eval(self, node->nd_cond)));
-	    break;
-
-	  case TAG_REDO:
-	    state = 0;
-	    goto while_redo;
-	  case TAG_NEXT:
-	    state = 0;
-	    goto while_next;
-	  case TAG_BREAK:
-	    state = 0;
-	  default:
-	    break;
-	}
-      while_out:
-	POP_TAG();
-	if (state) JUMP_TAG(state);
-	RETURN(Qnil);
+        if (!(state = eval_while(self,node))) break;
+        JUMP_TAG(state);
 
       case NODE_UNTIL:
-	PUSH_TAG(PROT_NONE);
-	switch (state = EXEC_TAG()) {
-	  case 0:
-	    if (node->nd_state && RTEST(rb_eval(self, node->nd_cond)))
-		goto until_out;
-	    do {
-	      until_redo:
-		rb_eval(self, node->nd_body);
-	      until_next:
-		;
-	    } while (!RTEST(rb_eval(self, node->nd_cond)));
-	    break;
-
-	  case TAG_REDO:
-	    state = 0;
-	    goto until_redo;
-	  case TAG_NEXT:
-	    state = 0;
-	    goto until_next;
-	  case TAG_BREAK:
-	    state = 0;
-	  default:
-	    break;
-	}
-      until_out:
-	POP_TAG();
-	if (state) JUMP_TAG(state);
-	RETURN(Qnil);
+        if (!(state = eval_until(self,node))) break;
+        JUMP_TAG(state);
 
       case NODE_BLOCK_PASS:
 	result = block_pass(self, node);
@@ -2301,57 +3024,7 @@ rb_eval(self, n)
 
       case NODE_ITER:
       case NODE_FOR:
-	{
-	  iter_retry:
-	    PUSH_TAG(PROT_FUNC);
-	    PUSH_BLOCK(node->nd_var, node->nd_body);
-
-	    state = EXEC_TAG();
-	    if (state == 0) {
-		PUSH_ITER(ITER_PRE);
-		if (nd_type(node) == NODE_ITER) {
-		    result = rb_eval(self, node->nd_iter);
-		}
-		else {
-		    VALUE recv;
-		    char *file = ruby_sourcefile;
-		    int line = ruby_sourceline;
-
-		    _block.flags &= ~BLOCK_D_SCOPE;
-		    BEGIN_CALLARGS;
-		    recv = rb_eval(self, node->nd_iter);
-		    END_CALLARGS;
-		    ruby_sourcefile = file;
-		    ruby_sourceline = line;
-		    result = rb_call(CLASS_OF(recv),recv,each,0,0,0);
-		}
-		POP_ITER();
-	    }
-	    else if (_block.tag->dst == state) {
-		state &= TAG_MASK;
-		if (state == TAG_RETURN) {
-		    result = prot_tag->retval;
-		}
-	    }
-	    POP_BLOCK();
-	    POP_TAG();
-	    switch (state) {
-	      case 0:
-		break;
-
-	      case TAG_RETRY:
-		goto iter_retry;
-
-	      case TAG_BREAK:
-		result = Qnil;
-		break;
-	      case TAG_RETURN:
-		return_value(result);
-		/* fall through */
-	      default:
-		JUMP_TAG(state);
-	    }
-	}
+        result = eval_iter(self,node);
 	break;
 
       case NODE_BREAK:
@@ -2375,85 +3048,26 @@ rb_eval(self, n)
 
       case NODE_RESTARGS:
 	result = rb_eval(self, node->nd_head);
-	if (TYPE(result) != T_ARRAY) {
-	    result = rb_Array(result);
-	}
+	if (TYPE(result) != T_ARRAY)
+	  result = rb_Array(result);
 	break;
 
       case NODE_YIELD:
 	if (node->nd_stts) {
 	    result = rb_eval(self, node->nd_stts);
-	    if (nd_type(node->nd_stts) == NODE_RESTARGS &&
-		RARRAY(result)->len == 1)
-	    {
-		result = RARRAY(result)->ptr[0];
-	    }
+	    if (nd_type(node->nd_stts) == NODE_RESTARGS && 
+                RARRAY(result)->len == 1) 
+	      result = RARRAY(result)->ptr[0];
 	}
-	else {
-	    result = Qnil;
-	}
-	result = rb_yield_0(result, 0, 0, 0);
+      	result = rb_yield_0(result, 0, 0, 0);
 	break;
 
       case NODE_RESCUE:
-      retry_entry:
-        {
-	    volatile VALUE e_info = ruby_errinfo;
-
-	    PUSH_TAG(PROT_NONE);
-	    if ((state = EXEC_TAG()) == 0) {
-		result = rb_eval(self, node->nd_head);
-	    }
-	    POP_TAG();
-	    if (state == TAG_RAISE) {
-		NODE * volatile resq = node->nd_resq;
-
-		ruby_sourceline = nd_line(node);
-		while (resq) {
-		    if (handle_rescue(self, resq)) {
-			state = 0;
-			PUSH_TAG(PROT_NONE);
-			if ((state = EXEC_TAG()) == 0) {
-			    result = rb_eval(self, resq->nd_body);
-			}
-			POP_TAG();
-			if (state == TAG_RETRY) {
-			    state = 0;
-			    ruby_errinfo = Qnil;
-			    goto retry_entry;
-			}
-			if (state != TAG_RAISE) {
-			    ruby_errinfo = e_info;
-			}
-			break;
-		    }
-		    resq = resq->nd_head; /* next rescue */
-		}
-	    }
-	    else if (node->nd_else) { /* else clause given */
-		if (!state) {	/* no exception raised */
-		    result = rb_eval(self, node->nd_else);
-		}
-	    }
-	    if (state) JUMP_TAG(state);
-	}
+        result = eval_rescue(self,node);
         break;
 
       case NODE_ENSURE:
-	PUSH_TAG(PROT_NONE);
-	if ((state = EXEC_TAG()) == 0) {
-	    result = rb_eval(self, node->nd_head);
-	}
-	POP_TAG();
-	if (node->nd_ensr) {
-	    VALUE retval = prot_tag->retval; /* save retval */
-	    VALUE errinfo = ruby_errinfo;
-
-	    rb_eval(self, node->nd_ensr);
-	    return_value(retval);
-	    ruby_errinfo = errinfo;
-	}
-	if (state) JUMP_TAG(state);
+        result = eval_ensure(self,node);
 	break;
 
       case NODE_AND:
@@ -2550,31 +3164,11 @@ rb_eval(self, n)
 	break;
 
       case NODE_CALL:
-	{
-	    VALUE recv;
-	    int argc; VALUE *argv; /* used in SETUP_ARGS */
-	    TMP_PROTECT;
-
-	    BEGIN_CALLARGS;
-	    recv = rb_eval(self, node->nd_recv);
-	    SETUP_ARGS(node->nd_args);
-	    END_CALLARGS;
-
-	    result = rb_call(CLASS_OF(recv),recv,node->nd_mid,argc,argv,0);
-	}
+        result = eval_call(self,node);
 	break;
 
       case NODE_FCALL:
-	{
-	    int argc; VALUE *argv; /* used in SETUP_ARGS */
-	    TMP_PROTECT;
-
-	    BEGIN_CALLARGS;
-	    SETUP_ARGS(node->nd_args);
-	    END_CALLARGS;
-
-	    result = rb_call(CLASS_OF(self),self,node->nd_mid,argc,argv,1);
-	}
+        result = eval_fcall(self,node);
 	break;
 
       case NODE_VCALL:
@@ -2583,131 +3177,20 @@ rb_eval(self, n)
 
       case NODE_SUPER:
       case NODE_ZSUPER:
-	{
-	    int argc; VALUE *argv; /* used in SETUP_ARGS */
-	    TMP_PROTECT;
-
-	    if (ruby_frame->last_class == 0) {	
-		if (ruby_frame->last_func) {
-		    rb_raise(rb_eNameError, "superclass method `%s' disabled",
-			     rb_id2name(ruby_frame->last_func));
-		}
-		else {
-		    rb_raise(rb_eRuntimeError, "super called outside of method");
-		}
-	    }
-	    if (nd_type(node) == NODE_ZSUPER) {
-		argc = ruby_frame->argc;
-		argv = ruby_frame->argv;
-	    }
-	    else {
-		BEGIN_CALLARGS;
-		SETUP_ARGS(node->nd_args);
-		END_CALLARGS;
-	    }
-
-	    PUSH_ITER(ruby_iter->iter?ITER_PRE:ITER_NOT);
-	    result = rb_call(RCLASS(ruby_frame->last_class)->super,
-			     ruby_frame->self, ruby_frame->last_func,
-			     argc, argv, 3);
-	    POP_ITER();
-	}
+        result = eval_super(self,node);
 	break;
 
       case NODE_SCOPE:
-	{
-	    struct FRAME frame;
-	    NODE *saved_cref = 0;
-
-	    frame = *ruby_frame;
-	    frame.tmp = ruby_frame;
-	    ruby_frame = &frame;
-
-	    PUSH_SCOPE();
-	    PUSH_TAG(PROT_NONE);
-	    if (node->nd_rval) {
-		saved_cref = ruby_cref;
-		ruby_cref = (NODE*)node->nd_rval;
-		ruby_frame->cbase = node->nd_rval;
-	    }
-	    ruby_scope->scope_node = (VALUE)node;
-	    if (node->nd_tbl) {
-		VALUE *vars = ALLOCA_N(VALUE, node->nd_tbl[0]+1);
-		*vars++ = (VALUE)node;
-		ruby_scope->local_vars = vars;
-		rb_mem_clear(ruby_scope->local_vars, node->nd_tbl[0]);
-		ruby_scope->local_tbl = node->nd_tbl;
-	    }
-	    else {
-		ruby_scope->local_vars = 0;
-		ruby_scope->local_tbl  = 0;
-	    }
-	    if ((state = EXEC_TAG()) == 0) {
-		result = rb_eval(self, node->nd_next);
-	    }
-	    POP_TAG();
-	    POP_SCOPE();
-	    ruby_frame = frame.tmp;
-	    if (saved_cref)
-		ruby_cref = saved_cref;
-	    if (state) JUMP_TAG(state);
-	}
+        result = eval_scope(self,node);
 	break;
 
       case NODE_OP_ASGN1:
-	{
-	    int argc; VALUE *argv; /* used in SETUP_ARGS */
-	    VALUE recv, val;
-	    NODE *rval;
-	    TMP_PROTECT;
-
-	    recv = rb_eval(self, node->nd_recv);
-	    rval = node->nd_args->nd_head;
-	    SETUP_ARGS(node->nd_args->nd_next);
-	    val = rb_funcall2(recv, aref, argc-1, argv);
-	    switch (node->nd_mid) {
-	    case 0: /* OR */
-		if (RTEST(val)) RETURN(val);
-		val = rb_eval(self, rval);
-		break;
-	    case 1: /* AND */
-		if (!RTEST(val)) RETURN(val);
-		val = rb_eval(self, rval);
-		break;
-	    default:
-		val = rb_funcall(val, node->nd_mid, 1, rb_eval(self, rval));
-	    }
-	    argv[argc-1] = val;
-	    val = rb_funcall2(recv, aset, argc, argv);
-	    result = val;
-	}
+        result = eval_asgn1(self,node);
 	break;
 
       case NODE_OP_ASGN2:
-	{
-	    ID id = node->nd_next->nd_vid;
-	    VALUE recv, val;
-
-	    recv = rb_eval(self, node->nd_recv);
-	    val = rb_funcall(recv, id, 0);
-	    switch (node->nd_next->nd_mid) {
-	    case 0: /* OR */
-		if (RTEST(val)) RETURN(val);
-		val = rb_eval(self, node->nd_value);
-		break;
-	    case 1: /* AND */
-		if (!RTEST(val)) RETURN(val);
-		val = rb_eval(self, node->nd_value);
-		break;
-	    default:
-		val = rb_funcall(val, node->nd_next->nd_mid, 1,
-				 rb_eval(self, node->nd_value));
-	    }
-
-	    rb_funcall2(recv, node->nd_next->nd_aid, 1, &val);
-	    result = val;
-	}
-	break;
+        result = eval_asgn2(self,node);
+        break;
 
       case NODE_OP_ASGN_AND:
 	result = rb_eval(self, node->nd_head);
@@ -2809,25 +3292,10 @@ rb_eval(self, n)
 	    result = rb_f_lambda();
 	    ruby_scope->local_vars[node->nd_cnt] = result;
 	}
-	else {
-	    result = Qnil;
-	}
 	break;
 
       case NODE_COLON2:
-	{
-	    VALUE klass;
-
-	    klass = rb_eval(self, node->nd_head);
-	    switch (TYPE(klass)) {
-	      case T_CLASS:
-	      case T_MODULE:
-		break;
-	      default:
-		return rb_funcall(klass, node->nd_mid, 0, 0);
-	    }
-	    result = rb_const_get(klass, node->nd_mid);
-	}
+        result = eval_colon2(self,node);
 	break;
 
       case NODE_COLON3:
@@ -2858,23 +3326,7 @@ rb_eval(self, n)
 	break;
 
       case NODE_HASH:
-	{
-	    NODE *list;
-	    VALUE hash = rb_hash_new();
-	    VALUE key, val;
-
-	    list = node->nd_head;
-	    while (list) {
-		key = rb_eval(self, list->nd_head);
-		list = list->nd_next;
-		if (list == 0)
-		    rb_bug("odd number list for Hash");
-		val = rb_eval(self, list->nd_head);
-		list = list->nd_next;
-		rb_hash_aset(hash, key, val);
-	    }
-	    result = hash;
-	}
+        result = eval_hash(self,node);
 	break;
 
       case NODE_ZARRAY:		/* zero length list */
@@ -2882,19 +3334,7 @@ rb_eval(self, n)
 	break;
 
       case NODE_ARRAY:
-	{
-	    VALUE ary;
-	    int i;
-
-	    i = node->nd_alen;
-	    ary = rb_ary_new2(i);
-	    for (i=0;node;node=node->nd_next) {
-		RARRAY(ary)->ptr[i++] = rb_eval(self, node->nd_head);
-		RARRAY(ary)->len = i;
-	    }
-
-	    result = ary;
-	}
+        result = eval_array(self,node);
 	break;
 
       case NODE_STR:
@@ -2905,69 +3345,7 @@ rb_eval(self, n)
       case NODE_DXSTR:
       case NODE_DREGX:
       case NODE_DREGX_ONCE:
-	{
-	    VALUE str, str2;
-	    NODE *list = node->nd_next;
-
-	    str = rb_str_new3(node->nd_lit);
-	    if (!ruby_dyna_vars) rb_dvar_push(0, 0);
-	    while (list) {
-		if (list->nd_head) {
-		    switch (nd_type(list->nd_head)) {
-		      case NODE_STR:
-			str2 = list->nd_head->nd_lit;
-			break;
-		      case NODE_EVSTR:
-			result = ruby_errinfo;
-			ruby_errinfo = Qnil;
-			ruby_sourceline = nd_line(list->nd_head);
-			ruby_in_eval++;
-			list->nd_head = compile(list->nd_head->nd_lit,
-						ruby_sourcefile,
-						ruby_sourceline);
-			if (ruby_scope->local_tbl) {
-			    NODE *body = (NODE *)ruby_scope->scope_node;
-			    if (body && body->nd_tbl != ruby_scope->local_tbl) {
-				if (body->nd_tbl) free(body->nd_tbl);
-				ruby_scope->local_vars[-1] = (VALUE)body;
-				body->nd_tbl = ruby_scope->local_tbl;
-			    }
-			}
-			ruby_eval_tree = 0;
-			ruby_in_eval--;
-			if (ruby_nerrs > 0) {
-			    compile_error("string expansion");
-			}
-			if (!NIL_P(result)) ruby_errinfo = result;
-			/* fall through */
-		      default:
-			str2 = rb_obj_as_string(rb_eval(self, list->nd_head));
-			break;
-		    }
-		    rb_str_append(str, str2);
-		    OBJ_INFECT(str, str2);
-		}
-		list = list->nd_next;
-	    }
-	    switch (nd_type(node)) {
-	      case NODE_DREGX:
-		result = rb_reg_new(RSTRING(str)->ptr, RSTRING(str)->len,
-				 node->nd_cflag);
-		break;
-	      case NODE_DREGX_ONCE:	/* regexp expand once */
-		result = rb_reg_new(RSTRING(str)->ptr, RSTRING(str)->len,
-				 node->nd_cflag);
-		nd_set_type(node, NODE_LIT);
-		node->nd_lit = result;
-		break;
-	      case NODE_DXSTR:
-		result = rb_funcall(self, '`', 1, str);
-		break;
-	      default:
-		result = str;
-		break;
-	    }
-	}
+        result = eval_regx(self,node);
 	break;
 
       case NODE_XSTR:
@@ -2986,104 +3364,20 @@ rb_eval(self, n)
 	break;
 
       case NODE_DEFN:
-	if (node->nd_defn) {
-	    NODE *body,  *defn;
-	    VALUE origin;
-	    int noex;
-
-	    if (NIL_P(ruby_class)) {
-		rb_raise(rb_eTypeError, "no class to add method");
-	    }
-	    if (ruby_class == rb_cObject && node->nd_mid == init) {
-		rb_warn("redefining Object#initialize may cause infinite loop");
-	    }
-	    if (node->nd_mid == __id__ || node->nd_mid == __send__) {
-		rb_warn("redefining `%s' may cause serious problem",
-			rb_id2name(node->nd_mid));
-	    }
-	    rb_frozen_class_p(ruby_class);
-	    body = search_method(ruby_class, node->nd_mid, &origin);
-	    if (body){
-		if (RTEST(ruby_verbose) && ruby_class == origin && body->nd_cnt == 0) {
-		    rb_warning("method redefined; discarding old %s", rb_id2name(node->nd_mid));
-		}
-	    }
-
-	    if (node->nd_noex == NOEX_PUBLIC) {
-		noex = NOEX_PUBLIC; 	/* means is is an attrset */
-	    }
-	    else if (SCOPE_TEST(SCOPE_PRIVATE) || node->nd_mid == init) {
-		noex = NOEX_PRIVATE;
-	    }
-	    else if (SCOPE_TEST(SCOPE_PROTECTED)) {
-		noex = NOEX_PROTECTED;
-	    }
-	    else {
-		noex = NOEX_PUBLIC;
-	    }
-	    if (body && origin == ruby_class && body->nd_noex & NOEX_UNDEF) {
-		noex |= NOEX_UNDEF;
-	    }
-
-	    defn = copy_node_scope(node->nd_defn, ruby_cref);
-	    rb_add_method(ruby_class, node->nd_mid, defn, noex);
-	    if (scope_vmode == SCOPE_MODFUNC) {
-		rb_add_method(rb_singleton_class(ruby_class),
-			      node->nd_mid, defn, NOEX_PUBLIC);
-		rb_funcall(ruby_class, singleton_added, 1, ID2SYM(node->nd_mid));
-	    }
-	    if (FL_TEST(ruby_class, FL_SINGLETON)) {
-		rb_funcall(rb_iv_get(ruby_class, "__attached__"),
-			   singleton_added, 1, ID2SYM(node->nd_mid));
-	    }
-	    else {
-		rb_funcall(ruby_class, added, 1, ID2SYM(node->nd_mid));
-	    }
-	    result = Qnil;
-	}
+	if (node->nd_defn) 
+          result = eval_defn(self,node);
 	break;
 
       case NODE_DEFS:
-	if (node->nd_defn) {
-	    VALUE recv = rb_eval(self, node->nd_recv);
-	    VALUE klass;
-	    NODE *body = 0, *defn;
-
-	    if (rb_safe_level() >= 4 && !OBJ_TAINTED(recv)) {
-		rb_raise(rb_eSecurityError, "Insecure: can't define singleton method");
-	    }
-	    if (FIXNUM_P(recv) || SYMBOL_P(recv)) {
-		rb_raise(rb_eTypeError,
-			 "can't define singleton method \"%s\" for %s",
-			 rb_id2name(node->nd_mid),
-			 rb_class2name(CLASS_OF(recv)));
-	    }
-
-	    if (OBJ_FROZEN(recv)) rb_error_frozen("object");
-	    klass = rb_singleton_class(recv);
-	    if (st_lookup(RCLASS(klass)->m_tbl, node->nd_mid, &body)) {
-		if (rb_safe_level() >= 4) {
-		    rb_raise(rb_eSecurityError, "redefining method prohibited");
-		}
-		if (RTEST(ruby_verbose)) {
-		    rb_warning("redefine %s", rb_id2name(node->nd_mid));
-		}
-	    }
-	    defn = copy_node_scope(node->nd_defn, ruby_cref);
-	    defn->nd_rval = (VALUE)ruby_cref;
-	    rb_add_method(klass, node->nd_mid, defn, 
-			  NOEX_PUBLIC|(body?body->nd_noex&NOEX_UNDEF:0));
-	    rb_funcall(recv, singleton_added, 1, ID2SYM(node->nd_mid));
-	    result = Qnil;
-	}
-	break;
+	if (node->nd_defn) 
+          result = eval_defs(self,node);
+        break;
 
       case NODE_UNDEF:
 	if (NIL_P(ruby_class)) {
 	    rb_raise(rb_eTypeError, "no class to undef method");
 	}
 	rb_undef(ruby_class, node->nd_mid);
-	result = Qnil;
 	break;
 
       case NODE_ALIAS:
@@ -3092,143 +3386,26 @@ rb_eval(self, n)
 	}
 	rb_alias(ruby_class, node->nd_new, node->nd_old);
 	rb_funcall(ruby_class, added, 1, ID2SYM(node->nd_mid));
-	result = Qnil;
 	break;
 
       case NODE_VALIAS:
 	rb_alias_variable(node->nd_new, node->nd_old);
-	result = Qnil;
 	break;
 
       case NODE_CLASS:
-	{
-	    VALUE super, klass, tmp;
-
-	    if (NIL_P(ruby_class)) {
-		rb_raise(rb_eTypeError, "no outer class/module");
-	    }
-	    if (node->nd_super) {
-		super = superclass(self, node->nd_super);
-	    }
-	    else {
-		super = 0;
-	    }
-
-	    if ((ruby_class == rb_cObject) && rb_autoload_defined(node->nd_cname)) {
-		rb_autoload_load(node->nd_cname);
-	    }
-	    if (rb_const_defined_at(ruby_class, node->nd_cname)) {
-		klass = rb_const_get(ruby_class, node->nd_cname);
-		if (TYPE(klass) != T_CLASS) {
-		    rb_raise(rb_eTypeError, "%s is not a class",
-			     rb_id2name(node->nd_cname));
-		}
-		if (super) {
-		    tmp = rb_class_real(RCLASS(klass)->super);
-		    if (tmp != super) {
-			goto override_class;
-		    }
-		}
-		if (rb_safe_level() >= 4) {
-		    rb_raise(rb_eSecurityError, "extending class prohibited");
-		}
-		rb_clear_cache();
-	    }
-	    else {
-	      override_class:
-		if (!super) super = rb_cObject;
-		klass = rb_define_class_id(node->nd_cname, super);
-		rb_set_class_path(klass,ruby_class,rb_id2name(node->nd_cname));
-		rb_class_inherited(super, klass);
-		rb_const_set(ruby_class, node->nd_cname, klass);
-	    }
-	    if (ruby_wrapper) {
-		rb_extend_object(klass, ruby_wrapper);
-		rb_include_module(klass, ruby_wrapper);
-	    }
-
-	    result = module_setup(klass, node->nd_body);
-	}
+        result = eval_class(self,node);
 	break;
 
       case NODE_MODULE:
-	{
-	    VALUE module;
-
-	    if (NIL_P(ruby_class)) {
-		rb_raise(rb_eTypeError, "no outer class/module");
-	    }
-	    if ((ruby_class == rb_cObject) && rb_autoload_defined(node->nd_cname)) {
-		rb_autoload_load(node->nd_cname);
-	    }
-	    if (rb_const_defined_at(ruby_class, node->nd_cname)) {
-		module = rb_const_get(ruby_class, node->nd_cname);
-		if (TYPE(module) != T_MODULE) {
-		    rb_raise(rb_eTypeError, "%s is not a module",
-			     rb_id2name(node->nd_cname));
-		}
-		if (rb_safe_level() >= 4) {
-		    rb_raise(rb_eSecurityError, "extending module prohibited");
-		}
-	    }
-	    else {
-		module = rb_define_module_id(node->nd_cname);
-		rb_set_class_path(module,ruby_class,rb_id2name(node->nd_cname));
-		rb_const_set(ruby_class, node->nd_cname, module);
-	    }
-	    if (ruby_wrapper) {
-		rb_extend_object(module, ruby_wrapper);
-		rb_include_module(module, ruby_wrapper);
-	    }
-
-	    result = module_setup(module, node->nd_body);
-	}
+        result = eval_module(self,node);
 	break;
 
       case NODE_SCLASS:
-	{
-	    VALUE klass;
-
-	    result = rb_eval(self, node->nd_recv);
-	    if (result == Qtrue) {
-		klass = rb_cTrueClass;
-	    }
-	    else if (result == Qfalse) {
-		klass = rb_cTrueClass;
-	    }
-	    else if (result == Qnil) {
-		klass = rb_cNilClass;
-	    }
-	    else {
-		if (rb_special_const_p(result)) {
-		    rb_raise(rb_eTypeError, "no virtual class for %s",
-			     rb_class2name(CLASS_OF(result)));
-		}
-		if (rb_safe_level() >= 4 && !OBJ_TAINTED(result))
-		    rb_raise(rb_eSecurityError, "Insecure: can't extend object");
-		if (FL_TEST(CLASS_OF(result), FL_SINGLETON)) {
-		    rb_clear_cache();
-		}
-		klass = rb_singleton_class(result);
-	    }
-	    
-	    if (ruby_wrapper) {
-		rb_extend_object(klass, ruby_wrapper);
-		rb_include_module(klass, ruby_wrapper);
-	    }
-	    
-	    result = module_setup(klass, node->nd_body);
-	}
+        result = eval_sclass(self,node);
 	break;
 
       case NODE_DEFINED:
-	{
-	    char buf[20];
-	    char *desc = is_defined(self, node->nd_head, buf);
-
-	    if (desc) result = rb_str_new2(desc);
-	    else result = Qnil;
-	}
+        result = eval_defined(self,node);
 	break;
 
     case NODE_NEWLINE:
@@ -3240,7 +3417,7 @@ rb_eval(self, n)
 			    ruby_frame->last_class);	
 	}
 	node = node->nd_next;
-	goto again;
+	goto again0;
 
       default:
 	rb_bug("unknown node type %d", nd_type(node));
@@ -4245,8 +4422,10 @@ stack_length(start)
 
 #if defined(sparc) || defined(__sparc__)
     return start - STACK_END + 0x80;
+#elif STACK_DIRECTION<0
+    return start - STACK_END;
 #else
-    return (STACK_END < start) ? start - STACK_END : STACK_END - start;
+    return STACK_END - start;
 #endif
 }
 
@@ -7001,7 +7180,8 @@ method_source_file_name(VALUE method)
 
     Data_Get_Struct(method, struct METHOD, data);
     filename = data->body->nd_file;
-    return rb_str_new2( filename == NULL ? "" : filename );
+    if (!filename) return Qnil;
+    return rb_str_new2(filename);
 }
 
 static VALUE
@@ -7021,20 +7201,27 @@ static VALUE
 proc_source_file_name(VALUE block)
 {
     struct BLOCK *data;
+    NODE *body;
     const char *filename;
 
     Data_Get_Struct(block, struct BLOCK, data);
-    filename = data->body->nd_file;
-    return rb_str_new2( filename == NULL ? "" : filename );
+    body=data->body;
+    if (!body) return Qnil;  //proc {} yields a nil body
+    filename = body->nd_file;
+    if (!filename) return Qnil;
+    return rb_str_new2(filename);
 }
 
 static VALUE
 proc_source_line(VALUE block)
 {
     struct BLOCK *data;
+    NODE *body;
 
     Data_Get_Struct(block, struct BLOCK, data);
-    return INT2FIX( nd_line(data->body) );
+    body=data->body;
+    if (!body) return Qnil;  //proc {} yields a nil body
+    return INT2FIX( nd_line(body) );
 }
 
 /* BAR: end */
@@ -7391,6 +7578,7 @@ thread_mark(th)
     rb_gc_mark((VALUE)th->scope);
     rb_gc_mark((VALUE)th->dyna_vars);
     rb_gc_mark(th->errinfo);
+    rb_gc_mark(th->last_status);
     rb_gc_mark(th->last_line);
     rb_gc_mark(th->last_match);
     rb_mark_tbl(th->locals);
@@ -7487,11 +7675,11 @@ static rb_thread_t
 rb_thread_check(data)
     VALUE data;
 {
-    if (TYPE(data) != T_DATA || RDATA(data)->dmark != (RUBY_DATA_FUNC)thread_mark) {
-	rb_raise(rb_eTypeError, "wrong argument type %s (expected Thread)",
-		 rb_class2name(CLASS_OF(data)));
-    }
-    return THREAD_DATA(data);
+  if (TYPE(data) != T_DATA || RDATA(data)->dmark != (RUBY_DATA_FUNC)thread_mark) {
+    rb_raise(rb_eTypeError, "wrong argument type %s (expected Thread)",
+	     rb_class2name(CLASS_OF(data)));
+  }
+  return THREAD_DATA(data);
 }
 
 static VALUE rb_thread_raise _((int, VALUE*, rb_thread_t));
@@ -9040,18 +9228,14 @@ rb_thread_atfork()
 
 static VALUE rb_cCont;
 
-static VALUE
-rb_callcc(self)
-    VALUE self;
+static rb_thread_t prep4callcc(void)
 {
-    volatile VALUE cont;
     rb_thread_t th;
     struct tag *tag;
     struct RVarmap *vars;
 
     THREAD_ALLOC(th);
     th->thread = curr_thread->thread;
-    cont = Data_Wrap_Struct(rb_cCont, cc_mark, thread_free, th);
 
     scope_dup(ruby_scope);
     for (tag=prot_tag; tag; tag=tag->prev) {
@@ -9071,13 +9255,19 @@ rb_callcc(self)
 	if (FL_TEST(vars, DVAR_DONT_RECYCLE)) break;
 	FL_SET(vars, DVAR_DONT_RECYCLE);
     }
+    return th;
+}
 
-    if (THREAD_SAVE_CONTEXT(th)) {
-	return th->result;
-    }
-    else {
-	return rb_yield(cont);
-    }
+
+static VALUE
+rb_callcc(self)
+    VALUE self;
+{
+    rb_thread_t th = prep4callcc();
+    return THREAD_SAVE_CONTEXT(th) ?
+	th->result
+      :
+	rb_yield(Data_Wrap_Struct(rb_cCont, cc_mark, thread_free, th));
 }
 
 static VALUE
