@@ -83,8 +83,8 @@ end
 
 class SourceRef   #combines source file name and line number
 
-  def initialize(file_name, line=nil, symbol=nil)
-    @file = file_name
+  def initialize(file_name, line=nil, symbol=nil) 
+    raise ArgumentError, "missing source file reference" unless @file=file_name
     @line = line
     @symbol = symbol
   end
@@ -248,8 +248,10 @@ class SourceRef   #combines source file name and line number
     
     Code::OPS.each{|m|define_method(m){|*args|SourceRef.doMethod(m,*args)}}
 
-    def backtrace err=$lastErr   #display a backtrace from the last error
+    def backtrace err=Thread.current  #default to this thread's most recent err
       case err  #try to make whatever we're handed into an Exception
+        when nil
+          err = $lastErr
         when Exception
         when Thread
           err = err.lastErr
@@ -260,12 +262,6 @@ class SourceRef   #combines source file name and line number
         puts err.backtrace
         $lastErr=err
       end
-    end
-    
-    def startRBBR  #start another Ruby Class Browser
-      require 'rbbr'
-      (rbbrThread=Thread.new {RBBR.main}).priority=Thread.current.priority+1
-      rbbrThread    
     end
     
   end  
