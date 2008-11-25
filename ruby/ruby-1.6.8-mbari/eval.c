@@ -107,9 +107,47 @@ struct timeval {
 
 #include <sys/stat.h>
 
-#if !STACK_DIRECTION
+#if !defined(STACK_DIRECTION) || (STACK_DIRECTION != 1 && STACK_DIRECTION != -1)
 #error STACK_DIRECTION must be predetermined.  Set it to -1 or 1
 #endif
+
+
+#if defined __GNUC__
+
+#define noinline  __attribute__ ((noinline))
+
+/* 
+    clear all uninitialized tempVars on the current frame so that
+    (unused) contents are not interpreted as object pointers by GC
+*/
+#define END_CLEAN_STACK  \
+  VALUE *_dirtyCstack_ = alloca(0);  /* stack pointer before any alloca's */
+
+#define PURGE_STACK \
+  pushzeros(_dirtyCstack_, (VALUE *)&_dirtyCstack_+1)
+
+static inline void pushzeros(VALUE *base, VALUE *top)
+{
+  base -= 20; //kludge**2
+  do
+    *--top = 0;
+  while (base < top);
+}
+
+#else  /* not GNUC */
+
+#define noinline
+#define PURGE_STACK
+#define END_CLEAN_STACK
+#warn failure to zero automatic variables may cause memory leaks
+
+#endif
+
+
+#define RETURN(value)  return (PURGE_STACK, (value))
+
+
+
 
 VALUE rb_cProc;
 static VALUE rb_cBinding;
@@ -1470,7 +1508,7 @@ ev_const_defined(cref, id, self)
     return rb_const_defined(cref->nd_clss, id);
 }
 
-static VALUE
+static VALUE noinline
 ev_const_get(cref, id, self)
     NODE *cref;
     ID id;
@@ -2248,6 +2286,8 @@ eval_iter(self, node)
 {
   int state = 0;
   volatile VALUE result;
+
+END_CLEAN_STACK
   
   iter_retry:
     PUSH_TAG(PROT_FUNC);
@@ -2299,7 +2339,7 @@ eval_iter(self, node)
       default:
 	JUMP_TAG(state);
     }
-  return result;
+  RETURN(result);
 }
 
 
@@ -2387,8 +2427,9 @@ eval_call(self, node)
   VALUE self;
   NODE *node;
 {
-    VALUE recv;
+    volatile VALUE recv; 
     int argc; VALUE *argv; /* used in SETUP_ARGS */
+ END_CLEAN_STACK;
     TMP_PROTECT;
 
     BEGIN_CALLARGS;
@@ -2396,7 +2437,8 @@ eval_call(self, node)
     SETUP_ARGS(node->nd_args);
     END_CALLARGS;
 
-    return rb_call(CLASS_OF(recv),recv,node->nd_mid,argc,argv,0);
+    recv=rb_call(CLASS_OF(recv),recv,node->nd_mid,argc,argv,0);
+  RETURN(recv);
 }
 
 
@@ -2935,9 +2977,11 @@ rb_eval(self, node)
     int state = 0;
     VALUE result;
 
+  END_CLEAN_STACK
+
   again:
     result = Qnil;
-  again0:
+  evalNode:
     if (!node) goto finish;
 
     switch (nd_type(node)) {
@@ -2947,18 +2991,17 @@ rb_eval(self, node)
 	    node = node->nd_next;
 	}
 	node = node->nd_head;
-	goto again0;
+	goto evalNode;
 
       case NODE_POSTEXE:
 	rb_f_END();
 	nd_set_type(node, NODE_NIL); /* exec just once */
-	result = Qnil;
 	break;
 
 	/* begin .. end without clauses */
       case NODE_BEGIN:
 	node = node->nd_body;
-	goto again0;
+	goto evalNode;
 
 	/* nodes for speed-up(default match) */
       case NODE_MATCH:
@@ -3000,15 +3043,15 @@ rb_eval(self, node)
 	ruby_sourceline = nd_line(node);
 	node = RTEST(rb_eval(self, node->nd_cond)) ? 
                                      node->nd_body : node->nd_else;
-	goto again0;
+	goto evalNode;
 
       case NODE_WHEN:
         if (!(node = eval_when(self, node))) break;
-        goto again0;
+        goto evalNode;
 
       case NODE_CASE:
         if (!(node = eval_case(self, node))) break;
-        goto again0;
+        goto evalNode;
 
       case NODE_WHILE:
         if (!(state = eval_while(self,node))) break;
@@ -3087,6 +3130,7 @@ rb_eval(self, node)
 	else result = Qtrue;
 	break;
 
+#if 1
       case NODE_DOT2:
       case NODE_DOT3:
 	result = rb_range_new(rb_eval(self, node->nd_beg),
@@ -3125,6 +3169,7 @@ rb_eval(self, node)
 	    result = Qtrue;
 	}
 	break;
+#endif
 
       case NODE_FLIP3:		/* like SED */
 	if (ruby_scope->local_vars == 0) {
@@ -3143,12 +3188,7 @@ rb_eval(self, node)
 	break;
 
       case NODE_RETURN:
-	if (node->nd_stts) {
- 	    return_value(rb_eval(self, node->nd_stts));
- 	}
-	else {
-	    return_value(Qnil);
-	}
+ 	return_value(node->nd_stts ? rb_eval(self, node->nd_stts) : Qnil);
 	return_check();
 	JUMP_TAG(TAG_RETURN);
 	break;
@@ -3277,9 +3317,11 @@ rb_eval(self, node)
 	result = rb_ivar_get(self, node->nd_vid);
 	break;
 
+#if 1
       case NODE_CONST:
 	result = ev_const_get(RNODE(ruby_frame->cbase), node->nd_vid, self);
 	break;
+#endif
 
       case NODE_CVAR:
 	result = rb_cvar_get(cvar_cbase(), node->nd_vid);
@@ -3417,14 +3459,14 @@ rb_eval(self, node)
 			    ruby_frame->last_class);	
 	}
 	node = node->nd_next;
-	goto again0;
+	goto evalNode;
 
       default:
 	rb_bug("unknown node type %d", nd_type(node));
     }
   finish:
     CHECK_INTS;
-    return result;
+    RETURN(result);
 }
 
 static VALUE
@@ -3435,7 +3477,7 @@ module_setup(module, n)
     NODE * volatile node = n;
     int state;
     struct FRAME frame;
-    VALUE result;		/* OK */
+    volatile VALUE result;		/* OK */
     char *file = ruby_sourcefile;
     int line = ruby_sourceline;
     TMP_PROTECT;
@@ -3741,15 +3783,18 @@ rb_yield_0(val, self, klass, acheck)
     VALUE val, self, klass;	/* OK */
     int acheck;
 {
-    NODE *node;
     volatile VALUE result = Qnil;
+    char *const file = ruby_sourcefile;
+    int line = ruby_sourceline;
+
+  END_CLEAN_STACK
+  
+    NODE *node;
     volatile VALUE old_cref;
     volatile VALUE old_wrapper;
     struct BLOCK * volatile block;
     struct SCOPE * volatile old_scope;
     struct FRAME frame;
-    char *const file = ruby_sourcefile;
-    int line = ruby_sourceline;
     int state;
     static unsigned serial = 1;
 
@@ -3909,7 +3954,7 @@ rb_yield_0(val, self, klass, acheck)
 	}
 	JUMP_TAG(state);
     }
-    return result;
+    RETURN(result);
 }
 
 VALUE
@@ -3999,6 +4044,8 @@ assign(self, lhs, val, check)
     VALUE val;
     int check;
 {
+  END_CLEAN_STACK
+  
     if (val == Qundef) val = Qnil;
     switch (nd_type(lhs)) {
       case NODE_GASGN:
@@ -4044,17 +4091,14 @@ assign(self, lhs, val, check)
 
       case NODE_CALL:
 	{
-	    VALUE recv;
-	    recv = rb_eval(self, lhs->nd_recv);
+	    VALUE recv = rb_eval(self, lhs->nd_recv);
 	    if (!lhs->nd_args) {
 		/* attr set */
 		rb_call(CLASS_OF(recv), recv, lhs->nd_mid, 1, &val, 0);
 	    }
 	    else {
 		/* array set */
-		VALUE args;
-
-		args = rb_eval(self, lhs->nd_args);
+		VALUE args = rb_eval(self, lhs->nd_args);
 		rb_ary_push(args, val);
 		rb_call(CLASS_OF(recv), recv, lhs->nd_mid,
 			RARRAY(args)->len, RARRAY(args)->ptr, 0);
@@ -4066,6 +4110,7 @@ assign(self, lhs, val, check)
 	rb_bug("bug in variable assignment");
 	break;
     }
+  PURGE_STACK;
 }
 
 VALUE
@@ -4403,7 +4448,7 @@ static unsigned int STACK_LEVEL_MAX = 655300;
 #endif
 
 extern VALUE *rb_gc_stack_start;
-static size_t
+static inline size_t
 stack_length(start)
     VALUE *start;
 {
@@ -4534,6 +4579,196 @@ call_cfunc(func, recv, len, argc, argv)
     return Qnil;		/* not reached */
 }
 
+
+static VALUE 
+call0scope (klass, recv, id, argc, argv, body, flags)
+    VALUE klass, recv;
+    ID    id;
+    int argc;			/* OK */
+    VALUE *argv;		/* OK */
+    NODE *body;			/* OK */
+    int flags;
+{
+    int state;
+    VALUE *local_vars;	/* OK */
+    NODE *saved_cref = 0;
+    NODE *b2;
+    volatile VALUE result = Qnil;
+    volatile int safe = -1;
+
+    PUSH_SCOPE();
+    if (body->nd_rval) {
+	saved_cref = ruby_cref;
+	ruby_cref = (NODE*)body->nd_rval;
+	ruby_frame->cbase = body->nd_rval;
+    }
+    ruby_scope->scope_node = (VALUE)body;
+    if (body->nd_tbl) {
+	local_vars = TMP_ALLOC(body->nd_tbl[0]+1);
+	*local_vars++ = (VALUE)body;
+	rb_mem_clear(local_vars, body->nd_tbl[0]);
+	ruby_scope->local_tbl = body->nd_tbl;
+	ruby_scope->local_vars = local_vars;
+    }
+    else {
+	local_vars = ruby_scope->local_vars = 0;
+	ruby_scope->local_tbl  = 0;
+    }
+    b2 = body = body->nd_next;
+
+    if (NOEX_SAFE(flags) > ruby_safe_level) {
+	if (!(flags&NOEX_TAINTED) && ruby_safe_level == 0 && NOEX_SAFE(flags) > 2) {
+	    rb_raise(rb_eSecurityError, "calling insecure method: %s",
+		     rb_id2name(id));
+	}
+	safe = ruby_safe_level;
+	ruby_safe_level = NOEX_SAFE(flags);
+    }
+    PUSH_VARS();
+    PUSH_TAG(PROT_FUNC);
+    if ((state = EXEC_TAG()) == 0) {
+	NODE *node = 0;
+	int i;
+
+	if (nd_type(body) == NODE_ARGS) {
+	    node = body;
+	    body = 0;
+	}
+	else if (nd_type(body) == NODE_BLOCK) {
+	    node = body->nd_head;
+	    body = body->nd_next;
+	}
+	if (node) {
+	    if (nd_type(node) != NODE_ARGS) {
+		rb_bug("no argument-node");
+	    }
+
+	    i = node->nd_cnt;
+	    if (i > argc) {
+		rb_raise(rb_eArgError, "wrong # of arguments(%d for %d)",
+			 argc, i);
+	    }
+	    if (node->nd_rest == -1) {
+		int opt = i;
+		NODE *optnode = node->nd_opt;
+
+		while (optnode) {
+		    opt++;
+		    optnode = optnode->nd_next;
+		}
+		if (opt < argc) {
+		    rb_raise(rb_eArgError, "wrong # of arguments(%d for %d)",
+			     argc, opt);
+		}
+		ruby_frame->argc = opt;
+		ruby_frame->argv = local_vars+2;
+	    }
+
+	    if (local_vars) {
+		if (i > 0) {
+		    /* +2 for $_ and $~ */
+		    MEMCPY(local_vars+2, argv, VALUE, i);
+		}
+		argv += i; argc -= i;
+		if (node->nd_opt) {
+		    NODE *opt = node->nd_opt;
+
+		    while (opt && argc) {
+			assign(recv, opt->nd_head, *argv, 1);
+			argv++; argc--;
+			opt = opt->nd_next;
+		    }
+		    if (opt) {
+			ruby_sourcefile = opt->nd_file;
+			ruby_sourceline = nd_line(opt);
+			rb_eval(recv, opt);
+		    }
+		}
+		if (node->nd_rest >= 0) {
+		    VALUE v;
+
+		    if (argc > 0)
+			v = rb_ary_new4(argc,argv);
+		    else
+			v = rb_ary_new2(0);
+		    ruby_scope->local_vars[node->nd_rest] = v;
+		}
+	    }
+	}
+
+	if (trace_func) {
+	    char *file = b2->nd_file;
+	    int line = nd_line(b2);
+	    call_trace_func("call", file, line, recv, id, klass);
+	    ruby_sourcefile = file;
+	    ruby_sourceline = line;
+	}
+	result = rb_eval(recv, body);
+    }
+    else if (state == TAG_RETURN) {
+	result = prot_tag->retval;
+	state = 0;
+    }
+    if (safe >= 0) ruby_safe_level = safe;
+    POP_TAG();
+    POP_VARS();
+    POP_SCOPE();
+    ruby_cref = saved_cref;
+    if (trace_func) {
+	char *file = ruby_frame->prev->file;
+	int line = ruby_frame->prev->line;
+	if (!file) {
+	    file = ruby_sourcefile;
+	    line = ruby_sourceline;
+	}
+	call_trace_func("return", file, line, recv, id, klass);
+    }
+    switch (state) {
+      case 0:
+	break;
+
+      case TAG_RETRY:
+	if (rb_block_given_p()) {
+           JUMP_TAG(state);
+	}
+	/* fall through */
+      default:
+	jump_tag_but_local_jump(state);
+	break;
+    }
+  return result;
+}
+
+
+static VALUE 
+call0ctrace (klass, recv, id, argc, argv, body, len)
+    VALUE klass, recv;
+    ID    id;
+    int argc;			/* OK */
+    VALUE *argv;		/* OK */
+    NODE *body;			/* OK */
+    int len;
+{
+    int state;
+    char *file = ruby_frame->prev->file;
+    int line = ruby_frame->prev->line;
+    volatile VALUE result = Qnil;
+    if (!file) {
+	file = ruby_sourcefile;
+	line = ruby_sourceline;
+    }
+
+    call_trace_func("c-call", 0, 0, recv, id, klass);
+    PUSH_TAG(PROT_FUNC);
+    if ((state = EXEC_TAG()) == 0)
+      result = call_cfunc(body->nd_cfnc, recv, len, argc, argv);
+    POP_TAG();
+    call_trace_func("c-return", 0, 0, recv, id, klass);
+    if (state) JUMP_TAG(state);
+    return result;
+}
+
+
 static VALUE
 rb_call0(klass, recv, id, argc, argv, body, flags)
     VALUE klass, recv;
@@ -4543,12 +4778,12 @@ rb_call0(klass, recv, id, argc, argv, body, flags)
     NODE *body;			/* OK */
     int flags;
 {
-    NODE *b2;		/* OK */
     volatile VALUE result = Qnil;
+END_CLEAN_STACK
+
     int itr;
     static int tick;
     TMP_PROTECT;
-    volatile int safe = -1;
 
     switch (ruby_iter->iter) {
       case ITER_PRE:
@@ -4582,27 +4817,9 @@ rb_call0(klass, recv, id, argc, argv, body, flags)
 		rb_bug("bad argc(%d) specified for `%s(%s)'",
 		       len, rb_class2name(klass), rb_id2name(id));
 	    }
-	    if (trace_func) {
-		int state;
-		char *file = ruby_frame->prev->file;
-		int line = ruby_frame->prev->line;
-		if (!file) {
-		    file = ruby_sourcefile;
-		    line = ruby_sourceline;
-		}
-
-		call_trace_func("c-call", 0, 0, recv, id, klass);
-		PUSH_TAG(PROT_FUNC);
-		if ((state = EXEC_TAG()) == 0) {
-		    result = call_cfunc(body->nd_cfnc, recv, len, argc, argv);
-		}
-		POP_TAG();
-		call_trace_func("c-return", 0, 0, recv, id, klass);
-		if (state) JUMP_TAG(state);
-	    }
-	    else {
-		result = call_cfunc(body->nd_cfnc, recv, len, argc, argv);
-	    }
+	    result = trace_func ?
+	      call0ctrace(klass, recv, id, argc, argv, body, len) :
+	      call_cfunc(body->nd_cfnc, recv, len, argc, argv);
 	}
 	break;
 
@@ -4626,152 +4843,7 @@ rb_call0(klass, recv, id, argc, argv, body, flags)
 	break;
 
       case NODE_SCOPE:
-	{
-	    int state;
-	    VALUE *local_vars;	/* OK */
-	    NODE *saved_cref = 0;
-
-	    PUSH_SCOPE();
-	    if (body->nd_rval) {
-		saved_cref = ruby_cref;
-		ruby_cref = (NODE*)body->nd_rval;
-		ruby_frame->cbase = body->nd_rval;
-	    }
-	    ruby_scope->scope_node = (VALUE)body;
-	    if (body->nd_tbl) {
-		local_vars = TMP_ALLOC(body->nd_tbl[0]+1);
-		*local_vars++ = (VALUE)body;
-		rb_mem_clear(local_vars, body->nd_tbl[0]);
-		ruby_scope->local_tbl = body->nd_tbl;
-		ruby_scope->local_vars = local_vars;
-	    }
-	    else {
-		local_vars = ruby_scope->local_vars = 0;
-		ruby_scope->local_tbl  = 0;
-	    }
-	    b2 = body = body->nd_next;
-
-	    if (NOEX_SAFE(flags) > ruby_safe_level) {
-		if (!(flags&NOEX_TAINTED) && ruby_safe_level == 0 && NOEX_SAFE(flags) > 2) {
-		    rb_raise(rb_eSecurityError, "calling insecure method: %s",
-			     rb_id2name(id));
-		}
-		safe = ruby_safe_level;
-		ruby_safe_level = NOEX_SAFE(flags);
-	    }
-	    PUSH_VARS();
-	    PUSH_TAG(PROT_FUNC);
-	    if ((state = EXEC_TAG()) == 0) {
-		NODE *node = 0;
-		int i;
-
-		if (nd_type(body) == NODE_ARGS) {
-		    node = body;
-		    body = 0;
-		}
-		else if (nd_type(body) == NODE_BLOCK) {
-		    node = body->nd_head;
-		    body = body->nd_next;
-		}
-		if (node) {
-		    if (nd_type(node) != NODE_ARGS) {
-			rb_bug("no argument-node");
-		    }
-
-		    i = node->nd_cnt;
-		    if (i > argc) {
-			rb_raise(rb_eArgError, "wrong # of arguments(%d for %d)",
-				 argc, i);
-		    }
-		    if (node->nd_rest == -1) {
-			int opt = i;
-			NODE *optnode = node->nd_opt;
-
-			while (optnode) {
-			    opt++;
-			    optnode = optnode->nd_next;
-			}
-			if (opt < argc) {
-			    rb_raise(rb_eArgError, "wrong # of arguments(%d for %d)",
-				     argc, opt);
-			}
-			ruby_frame->argc = opt;
-			ruby_frame->argv = local_vars+2;
-		    }
-
-		    if (local_vars) {
-			if (i > 0) {
-			    /* +2 for $_ and $~ */
-			    MEMCPY(local_vars+2, argv, VALUE, i);
-			}
-			argv += i; argc -= i;
-			if (node->nd_opt) {
-			    NODE *opt = node->nd_opt;
-
-			    while (opt && argc) {
-				assign(recv, opt->nd_head, *argv, 1);
-				argv++; argc--;
-				opt = opt->nd_next;
-			    }
-			    if (opt) {
-				ruby_sourcefile = opt->nd_file;
-				ruby_sourceline = nd_line(opt);
-				rb_eval(recv, opt);
-			    }
-			}
-			if (node->nd_rest >= 0) {
-			    VALUE v;
-
-			    if (argc > 0)
-				v = rb_ary_new4(argc,argv);
-			    else
-				v = rb_ary_new2(0);
-			    ruby_scope->local_vars[node->nd_rest] = v;
-			}
-		    }
-		}
-
-		if (trace_func) {
-		    char *file = b2->nd_file;
-		    int line = nd_line(b2);
-		    call_trace_func("call", file, line, recv, id, klass);
-		    ruby_sourcefile = file;
-		    ruby_sourceline = line;
-		}
-		result = rb_eval(recv, body);
-	    }
-	    else if (state == TAG_RETURN) {
-		result = prot_tag->retval;
-		state = 0;
-	    }
-	    if (safe >= 0) ruby_safe_level = safe;
-	    POP_TAG();
-	    POP_VARS();
-	    POP_SCOPE();
-	    ruby_cref = saved_cref;
-	    if (trace_func) {
-		char *file = ruby_frame->prev->file;
-		int line = ruby_frame->prev->line;
-		if (!file) {
-		    file = ruby_sourcefile;
-		    line = ruby_sourceline;
-		}
-		call_trace_func("return", file, line, recv, id, klass);
-	    }
-	    switch (state) {
-	      case 0:
-		break;
-
-	      case TAG_RETRY:
-		if (rb_block_given_p()) {
-                   JUMP_TAG(state);
-		}
-		/* fall through */
-	      default:
-		jump_tag_but_local_jump(state);
-		break;
-	    }
-	}
+      	result = call0scope(klass, recv, id, argc, argv, body, flags);
 	break;
 
       default:
@@ -4780,7 +4852,7 @@ rb_call0(klass, recv, id, argc, argv, body, flags)
     }
     POP_FRAME();
     POP_ITER();
-    return result;
+  RETURN(result);
 }
 
 static VALUE
@@ -6101,7 +6173,7 @@ call_end_proc(data)
     POP_ITER();
 }
 
-static void
+static void noinline
 rb_f_END()
 {
     PUSH_FRAME();
@@ -7711,11 +7783,9 @@ rb_thread_save_context(th)
 #if STACK_DIRECTION < 0
     pos -= len;
 #endif
-    if (len > th->stk_max) {
-	REALLOC_N(th->stk_ptr, VALUE, len);
-	th->stk_max = len;
-    }
-//fprintf(stderr,"SAVE pos=%p, stk_ptr=%p, len=%d\n", pos, th->stk_ptr, len);
+    if (len > th->stk_max)
+      REALLOC_N(th->stk_ptr, VALUE, th->stk_max = len);
+fprintf(stderr,"SAVE pos=%p, stk_ptr=%p, len=%d\n", pos, th->stk_ptr, len);
     FLUSH_REGISTER_WINDOWS; 
     MEMCPY(th->stk_ptr, pos, VALUE, th->stk_len=len);
 #ifdef SAVE_WIN32_EXCEPTION_LIST
