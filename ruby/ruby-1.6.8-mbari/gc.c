@@ -59,8 +59,10 @@ static void run_final();
 #endif
 #endif
 
-static unsigned long malloc_increase = 0;
+size_t rb_gc_malloc_increase = 0;
+#define malloc_increase rb_gc_malloc_increase
 static unsigned long malloc_limit = GC_MALLOC_LIMIT;
+size_t rb_gc_malloc_limit = GC_MALLOC_LIMIT-GC_MALLOC_LIMIT/8;
 
 static VALUE gc_getlimit(VALUE mod)
 {
@@ -72,6 +74,7 @@ static VALUE gc_setlimit(VALUE mod, VALUE newLimit)
   long limit = NUM2LONG(newLimit);
   if (limit < 0) return gc_getlimit(mod);
   malloc_limit = limit;
+  rb_gc_malloc_limit = malloc_limit - malloc_limit/8;
   return newLimit;
 }
 
@@ -125,7 +128,7 @@ ruby_xmalloc(size)
 	    mem_error("failed to allocate memory");
 	}
     }
-
+    rb_gc_update_stack_extent();
     return mem;
 }
 
@@ -162,7 +165,7 @@ ruby_xrealloc(ptr, size)
 	    mem_error("failed to allocate memory(realloc)");
 	}
     }
-
+    rb_gc_update_stack_extent();
     return mem;
 }
 
@@ -364,6 +367,8 @@ rb_data_object_alloc(klass, datap, dmark, dfree)
 
 extern st_table *rb_class_tbl;
 VALUE *rb_gc_stack_start = 0;
+VALUE *rb_gc_stack_end = (VALUE *)STACK_DIRECTION;
+
 
 static inline int
 is_pointer_to_heap(ptr)
@@ -937,6 +942,7 @@ rb_gc_mark(ptr)
     // restore position in array
     rbx_reach_test_len = save_reach_test_len;
 #endif
+    rb_gc_update_stack_extent();
 }
 
 static void obj_free _((VALUE));
