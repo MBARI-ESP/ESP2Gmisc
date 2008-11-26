@@ -991,7 +991,7 @@ VALUE
 rb_ivar_set(obj, id, val)
     VALUE obj;
     ID id;
-    VALUE val;
+    volatile VALUE val;  //allows x86 GCC 3.3.5 to GC -- loop {@x=callcc {|c|c}}
 {
     if (!OBJ_TAINTED(obj) && rb_safe_level() >= 4)
 	rb_raise(rb_eSecurityError, "Insecure: can't modify instance variable");
