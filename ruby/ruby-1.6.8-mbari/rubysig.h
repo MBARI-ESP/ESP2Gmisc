@@ -64,10 +64,45 @@ void rb_trap_restore_mask _((void));
 
 EXTERN int rb_thread_critical;
 void rb_thread_schedule _((void));
+
 #if defined(HAVE_SETITIMER) && !defined(__BOW__)
 EXTERN int rb_thread_pending;
 #define THREAD_INTERRUPTABLE  (!(rb_prohibit_interrupt | rb_thread_critical))
+
+
+EXTERN size_t rb_gc_malloc_increase;
+EXTERN size_t rb_gc_malloc_limit;
+EXTERN VALUE *rb_gc_stack_end;
+/*
+  zero the memory that was (recently) part of the stack
+  but is no longer.  Invoke when stack is deep to mark its extent
+  and when it is shallow to wipe it
+*/
+#define rb_gc_wipe_stack() {    \
+  VALUE *sp = alloca(0);         \
+  VALUE *end = rb_gc_stack_end;  \
+  rb_gc_stack_end = sp;          \
+  __stack_while(end, sp) *sp=0;   \
+}
+
+/*
+  Update our record of maximum stack extent without zeroing unused stack
+*/
+#define rb_gc_update_stack_extent() \
+    if __stack_grown rb_gc_stack_end = alloca(0);
+
+
+#if STACK_DIRECTION > 0
+#define __stack_while(end,sp)  while (end >= ++sp)
+#define __stack_grown  (rb_gc_stack_end > (VALUE *)alloca(0))
+#else
+#define __stack_while(end,sp)  while (end <= --sp)
+#define __stack_grown  (rb_gc_stack_end < (VALUE *)alloca(0))
+#endif
+
 # define CHECK_INTS if THREAD_INTERRUPTABLE {\
+    rb_gc_wipe_stack(); \
+    if (rb_gc_malloc_increase > rb_gc_malloc_limit) rb_gc(); \
     if (rb_thread_pending) rb_thread_schedule();\
     if (rb_trap_pending) rb_trap_exec();\
 }
@@ -76,10 +111,12 @@ EXTERN int rb_thread_pending;
 EXTERN int rb_thread_tick;
 #define THREAD_TICK 500
 #define CHECK_INTS if THREAD_INTERRUPTABLE {\
-	if (rb_thread_tick-- <= 0) {\
-	    rb_thread_tick = THREAD_TICK;\
-	    rb_thread_schedule();\
-	}\
+    rb_gc_wipe_stack(); \
+    if (rb_gc_malloc_increase > rb_gc_malloc_limit) rb_gc(); \
+    if (rb_thread_tick-- <= 0) {\
+	rb_thread_tick = THREAD_TICK;\
+	rb_thread_schedule();\
+    }\
     if (rb_trap_pending) rb_trap_exec();\
 }
 #endif
