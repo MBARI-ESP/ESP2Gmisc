@@ -29,12 +29,14 @@
 
 /* Make alloca work the best possible way.  */
 #ifdef __GNUC__
+#define noinline  __attribute__ ((noinline))
 # ifndef atarist
 #  ifndef alloca
 #   define alloca __builtin_alloca
 #  endif
 # endif /* atarist */
 #else
+#define noinline
 # ifdef HAVE_ALLOCA_H
 #  include <alloca.h>
 # else
@@ -110,42 +112,6 @@ struct timeval {
 #if !defined(STACK_DIRECTION) || (STACK_DIRECTION != 1 && STACK_DIRECTION != -1)
 #error STACK_DIRECTION must be predetermined.  Set it to -1 or 1
 #endif
-
-
-#if defined __GNUC__
-
-#define noinline  __attribute__ ((noinline))
-
-/* 
-    clear all uninitialized tempVars on the current frame so that
-    (unused) contents are not interpreted as object pointers by GC
-*/
-#define END_CLEAN_STACK  \
-  VALUE *_dirtyCstack_ = alloca(0);  /* stack pointer before any alloca's */
-
-#define PURGE_STACK \
-  pushzeros(_dirtyCstack_, (VALUE *)&_dirtyCstack_+1)
-
-static inline void pushzeros(VALUE *base, VALUE *top)
-{
-  base -= 20; //kludge**2
-  do
-    *--top = 0;
-  while (base < top);
-}
-
-#else  /* not GNUC */
-
-#define noinline
-#define PURGE_STACK
-#define END_CLEAN_STACK
-#warn failure to zero automatic variables may cause memory leaks
-
-#endif
-
-
-#define RETURN(value)  return (PURGE_STACK, (value))
-
 
 
 
@@ -828,7 +794,14 @@ static struct tag *prot_tag;
 #define PROT_FUNC   -1
 #define PROT_THREAD -2
 
-#define EXEC_TAG()    (FLUSH_REGISTER_WINDOWS, setjmp(prot_tag->buf))
+#define EXEC_TAG()    (FLUSH_REGISTER_WINDOWS, ckstk(setjmp(prot_tag->buf)))
+
+static inline 
+int ckstk(int status)
+{
+  rb_gc_update_stack_extent();
+  return status;
+}
 
 #define JUMP_TAG(st) {			\
     ruby_frame = prot_tag->frame;	\
@@ -2286,8 +2259,6 @@ eval_iter(self, node)
 {
   int state = 0;
   volatile VALUE result;
-
-END_CLEAN_STACK
   
   iter_retry:
     PUSH_TAG(PROT_FUNC);
@@ -2339,7 +2310,7 @@ END_CLEAN_STACK
       default:
 	JUMP_TAG(state);
     }
-  RETURN(result);
+  return result;
 }
 
 
@@ -2427,9 +2398,9 @@ eval_call(self, node)
   VALUE self;
   NODE *node;
 {
-    volatile VALUE recv; 
     int argc; VALUE *argv; /* used in SETUP_ARGS */
- END_CLEAN_STACK;
+    VALUE recv;
+
     TMP_PROTECT;
 
     BEGIN_CALLARGS;
@@ -2437,8 +2408,7 @@ eval_call(self, node)
     SETUP_ARGS(node->nd_args);
     END_CALLARGS;
 
-    recv=rb_call(CLASS_OF(recv),recv,node->nd_mid,argc,argv,0);
-  RETURN(recv);
+    return rb_call(CLASS_OF(recv),recv,node->nd_mid,argc,argv,0);
 }
 
 
@@ -2448,6 +2418,7 @@ eval_fcall(self, node)
   NODE *node;      
 {
     int argc; VALUE *argv; /* used in SETUP_ARGS */
+    
     TMP_PROTECT;
 
     BEGIN_CALLARGS;
@@ -2974,10 +2945,8 @@ rb_eval(self, node)
     VALUE self;
     NODE *node;
 {
-    int state = 0;
     VALUE result;
-
-  END_CLEAN_STACK
+    int state;
 
   again:
     result = Qnil;
@@ -3130,7 +3099,6 @@ rb_eval(self, node)
 	else result = Qtrue;
 	break;
 
-#if 1
       case NODE_DOT2:
       case NODE_DOT3:
 	result = rb_range_new(rb_eval(self, node->nd_beg),
@@ -3169,7 +3137,6 @@ rb_eval(self, node)
 	    result = Qtrue;
 	}
 	break;
-#endif
 
       case NODE_FLIP3:		/* like SED */
 	if (ruby_scope->local_vars == 0) {
@@ -3317,11 +3284,9 @@ rb_eval(self, node)
 	result = rb_ivar_get(self, node->nd_vid);
 	break;
 
-#if 1
       case NODE_CONST:
 	result = ev_const_get(RNODE(ruby_frame->cbase), node->nd_vid, self);
 	break;
-#endif
 
       case NODE_CVAR:
 	result = rb_cvar_get(cvar_cbase(), node->nd_vid);
@@ -3466,7 +3431,7 @@ rb_eval(self, node)
     }
   finish:
     CHECK_INTS;
-    RETURN(result);
+    return result;
 }
 
 static VALUE
@@ -3783,11 +3748,10 @@ rb_yield_0(val, self, klass, acheck)
     VALUE val, self, klass;	/* OK */
     int acheck;
 {
-    volatile VALUE result = Qnil;
     char *const file = ruby_sourcefile;
     int line = ruby_sourceline;
-
-  END_CLEAN_STACK
+    
+    volatile VALUE result = Qnil;
   
     NODE *node;
     volatile VALUE old_cref;
@@ -3954,7 +3918,7 @@ rb_yield_0(val, self, klass, acheck)
 	}
 	JUMP_TAG(state);
     }
-    RETURN(result);
+    return result;
 }
 
 VALUE
@@ -4044,8 +4008,6 @@ assign(self, lhs, val, check)
     VALUE val;
     int check;
 {
-  END_CLEAN_STACK
-  
     if (val == Qundef) val = Qnil;
     switch (nd_type(lhs)) {
       case NODE_GASGN:
@@ -4110,7 +4072,6 @@ assign(self, lhs, val, check)
 	rb_bug("bug in variable assignment");
 	break;
     }
-  PURGE_STACK;
 }
 
 VALUE
@@ -4778,11 +4739,10 @@ rb_call0(klass, recv, id, argc, argv, body, flags)
     NODE *body;			/* OK */
     int flags;
 {
-    volatile VALUE result = Qnil;
-END_CLEAN_STACK
-
-    int itr;
     static int tick;
+    int itr;
+    volatile VALUE result = Qnil;
+
     TMP_PROTECT;
 
     switch (ruby_iter->iter) {
@@ -4852,7 +4812,7 @@ END_CLEAN_STACK
     }
     POP_FRAME();
     POP_ITER();
-  RETURN(result);
+  return result;
 }
 
 static VALUE
@@ -7785,7 +7745,7 @@ rb_thread_save_context(th)
 #endif
     if (len > th->stk_max)
       REALLOC_N(th->stk_ptr, VALUE, th->stk_max = len);
-fprintf(stderr,"SAVE pos=%p, stk_ptr=%p, len=%d\n", pos, th->stk_ptr, len);
+//fprintf(stderr,"SAVE pos=%p, stk_ptr=%p, len=%d\n", pos, th->stk_ptr, len);
     FLUSH_REGISTER_WINDOWS; 
     MEMCPY(th->stk_ptr, pos, VALUE, th->stk_len=len);
 #ifdef SAVE_WIN32_EXCEPTION_LIST
@@ -7852,7 +7812,7 @@ thread_switch(n)
 
 #define THREAD_SAVE_CONTEXT(th) \
     (rb_thread_save_context(th),\
-     thread_switch((FLUSH_REGISTER_WINDOWS, setjmp((th)->context))))
+     thread_switch((FLUSH_REGISTER_WINDOWS, ckstk(setjmp((th)->context)))))
 
 static void rb_thread_restore_context _((rb_thread_t,int));
 
