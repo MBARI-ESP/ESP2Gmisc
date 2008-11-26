@@ -1,6 +1,11 @@
 #!/bin/bash
-# configure ruby 1.6.8 build for arm-linux -- 12/20/07 brent@mbari.org
-: ${CFLAGS:=-Os}
+# configure ruby 1.6.8 build for arm-linux -- 11/24/08 brent@mbari.org
+# for gcc x86 add:
+# -mpreferred-stack-boundary=2 -fno-stack-protector
+# for gcc x86 4.x add:
+# -fno-inline-functions-called-once
+# to CFLAGS
+: ${CFLAGS:="-Os"}
 : ${CXXFLAGS:=$CFLAGS}
 : ${ARMGCC:=/arm}
 : ${CC:=$ARMGCC/bin/gcc}
