@@ -1,3 +1,20 @@
+Tue Dec  9  8:11:36 2008  Brent Roman  <brent@mbari.org>
+
+     * eval.c:  added Continuation.thread method
+        * cc_mark frees the continuation's stack if its thread is dead
+          avoids recursive gc that segfaults [see Dec 5th, 2007 ruby-core]
+
+        * added cast in PUSH_FRAME() to eliminate gcc 4.2 compiler warnings    
+                   
+        * THREAD_DATA() replaces rb_thread_check() in most contexts
+        
+        * rb_thread_check now complains when passed a Continuation
+          (no longer need redundant check in thgroup_add()
+        
+        * rb_callcc() assigns th->thread before scope_dup()
+          this avoids segfaults if this scope_dup() triggers a gc pass
+        
+
 Fri Aug  8 10:53:52 2008  Tanaka Akira  <akr@fsij.org>
 
 	* lib/resolv.rb: randomize source port and transaction id.
