@@ -6572,6 +6572,7 @@ eval(self, src, scope, file, line)
 
 	    scope_dup(ruby_scope);
 	    for (tag=prot_tag; tag; tag=tag->prev) {
+                if (tag->tag == PROT_THREAD) break;
 		scope_dup(tag->scope);
 	    }
 	    for (vars = ruby_dyna_vars; vars; vars = vars->next) {
@@ -10579,13 +10580,10 @@ static void
 rb_thread_save_context(th)
     rb_thread_t th;
 {
-    VALUE *pos;
     int len;
     static VALUE tval;
 
-    len = ruby_stack_length(&pos);
-    th->stk_len = 0;
-    th->stk_pos = pos;
+    len = ruby_stack_length(th->stk_start,&th->stk_pos);
     if (len > th->stk_max) {
 	VALUE *ptr = realloc(th->stk_ptr, sizeof(VALUE) * len);
 	if (!ptr) rb_memerror();
@@ -12065,6 +12063,7 @@ rb_thread_group(thread)
     th->result = 0;\
     th->flags = 0;\
 \
+    th->stk_start = rb_gc_stack_start;\
     th->stk_ptr = 0;\
     th->stk_len = 0;\
     th->stk_max = 0;\
@@ -12234,6 +12233,16 @@ rb_thread_start_0(fn, arg, th)
 		 "can't start a new thread (frozen ThreadGroup)");
     }
 
+
+    th->stk_start =   /* establish start of new thread's stack */
+#if STACK_GROW_DIRECTION > 0
+      (VALUE *)ruby_frame;
+#elif STACK_GROW_DIRECTION < 0
+      (VALUE *)(ruby_frame+1);
+#else
+      (VALUE *)(ruby_frame+((VALUE *)(&arg)<rb_gc_stack_start))
+#endif
+ 
     if (!thread_init) {
 	thread_init = 1;
 #if defined(HAVE_SETITIMER) || defined(_THREAD_SAFE)
@@ -12277,6 +12286,8 @@ rb_thread_start_0(fn, arg, th)
     PUSH_TAG(PROT_THREAD);
     if ((state = EXEC_TAG()) == 0) {
 	if (THREAD_SAVE_CONTEXT(th) == 0) {
+            ruby_frame->prev = top_frame;     /* hide parent thread's frames */
+            ruby_frame->tmp = 0;           
 	    curr_thread = th;
 	    th->result = (*fn)(arg, th);
 	}
@@ -12388,9 +12399,6 @@ rb_thread_s_new(argc, argv, klass)
     VALUE klass;
 {
     rb_thread_t th = rb_thread_alloc(klass);
-    volatile VALUE *pos;
-
-    pos = th->stk_pos;
     rb_obj_call_init(th->thread, argc, argv);
     if (th->stk_pos == 0) {
 	rb_raise(rb_eThreadError, "uninitialized thread - check `%s#initialize'",
@@ -13082,6 +13090,7 @@ rb_callcc(self)
 
     scope_dup(ruby_scope);
     for (tag=prot_tag; tag; tag=tag->prev) {
+        if (tag->tag == PROT_THREAD) break;
 	scope_dup(tag->scope);
     }
 
