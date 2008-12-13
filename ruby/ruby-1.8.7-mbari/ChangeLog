@@ -3,7 +3,11 @@ Tue Dec 12  6:11:36 2008  Brent Roman  <brent@mbari.org>
         * eval.c:  exclude other thread's stack frames from current one
 
         * gc.c:  STACK_LENGTH macro takes start parameter
-  
+
+        * node.h: added stk_start pointer to ruby thread struct
+
+        * intern.h:  stack_length takes base pointer as parameter
+        
 
 Tue Dec  9  8:11:36 2008  Brent Roman  <brent@mbari.org>
 
