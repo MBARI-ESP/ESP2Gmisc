@@ -1027,7 +1027,14 @@ static struct tag *prot_tag;
 #define PROT_LAMBDA INT2FIX(2)	/* 5 */
 #define PROT_YIELD  INT2FIX(3)	/* 7 */
 
-#define EXEC_TAG()    ruby_setjmp(((void)0), prot_tag->buf)
+#define EXEC_TAG()    up_stk_extent(ruby_setjmp(((void)0), prot_tag->buf))
+
+static inline 
+int up_stk_extent(int status)
+{
+  rb_gc_update_stack_extent();
+  return status;
+}
 
 #define JUMP_TAG(st) do {		\
     ruby_frame = prot_tag->frame;	\
@@ -10419,7 +10426,7 @@ thread_mark(th)
     stkBase = (void *)th->stk_start;
     stkSize = th->stk_len * sizeof(VALUE);
 #if STACK_GROW_DIRECTION == 0
-    if ((VALUE *)&th < rb_gc_stack_start)
+    if (rb_gc_stack_grow_direction < 0)
 #endif
 #if STACK_GROW_DIRECTION <= 0
       stkBase -= stkSize;
@@ -10697,8 +10704,8 @@ rb_thread_switch(n)
     return 1;
 }
 
-#define THREAD_SAVE_CONTEXT(th) \
-    (rb_thread_switch(ruby_setjmp(rb_thread_save_context(th), (th)->context)))
+#define THREAD_SAVE_CONTEXT(th) (rb_thread_switch(up_stk_extent( \
+                  ruby_setjmp(rb_thread_save_context(th), (th)->context))))
 
 NORETURN(static void rb_thread_restore_context _((rb_thread_t,int)));
 NORETURN(NOINLINE(static void rb_thread_restore_context_0(rb_thread_t,int,void*)));
