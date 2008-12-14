@@ -1,3 +1,18 @@
+Tue Dec 13  6:10:36 2008  Brent Roman  <brent@mbari.org>
+
+        * eval.c:  update stack extent just before and after every setjmp
+
+        * gc.c:  replaced rb_gc_stress with gc_getlimit and setlimit
+                 update stack extent after every xmalloc and xrealloc
+                 export rb_gc_grow_direction if not known at compile time
+                 removed dynamic adjustment of malloc_limit
+                 removed workaround for obsolete gcc 2.7.2.3 bug                 
+
+        * signal.h: don't try to clear stress after segsegv.  It's a too late.
+        
+        * rubysig.h:  CHECK_INTS clears ghost references off stack
+
+
 Tue Dec 12  6:11:36 2008  Brent Roman  <brent@mbari.org>
 
         * eval.c:  exclude other thread's stack frames from current one
