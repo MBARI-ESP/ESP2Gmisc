@@ -112,10 +112,10 @@ ruby_xmalloc(size)
 	rb_raise(rb_eNoMemError, "negative allocation size (or too big)");
     }
     if (size == 0) size = 1;
-    malloc_increase += size;
-
-    if (malloc_increase > malloc_limit) {
+    
+    if ((malloc_increase += size) > malloc_limit) {
 	rb_gc();
+        malloc_increase = size;
     }
     RUBY_CRITICAL(mem = malloc(size));
     if (!mem) {
@@ -156,7 +156,10 @@ ruby_xrealloc(ptr, size)
     }
     if (!ptr) return xmalloc(size);
     if (size == 0) size = 1;
-    malloc_increase += size;
+    if ((malloc_increase += size) > malloc_limit) {
+	rb_gc();
+        malloc_increase = size;
+    }
     RUBY_CRITICAL(mem = realloc(ptr, size));
     if (!mem) {
 	rb_gc();
@@ -538,7 +541,7 @@ rbx_reachability_paths(mod, obj)
     int i;
     VALUE result;
     struct gc_list *list;
-    struct FRAME * volatile frame;
+    struct FRAME * frame;
     jmp_buf save_regs_gc_mark;
 #ifdef C_ALLOCA
     VALUE stack_end;
@@ -1217,7 +1220,7 @@ void
 rb_gc()
 {
     struct gc_list *list;
-    struct FRAME * volatile frame;
+    struct FRAME * frame;
     jmp_buf save_regs_gc_mark;
 #ifdef C_ALLOCA
     VALUE stack_end;

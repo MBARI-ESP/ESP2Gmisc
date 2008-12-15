@@ -7656,25 +7656,28 @@ thread_mark(th)
     }
 }
 
+#define THREAD_DATA(threadObject)  ((rb_thread_t)RDATA(threadObject)->data)
+
+static inline void
+cc_purge(cc)
+    rb_thread_t cc;
+{  /* free continuation's stack if it has just died */
+  if (cc->thread != Qnil && THREAD_DATA(cc->thread)->status == THREAD_KILLED) {
+    cc->thread = Qnil;
+    if (cc->stk_ptr) {  //can't possibly activate this stack, so free it.
+      free(cc->stk_ptr);
+      cc->stk_ptr = 0;
+      cc->stk_len = 0;
+    }
+  }  
+}
+
 static void
 cc_mark(cc)
     rb_thread_t cc;
 {  /* mark this continuation's stack only if its parent thread is still alive */
-    if (cc->thread != Qnil) {
-      rb_thread_t parent = DATA_PTR(cc->thread);
-      if (parent->status == THREAD_KILLED) {
-        cc->thread = Qnil;
-        if (cc->stk_ptr) {  //can't possibly activate this stack, so free it.
-          free(cc->stk_ptr);
-          cc->stk_ptr = 0;
-          cc->stk_len = 0;
-        }
-      }   
-/*    else                   
-        thread_mark(parent);  //no need:  active threads are marked elsewhere
-*/
-    }
-    thread_mark(cc);
+  cc_purge(cc);
+  thread_mark(cc);
 }
 
 void
@@ -7700,8 +7703,6 @@ thread_free(th)
     }
     if (th != main_thread) free(th);
 }
-
-#define THREAD_DATA(threadObject)  ((rb_thread_t)RDATA(threadObject)->data)
 
 static rb_thread_t
 rb_thread_check(data)
@@ -9303,8 +9304,11 @@ rb_callcc(self)
 static VALUE
 rb_cont_thread(cont)
   VALUE cont;
+// return the active parent thread, nil if it has died
 {
-  return THREAD_DATA(cont)->thread;  //nil if parent thread is dead
+  rb_thread_t th = THREAD_DATA(cont);
+  cc_purge(th);
+  return th->thread;
 }
 
 static VALUE
