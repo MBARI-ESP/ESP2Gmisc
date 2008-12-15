@@ -1,3 +1,11 @@
+Fri Nov 27 16:11:36 2008  Brent Roman  <brent@mbari.org>
+
+     * eval.c:  added Continuation.thread method
+                rb_thread_check frees the continuation's stack
+                if it refers to a dead thread
+                clear stack on thread switches
+                   
+                   
 Fri Dec 14 21:11:36 2007  Brent Roman  <brent@mbari.org>
 
         * eval.c:  rb_thread_check compares dmark rather than dfree
