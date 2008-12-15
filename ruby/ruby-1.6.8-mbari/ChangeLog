@@ -1,3 +1,12 @@
+Fri Dec 14 16:11:36 2008  Brent Roman  <brent@mbari.org>
+
+     * eval.c:  Continuation#thread calls cc_purge()
+
+     * gc.c:  ruby_xrealloc() updates malloc_increase and 
+              garbage collects when it exceeds malloc_limit
+              got rid of obsolete "volatile" workarounds for gcc 2.7.x
+
+              
 Fri Nov 27 16:11:36 2008  Brent Roman  <brent@mbari.org>
 
      * eval.c:  added Continuation.thread method
