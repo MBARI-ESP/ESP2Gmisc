@@ -1921,8 +1921,8 @@ ev_const_defined(cref, id, self)
     return rb_const_defined(cref->nd_clss, id);
 }
 
-static VALUE
-ev_const_get(cref, id, self)
+NOINLINE(static VALUE
+ev_const_get(cref, id, self))
     NODE *cref;
     ID id;
     VALUE self;
@@ -3844,6 +3844,28 @@ eval_defined(self, node))
 }
 
 
+NOINLINE (static void
+eval_cvar_set(result, node, bool))
+  VALUE result, bool;
+  NODE *node;
+{
+  rb_cvar_set(cvar_cbase(), node->nd_vid, result, bool);
+}
+
+
+NOINLINE (static void
+eval_cdecl(self, node, result))
+  VALUE self, result;
+  NODE *node;
+{
+  if (node->nd_vid == 0)
+      rb_const_set(class_prefix(self, node->nd_else), 
+                          node->nd_else->nd_mid, result);
+  else
+      rb_const_set(ruby_cbase, node->nd_vid, result);
+}
+
+
 static VALUE
 rb_eval(self, node)
   VALUE self;
@@ -4127,26 +4149,21 @@ again:
 	break;
 
       case NODE_CDECL:
-	result = rb_eval(self, node->nd_value);
-	if (node->nd_vid == 0) {
-	    rb_const_set(class_prefix(self, node->nd_else), node->nd_else->nd_mid, result);
-	}
-	else {
-	    rb_const_set(ruby_cbase, node->nd_vid, result);
-	}
+        result = rb_eval(self, node->nd_value);
+        eval_cdecl(self, node, result);
 	break;
 
       case NODE_CVDECL:
 	if (NIL_P(ruby_cbase)) {
 	    rb_raise(rb_eTypeError, "no class/module to define class variable");
 	}
-	result = rb_eval(self, node->nd_value);
-	rb_cvar_set(cvar_cbase(), node->nd_vid, result, Qtrue);
+        result = rb_eval(self, node->nd_value);
+        eval_cvar_set(result, node, Qtrue);
 	break;
 
       case NODE_CVASGN:
-	result = rb_eval(self, node->nd_value);
-	rb_cvar_set(cvar_cbase(), node->nd_vid, result, Qfalse);
+        result = rb_eval(self, node->nd_value);
+        eval_cvar_set(result, node, Qfalse);
 	break;
 
       case NODE_LVAR:
