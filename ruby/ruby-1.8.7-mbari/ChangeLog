@@ -1,3 +1,10 @@
+Tue Dec 15  9:15:36 2008  Brent Roman  <brent@mbari.org>
+
+        * eval.c:  factored rb_eval() into many separate non-inlined
+                  functions to reduce the size of its stack frame when
+                  compiled with gcc.
+
+
 Tue Dec 13  6:10:36 2008  Brent Roman  <brent@mbari.org>
 
         * eval.c:  update stack extent just before and after every setjmp
