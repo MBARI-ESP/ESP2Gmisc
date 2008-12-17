@@ -13257,6 +13257,32 @@ rb_thread_atfork()
 
 VALUE rb_cCont;
 
+
+static rb_thread_t prep4callcc(void)
+{
+  rb_thread_t th;
+  struct tag *tag;
+  struct RVarmap *vars;
+
+  THREAD_ALLOC(th);
+  /* must finish th initialization before any possible gc */
+  th->thread = curr_thread->thread;    /* brent@mbari.org */
+  th->thgroup = cont_protect;
+
+  scope_dup(ruby_scope);
+  for (tag=prot_tag; tag; tag=tag->prev) {
+      if (tag->tag == PROT_THREAD) break;
+      scope_dup(tag->scope);
+  }
+
+  for (vars = ruby_dyna_vars; vars; vars = vars->next) {
+      if (FL_TEST(vars, DVAR_DONT_RECYCLE)) break;
+      FL_SET(vars, DVAR_DONT_RECYCLE);
+  }
+  return th;
+}
+
+
 /*
  *  call-seq:
  *     callcc {|cont| block }   =>  obj
@@ -13275,36 +13301,13 @@ static VALUE
 rb_callcc(self)
     VALUE self;
 {
-    volatile VALUE cont;
-    rb_thread_t th;
-    volatile rb_thread_t th_save;
-    struct tag *tag;
-    struct RVarmap *vars;
-
-    THREAD_ALLOC(th);
-    /* must finish th initialization before any possible gc */
-    th->thread = curr_thread->thread;    /* brent@mbari.org */
-    th->thgroup = cont_protect;
-    cont = Data_Wrap_Struct(rb_cCont, cc_mark, thread_free, th);
-
-    scope_dup(ruby_scope);
-    for (tag=prot_tag; tag; tag=tag->prev) {
-        if (tag->tag == PROT_THREAD) break;
-	scope_dup(tag->scope);
-    }
-
-    for (vars = ruby_dyna_vars; vars; vars = vars->next) {
-	if (FL_TEST(vars, DVAR_DONT_RECYCLE)) break;
-	FL_SET(vars, DVAR_DONT_RECYCLE);
-    }
-    th_save = th;
-    if (THREAD_SAVE_CONTEXT(th)) {
-	return th_save->result;
-    }
-    else {
-	return rb_yield(cont);
-    }
+    rb_thread_t th = prep4callcc();
+    return THREAD_SAVE_CONTEXT(th) ?
+      th->result
+          :
+      rb_yield(Data_Wrap_Struct(rb_cCont, cc_mark, thread_free, th));
 }
+
 
 /*
  *  call-seq:
