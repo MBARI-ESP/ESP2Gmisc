@@ -935,12 +935,7 @@ error_print()
     if (NIL_P(ruby_errinfo)) return;
 
     PUSH_TAG(PROT_NONE);
-    if (EXEC_TAG() == 0) {
-	errat = get_backtrace(ruby_errinfo);
-    }
-    else {
-	errat = Qnil;
-    }
+    errat = EXEC_TAG() == 0 ? get_backtrace(ruby_errinfo) : Qnil;
     POP_TAG();
     if (NIL_P(errat)) {
 	if (ruby_sourcefile)
@@ -1461,7 +1456,7 @@ superclass(self, node)
 
 #define ruby_cbase (RNODE(ruby_frame->cbase)->nd_clss)
 
-static VALUE
+static VALUE noinline
 ev_const_defined(cref, id, self)
     NODE *cref;
     ID id;
@@ -2055,7 +2050,16 @@ static void return_check _((void));
 #define return_value(v) prot_tag->retval = (v)
 
 
-static VALUE
+static noinline VALUE eval_match2(self, node)
+  VALUE self;
+  NODE *node;
+{
+    VALUE l = rb_eval(self,node->nd_recv);
+    VALUE r = rb_eval(self,node->nd_value);
+    return rb_reg_match(l, r);
+}
+
+static noinline VALUE
 eval_match3(self, node)
   VALUE self;
   NODE *node;
@@ -2066,7 +2070,7 @@ eval_match3(self, node)
 }
 
 
-static int
+static noinline int
 eval_opt_n(self, node)
   VALUE self;
   NODE *node;
@@ -2098,7 +2102,7 @@ eval_opt_n(self, node)
 }
 
 
-static int
+static noinline int
 eval_while(self, node)
   VALUE self;
   NODE *node;
@@ -2135,7 +2139,7 @@ while_out:
 }
 
 
-static int
+static noinline int
 eval_until(self, node)
   VALUE self;
   NODE *node;
@@ -2171,14 +2175,13 @@ until_out:
 }
 
 
-static NODE *
+static noinline NODE *
 eval_when(self, node)
   VALUE self;
   NODE *node;
 {
-  while (node) {
-      NODE *tag;
-      tag = node->nd_head;
+  do {
+      NODE *tag = node->nd_head;
       while (tag) {
 	  if (trace_func) {
 	      call_trace_func("line", tag->nd_file, nd_line(tag), self,
@@ -2201,21 +2204,17 @@ eval_when(self, node)
 	  if (RTEST(rb_eval(self, tag->nd_head))) return node->nd_body;
 	  tag = tag->nd_next;
       }
-      node = node->nd_next;
-      if (nd_type(node) != NODE_WHEN) break;
-  }
+  } while ((node = node->nd_next) && nd_type(node) == NODE_WHEN);
   return node;
 }
 
 
-static NODE *
+static noinline NODE *
 eval_case(self, node)
   VALUE self;
   NODE *node;
 {
-  VALUE val;
-
-  val = rb_eval(self, node->nd_head);
+  VALUE val = rb_eval(self, node->nd_head);
   node = node->nd_body;
   while (node) {
       NODE *tag;
@@ -2252,12 +2251,12 @@ eval_case(self, node)
 }
 
 
-static VALUE
+static noinline VALUE
 eval_iter(self, node)
   VALUE self;
   NODE *node;
 {
-  int state = 0;
+  int state;
   volatile VALUE result;
   
   iter_retry:
@@ -2314,7 +2313,7 @@ eval_iter(self, node)
 }
 
 
-static VALUE
+static noinline VALUE
 eval_rescue(self, node)
   VALUE self;
   NODE *node;
@@ -2367,7 +2366,7 @@ eval_rescue(self, node)
 }
 
 
-static VALUE
+static noinline VALUE
 eval_ensure(self, node)
   VALUE self;
   NODE *node;
@@ -2393,7 +2392,7 @@ eval_ensure(self, node)
 }
 
 
-static VALUE
+static noinline VALUE
 eval_call(self, node)
   VALUE self;
   NODE *node;
@@ -2412,7 +2411,7 @@ eval_call(self, node)
 }
 
 
-static VALUE
+static noinline VALUE
 eval_fcall(self, node)
   VALUE self;
   NODE *node;      
@@ -2429,7 +2428,7 @@ eval_fcall(self, node)
 }
 
 
-static VALUE
+static noinline VALUE
 eval_super(self, node)
   VALUE self;
   NODE *node;      
@@ -2466,7 +2465,7 @@ eval_super(self, node)
 }
 
 
-static VALUE
+static noinline VALUE
 eval_scope(self, node)
   VALUE self;
   NODE *node;
@@ -2512,7 +2511,7 @@ eval_scope(self, node)
 }
 
 
-static VALUE
+static noinline VALUE
 eval_asgn1(self, node)
   VALUE self;
   NODE *node;
@@ -2543,7 +2542,7 @@ eval_asgn1(self, node)
 }
 
 
-static VALUE
+static noinline VALUE
 eval_asgn2(self, node)
   VALUE self;
   NODE *node;
@@ -2571,7 +2570,7 @@ eval_asgn2(self, node)
 }
 
 
-static VALUE
+static noinline VALUE
 eval_colon2(self, node)
   VALUE self;
   NODE *node;
@@ -2590,7 +2589,7 @@ eval_colon2(self, node)
 }
 
 
-static VALUE
+static noinline VALUE
 eval_hash(self, node)
   VALUE self;
   NODE *node;
@@ -2613,7 +2612,7 @@ eval_hash(self, node)
 }
 
 
-static VALUE
+static noinline VALUE
 eval_array(self, node)
   VALUE self;
   NODE *node;
@@ -2632,7 +2631,7 @@ eval_array(self, node)
 }
 
 
-static VALUE
+static noinline VALUE
 eval_regx(self, node)
   VALUE self;
   NODE *node;
@@ -2702,7 +2701,7 @@ eval_regx(self, node)
 }
 
         
-static VALUE
+static noinline VALUE
 eval_defn(self, node)
   VALUE self;
   NODE *node;
@@ -2764,7 +2763,7 @@ eval_defn(self, node)
 }
 
 
-static VALUE
+static noinline VALUE
 eval_defs(self, node)
   VALUE self;
   NODE *node;
@@ -2802,7 +2801,7 @@ eval_defs(self, node)
 }
 
 
-static VALUE
+static noinline VALUE
 eval_class(self, node)
   VALUE self;
   NODE *node;
@@ -2852,7 +2851,7 @@ eval_class(self, node)
 }
 
 
-static VALUE
+static noinline VALUE
 eval_sclass(self, node)
   VALUE self;
   NODE *node;
@@ -2891,7 +2890,7 @@ eval_sclass(self, node)
 }
 
 
-static VALUE
+static noinline VALUE
 eval_module(self, node)
   VALUE self;
   NODE *node;
@@ -2928,7 +2927,7 @@ eval_module(self, node)
 }
 
 
-static VALUE
+static noinline VALUE
 eval_defined(self, node)
   VALUE self;
   NODE *node;
@@ -2939,140 +2938,134 @@ eval_defined(self, node)
     return desc ? rb_str_new2(desc) : Qnil;
 }
 
-
 static VALUE
 rb_eval(self, node)
-    VALUE self;
-    NODE *node;
+  VALUE self;
+  NODE *node;
 {
-    VALUE result;
-    int state;
+  VALUE result;
+  int state;
 
-  again:
-    result = Qnil;
-  evalNode:
-    if (!node) goto finish;
-
+again:
+  CHECK_INTS;
+  result = Qnil;
+  if (node) {
     switch (nd_type(node)) {
       case NODE_BLOCK:
-	while (node->nd_next) {
+        while (node->nd_next) {
 	    rb_eval(self, node->nd_head);
 	    node = node->nd_next;
-	}
-	node = node->nd_head;
-	goto evalNode;
+        }
+        node = node->nd_head;
+        goto again;
 
       case NODE_POSTEXE:
-	rb_f_END();
-	nd_set_type(node, NODE_NIL); /* exec just once */
-	break;
+        rb_f_END();
+        nd_set_type(node, NODE_NIL); /* exec just once */
+        break;
 
-	/* begin .. end without clauses */
+        /* begin .. end without clauses */
       case NODE_BEGIN:
-	node = node->nd_body;
-	goto evalNode;
+        node = node->nd_body;
+        goto again;
 
-	/* nodes for speed-up(default match) */
+        /* nodes for speed-up(default match) */
       case NODE_MATCH:
-	result = rb_reg_match2(node->nd_head->nd_lit);
-	break;
+        result = rb_reg_match2(node->nd_head->nd_lit);
+        break;
 
-	/* nodes for speed-up(literal match) */
-      case NODE_MATCH2:
-	result = rb_reg_match(rb_eval(self,node->nd_recv),
-			      rb_eval(self,node->nd_value));
-	break;
+        /* nodes for speed-up(literal match) */
+      case NODE_MATCH2:        
+        result = eval_match2(self, node);
+        break;
 
-	/* nodes for speed-up(literal match) */
+        /* nodes for speed-up(literal match) */
       case NODE_MATCH3:
         result = eval_match3(self,node);
-	break;
+        break;
 
-	/* node for speed-up(top-level loop for -n/-p) */
+        /* node for speed-up(top-level loop for -n/-p) */
       case NODE_OPT_N:
-        if (!(state = eval_opt_n(self, node))) break;
-        JUMP_TAG(state);
+        if (state = eval_opt_n(self, node)) JUMP_TAG(state);
+        break;
 
       case NODE_SELF:
-	result = self;
+        result = self;
         break;
 
       case NODE_NIL:
-	break;
+        break;
 
       case NODE_TRUE:
-	result = Qtrue;
+        result = Qtrue;
         break;
 
       case NODE_FALSE:
-	result = Qfalse;
+        result = Qfalse;
         break;
 
       case NODE_IF:
-	ruby_sourceline = nd_line(node);
-	node = RTEST(rb_eval(self, node->nd_cond)) ? 
+        ruby_sourceline = nd_line(node);
+        node = RTEST(rb_eval(self, node->nd_cond)) ? 
                                      node->nd_body : node->nd_else;
-	goto evalNode;
+        goto again;
 
       case NODE_WHEN:
-        if (!(node = eval_when(self, node))) break;
-        goto evalNode;
+        if (node = eval_when(self, node)) goto again;
+        break;
 
       case NODE_CASE:
-        if (!(node = eval_case(self, node))) break;
-        goto evalNode;
+        if (node = eval_case(self, node)) goto again;
+        break;
 
       case NODE_WHILE:
-        if (!(state = eval_while(self,node))) break;
-        JUMP_TAG(state);
+        if (state = eval_while(self,node)) JUMP_TAG(state);
+        break;
 
       case NODE_UNTIL:
-        if (!(state = eval_until(self,node))) break;
-        JUMP_TAG(state);
+        if (state = eval_until(self,node)) JUMP_TAG(state);
+        break;
 
       case NODE_BLOCK_PASS:
-	result = block_pass(self, node);
-	break;
+        result = block_pass(self, node);
+        break;
 
       case NODE_ITER:
       case NODE_FOR:
         result = eval_iter(self,node);
-	break;
+        break;
 
       case NODE_BREAK:
-	JUMP_TAG(TAG_BREAK);
-	break;
+        JUMP_TAG(TAG_BREAK);
+        break;
 
       case NODE_NEXT:
-	CHECK_INTS;
-	JUMP_TAG(TAG_NEXT);
-	break;
+        JUMP_TAG(TAG_NEXT);
+        break;
 
       case NODE_REDO:
-	CHECK_INTS;
-	JUMP_TAG(TAG_REDO);
-	break;
+        JUMP_TAG(TAG_REDO);
+        break;
 
       case NODE_RETRY:
-	CHECK_INTS;
-	JUMP_TAG(TAG_RETRY);
-	break;
+        JUMP_TAG(TAG_RETRY);
+        break;
 
       case NODE_RESTARGS:
-	result = rb_eval(self, node->nd_head);
-	if (TYPE(result) != T_ARRAY)
+        result = rb_eval(self, node->nd_head);
+        if (TYPE(result) != T_ARRAY)
 	  result = rb_Array(result);
-	break;
+        break;
 
       case NODE_YIELD:
-	if (node->nd_stts) {
+        if (node->nd_stts) {
 	    result = rb_eval(self, node->nd_stts);
 	    if (nd_type(node->nd_stts) == NODE_RESTARGS && 
                 RARRAY(result)->len == 1) 
 	      result = RARRAY(result)->ptr[0];
-	}
-      	result = rb_yield_0(result, 0, 0, 0);
-	break;
+        }
+        result = rb_yield_0(result, 0, 0, 0);
+        break;
 
       case NODE_RESCUE:
         result = eval_rescue(self,node);
@@ -3080,241 +3073,240 @@ rb_eval(self, node)
 
       case NODE_ENSURE:
         result = eval_ensure(self,node);
-	break;
+        break;
 
       case NODE_AND:
-	result = rb_eval(self, node->nd_1st);
-	if (!RTEST(result)) break;
-	node = node->nd_2nd;
-	goto again;
+        result = rb_eval(self, node->nd_1st);
+        if (!RTEST(result)) break;
+        node = node->nd_2nd;
+        goto again;
 
       case NODE_OR:
-	result = rb_eval(self, node->nd_1st);
-	if (RTEST(result)) break;
-	node = node->nd_2nd;
-	goto again;
+        result = rb_eval(self, node->nd_1st);
+        if (RTEST(result)) break;
+        node = node->nd_2nd;
+        goto again;
 
       case NODE_NOT:
-	if (RTEST(rb_eval(self, node->nd_body))) result = Qfalse;
-	else result = Qtrue;
-	break;
+        result = RTEST(rb_eval(self, node->nd_body)) ? Qfalse : Qtrue;
+        break;
 
       case NODE_DOT2:
       case NODE_DOT3:
-	result = rb_range_new(rb_eval(self, node->nd_beg),
+        result = rb_range_new(rb_eval(self, node->nd_beg),
 			      rb_eval(self, node->nd_end),
 			      nd_type(node) == NODE_DOT3);
-	if (node->nd_state) break;
-	if (nd_type(node->nd_beg) == NODE_LIT && FIXNUM_P(node->nd_beg->nd_lit) &&
+        if (node->nd_state) break;
+        if (nd_type(node->nd_beg) == NODE_LIT && FIXNUM_P(node->nd_beg->nd_lit) &&
 	    nd_type(node->nd_end) == NODE_LIT && FIXNUM_P(node->nd_end->nd_lit))
-	{
+        {
 	    nd_set_type(node, NODE_LIT);
 	    node->nd_lit = result;
-	}
-	else {
+        }
+        else {
 	    node->nd_state = 1;
-	}
-	break;
+        }
+        break;
 
       case NODE_FLIP2:		/* like AWK */
-	if (ruby_scope->local_vars == 0) {
+        if (ruby_scope->local_vars == 0) {
 	    rb_bug("unexpected local variable");
-	}
-	if (!RTEST(ruby_scope->local_vars[node->nd_cnt])) {
+        }
+        if (!RTEST(ruby_scope->local_vars[node->nd_cnt])) {
 	    if (RTEST(rb_eval(self, node->nd_beg))) {
-		ruby_scope->local_vars[node->nd_cnt] = 
+	        ruby_scope->local_vars[node->nd_cnt] = 
 		    RTEST(rb_eval(self, node->nd_end))?Qfalse:Qtrue;
-		result = Qtrue;
+	        result = Qtrue;
 	    }
 	    else {
-		result = Qfalse;
+	        result = Qfalse;
 	    }
-	}
-	else {
+        }
+        else {
 	    if (RTEST(rb_eval(self, node->nd_end))) {
-		ruby_scope->local_vars[node->nd_cnt] = Qfalse;
+	        ruby_scope->local_vars[node->nd_cnt] = Qfalse;
 	    }
 	    result = Qtrue;
-	}
-	break;
+        }
+        break;
 
       case NODE_FLIP3:		/* like SED */
-	if (ruby_scope->local_vars == 0) {
+        if (ruby_scope->local_vars == 0) {
 	    rb_bug("unexpected local variable");
-	}
-	if (!RTEST(ruby_scope->local_vars[node->nd_cnt])) {
+        }
+        if (!RTEST(ruby_scope->local_vars[node->nd_cnt])) {
 	    result = RTEST(rb_eval(self, node->nd_beg)) ? Qtrue : Qfalse;
 	    ruby_scope->local_vars[node->nd_cnt] = result;
-	}
-	else {
+        }
+        else {
 	    if (RTEST(rb_eval(self, node->nd_end))) {
-		ruby_scope->local_vars[node->nd_cnt] = Qfalse;
+	        ruby_scope->local_vars[node->nd_cnt] = Qfalse;
 	    }
 	    result = Qtrue;
-	}
-	break;
+        }
+        break;
 
       case NODE_RETURN:
- 	return_value(node->nd_stts ? rb_eval(self, node->nd_stts) : Qnil);
-	return_check();
-	JUMP_TAG(TAG_RETURN);
-	break;
+        return_value(node->nd_stts ? rb_eval(self, node->nd_stts) : Qnil);
+        return_check();
+        JUMP_TAG(TAG_RETURN);
+        break;
 
       case NODE_ARGSCAT:
-	result = rb_ary_concat(rb_eval(self, node->nd_head),
+        result = rb_ary_concat(rb_eval(self, node->nd_head),
 			       rb_eval(self, node->nd_body));
-	break;
+        break;
 
       case NODE_ARGSPUSH:
-	result = rb_ary_push(rb_obj_dup(rb_eval(self, node->nd_head)),
+        result = rb_ary_push(rb_obj_dup(rb_eval(self, node->nd_head)),
 			     rb_eval(self, node->nd_body));
-	break;
+        break;
 
       case NODE_CALL:
         result = eval_call(self,node);
-	break;
+        break;
 
       case NODE_FCALL:
         result = eval_fcall(self,node);
-	break;
+        break;
 
       case NODE_VCALL:
-	result = rb_call(CLASS_OF(self),self,node->nd_mid,0,0,2);
-	break;
+        result = rb_call(CLASS_OF(self),self,node->nd_mid,0,0,2);
+        break;
 
       case NODE_SUPER:
       case NODE_ZSUPER:
         result = eval_super(self,node);
-	break;
+        break;
 
       case NODE_SCOPE:
         result = eval_scope(self,node);
-	break;
+        break;
 
       case NODE_OP_ASGN1:
         result = eval_asgn1(self,node);
-	break;
+        break;
 
       case NODE_OP_ASGN2:
         result = eval_asgn2(self,node);
         break;
 
       case NODE_OP_ASGN_AND:
-	result = rb_eval(self, node->nd_head);
-	if (!RTEST(result)) break;
-	node = node->nd_value;
-	goto again;
+        result = rb_eval(self, node->nd_head);
+        if (!RTEST(result)) break;
+        node = node->nd_value;
+        goto again;
 
       case NODE_OP_ASGN_OR:
-	if ((node->nd_aid && !rb_ivar_defined(self, node->nd_aid)) ||
+        if ((node->nd_aid && !rb_ivar_defined(self, node->nd_aid)) ||
 	    !RTEST(result = rb_eval(self, node->nd_head))) {
 	    node = node->nd_value;
 	    goto again;
-	}
-	break;
+        }
+        break;
 
       case NODE_MASGN:
-	result = massign(self, node, rb_eval(self, node->nd_value),0);
-	break;
+        result = massign(self, node, rb_eval(self, node->nd_value),0);
+        break;
 
       case NODE_LASGN:
-	if (ruby_scope->local_vars == 0)
+        if (ruby_scope->local_vars == 0)
 	    rb_bug("unexpected local variable assignment");
-	result = rb_eval(self, node->nd_value);
-	ruby_scope->local_vars[node->nd_cnt] = result;
-	break;
+        result = rb_eval(self, node->nd_value);
+        ruby_scope->local_vars[node->nd_cnt] = result;
+        break;
 
       case NODE_DASGN:
-	result = rb_eval(self, node->nd_value);
-	dvar_asgn(node->nd_vid, result);
-	break;
+        result = rb_eval(self, node->nd_value);
+        dvar_asgn(node->nd_vid, result);
+        break;
 
       case NODE_DASGN_CURR:
-	result = rb_eval(self, node->nd_value);
-	dvar_asgn_curr(node->nd_vid, result);
-	break;
+        result = rb_eval(self, node->nd_value);
+        dvar_asgn_curr(node->nd_vid, result);
+        break;
 
       case NODE_GASGN:
-	result = rb_eval(self, node->nd_value);
-	rb_gvar_set(node->nd_entry, result);
-	break;
+        result = rb_eval(self, node->nd_value);
+        rb_gvar_set(node->nd_entry, result);
+        break;
 
       case NODE_IASGN:
-	result = rb_eval(self, node->nd_value);
-	rb_ivar_set(self, node->nd_vid, result);
-	break;
+        result = rb_eval(self, node->nd_value);
+        rb_ivar_set(self, node->nd_vid, result);
+        break;
 
       case NODE_CDECL:
-	if (NIL_P(ruby_class)) {
+        if (NIL_P(ruby_class)) {
 	    rb_raise(rb_eTypeError, "no class/module to define constant");
-	}
-	result = rb_eval(self, node->nd_value);
-	rb_const_set(ruby_class, node->nd_vid, result);
-	break;
+        }
+        result = rb_eval(self, node->nd_value);
+        rb_const_set(ruby_class, node->nd_vid, result);
+        break;
 
       case NODE_CVDECL:
-	if (NIL_P(ruby_cbase)) {
+        if (NIL_P(ruby_cbase)) {
 	    rb_raise(rb_eTypeError, "no class/module to define class variable");
-	}
-	result = rb_eval(self, node->nd_value);
-	rb_cvar_declare(cvar_cbase(), node->nd_vid, result);
-	break;
+        }
+        result = rb_eval(self, node->nd_value);
+        rb_cvar_declare(cvar_cbase(), node->nd_vid, result);
+        break;
 
       case NODE_CVASGN:
-	result = rb_eval(self, node->nd_value);
-	rb_cvar_set(cvar_cbase(), node->nd_vid, result);
-	break;
+        result = rb_eval(self, node->nd_value);
+        rb_cvar_set(cvar_cbase(), node->nd_vid, result);
+        break;
 
       case NODE_LVAR:
-	if (ruby_scope->local_vars == 0) {
+        if (ruby_scope->local_vars == 0) {
 	    rb_bug("unexpected local variable");
-	}
-	result = ruby_scope->local_vars[node->nd_cnt];
-	break;
+        }
+        result = ruby_scope->local_vars[node->nd_cnt];
+        break;
 
       case NODE_DVAR:
-	result = rb_dvar_ref(node->nd_vid);
-	break;
+        result = rb_dvar_ref(node->nd_vid);
+        break;
 
       case NODE_GVAR:
-	result = rb_gvar_get(node->nd_entry);
-	break;
+        result = rb_gvar_get(node->nd_entry);
+        break;
 
       case NODE_IVAR:
-	result = rb_ivar_get(self, node->nd_vid);
-	break;
+        result = rb_ivar_get(self, node->nd_vid);
+        break;
 
       case NODE_CONST:
-	result = ev_const_get(RNODE(ruby_frame->cbase), node->nd_vid, self);
-	break;
+        result = ev_const_get(RNODE(ruby_frame->cbase), node->nd_vid, self);
+        break;
 
       case NODE_CVAR:
-	result = rb_cvar_get(cvar_cbase(), node->nd_vid);
-	break;
+        result = rb_cvar_get(cvar_cbase(), node->nd_vid);
+        break;
 
       case NODE_BLOCK_ARG:
-	if (ruby_scope->local_vars == 0)
+        if (ruby_scope->local_vars == 0)
 	    rb_bug("unexpected block argument");
-	if (rb_block_given_p()) {
+        if (rb_block_given_p()) {
 	    result = rb_f_lambda();
 	    ruby_scope->local_vars[node->nd_cnt] = result;
-	}
-	break;
+        }
+        break;
 
       case NODE_COLON2:
         result = eval_colon2(self,node);
-	break;
+        break;
 
       case NODE_COLON3:
-	result = rb_const_get_at(rb_cObject, node->nd_mid);
-	break;
+        result = rb_const_get_at(rb_cObject, node->nd_mid);
+        break;
 
       case NODE_NTH_REF:
-	result = rb_reg_nth_match(node->nd_nth, MATCH_DATA);
-	break;
+        result = rb_reg_nth_match(node->nd_nth, MATCH_DATA);
+        break;
 
       case NODE_BACK_REF:
-	switch (node->nd_nth) {
+        switch (node->nd_nth) {
 	  case '&':
 	    result = rb_reg_last_match(MATCH_DATA);
 	    break;
@@ -3329,109 +3321,108 @@ rb_eval(self, node)
 	    break;
 	  default:
 	    rb_bug("unexpected back-ref");
-	}
-	break;
+        }
+        break;
 
       case NODE_HASH:
         result = eval_hash(self,node);
-	break;
+        break;
 
       case NODE_ZARRAY:		/* zero length list */
-	result = rb_ary_new();
-	break;
+        result = rb_ary_new();
+        break;
 
       case NODE_ARRAY:
         result = eval_array(self,node);
-	break;
+        break;
 
       case NODE_STR:
-	result = rb_str_new3(node->nd_lit);
-	break;
+        result = rb_str_new3(node->nd_lit);
+        break;
 
       case NODE_DSTR:
       case NODE_DXSTR:
       case NODE_DREGX:
       case NODE_DREGX_ONCE:
         result = eval_regx(self,node);
-	break;
+        break;
 
       case NODE_XSTR:
-	result = rb_funcall(self, '`', 1, node->nd_lit);
-	break;
+        result = rb_funcall(self, '`', 1, node->nd_lit);
+        break;
 
       case NODE_LIT:
-	result = node->nd_lit;
-	break;
+        result = node->nd_lit;
+        break;
 
       case NODE_ATTRSET:
-	if (ruby_frame->argc != 1)
+        if (ruby_frame->argc != 1)
 	    rb_raise(rb_eArgError, "wrong # of arguments(%d for 1)",
 		     ruby_frame->argc);
-	result = rb_ivar_set(self, node->nd_vid, ruby_frame->argv[0]);
-	break;
+        result = rb_ivar_set(self, node->nd_vid, ruby_frame->argv[0]);
+        break;
 
       case NODE_DEFN:
-	if (node->nd_defn) 
+        if (node->nd_defn) 
           result = eval_defn(self,node);
-	break;
+        break;
 
       case NODE_DEFS:
-	if (node->nd_defn) 
+        if (node->nd_defn) 
           result = eval_defs(self,node);
         break;
 
       case NODE_UNDEF:
-	if (NIL_P(ruby_class)) {
+        if (NIL_P(ruby_class)) {
 	    rb_raise(rb_eTypeError, "no class to undef method");
-	}
-	rb_undef(ruby_class, node->nd_mid);
-	break;
+        }
+        rb_undef(ruby_class, node->nd_mid);
+        break;
 
       case NODE_ALIAS:
-	if (NIL_P(ruby_class)) {
+        if (NIL_P(ruby_class)) {
 	    rb_raise(rb_eTypeError, "no class to make alias");
-	}
-	rb_alias(ruby_class, node->nd_new, node->nd_old);
-	rb_funcall(ruby_class, added, 1, ID2SYM(node->nd_mid));
-	break;
+        }
+        rb_alias(ruby_class, node->nd_new, node->nd_old);
+        rb_funcall(ruby_class, added, 1, ID2SYM(node->nd_mid));
+        break;
 
       case NODE_VALIAS:
-	rb_alias_variable(node->nd_new, node->nd_old);
-	break;
+        rb_alias_variable(node->nd_new, node->nd_old);
+        break;
 
       case NODE_CLASS:
         result = eval_class(self,node);
-	break;
+        break;
 
       case NODE_MODULE:
         result = eval_module(self,node);
-	break;
+        break;
 
       case NODE_SCLASS:
         result = eval_sclass(self,node);
-	break;
+        break;
 
       case NODE_DEFINED:
         result = eval_defined(self,node);
-	break;
+        break;
 
     case NODE_NEWLINE:
-	ruby_sourcefile = node->nd_file;
-	ruby_sourceline = node->nd_nth;
-	if (trace_func) {
+        ruby_sourcefile = node->nd_file;
+        ruby_sourceline = node->nd_nth;
+        if (trace_func) {
 	    call_trace_func("line", ruby_sourcefile, ruby_sourceline, self,
 			    ruby_frame->last_func,
 			    ruby_frame->last_class);	
-	}
-	node = node->nd_next;
-	goto evalNode;
+        }
+        node = node->nd_next;
+        goto again;
 
       default:
-	rb_bug("unknown node type %d", nd_type(node));
+        rb_bug("unknown node type %d", nd_type(node));
     }
-  finish:
-    CHECK_INTS;
-    return result;
+  }
+  return result;
 }
 
 static VALUE
