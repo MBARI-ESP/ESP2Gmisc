@@ -542,15 +542,15 @@ stack_end_address(VALUE **stack_end_p)
 #elif STACK_GROW_DIRECTION < 0
 # define STACK_UPPER(x, a, b) b
 #else
-int rb_gc_grow_direction;
+int rb_gc_stack_grow_direction;
 static int
 stack_grow_direction(addr)
     VALUE *addr;
 {
     SET_STACK_END;
-    return rb_gc_grow_direction = STACK_END > addr ? 1 : -1;
+    return rb_gc_stack_grow_direction = STACK_END > addr ? 1 : -1;
 }
-# define STACK_UPPER(x, a, b) (rb_gc_grow_direction > 0 ? a : b)
+# define STACK_UPPER(x, a, b) (rb_gc_stack_grow_direction > 0 ? a : b)
 #endif
 
 #define GC_WATER_MARK 512
