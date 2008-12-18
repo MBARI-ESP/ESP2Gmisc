@@ -1,7 +1,7 @@
 #define RUBY_VERSION "1.8.7"
-#define RUBY_RELEASE_DATE "2008-12-16"
+#define RUBY_RELEASE_DATE "2008-12-17"
 #define RUBY_VERSION_CODE 187
-#define RUBY_RELEASE_CODE 20081216
+#define RUBY_RELEASE_CODE 20081217
 #define RUBY_PATCHLEVEL 72
 
 #define RUBY_VERSION_MAJOR 1
@@ -9,7 +9,7 @@
 #define RUBY_VERSION_TEENY 7
 #define RUBY_RELEASE_YEAR 2008
 #define RUBY_RELEASE_MONTH 12
-#define RUBY_RELEASE_DAY 16
+#define RUBY_RELEASE_DAY 17
 
 #ifdef RUBY_EXTERN
 RUBY_EXTERN const char ruby_version[];
@@ -25,7 +25,7 @@ RUBY_EXTERN const char *ruby_copyright;
 #define RUBY_BIRTH_MONTH 2
 #define RUBY_BIRTH_DAY 24
 
-#define RUBY_RELEASE_STR "MBARI 4 on patchlevel"
+#define RUBY_RELEASE_STR "MBARI 5 on patchlevel"
 #define RUBY_RELEASE_NUM RUBY_PATCHLEVEL
 
 

@@ -1,3 +1,7 @@
+Tue Dec 17  4:15:36 2008  Brent Roman  <brent@mbari.org>
+
+        * eval.c:  streamlined rb_thread_restore_context() to ensure O(1) time
+
 Tue Dec 15  9:15:36 2008  Brent Roman  <brent@mbari.org>
 
         * eval.c:  factored rb_eval() into many separate non-inlined
@@ -12,7 +16,7 @@ Tue Dec 13  6:10:36 2008  Brent Roman  <brent@mbari.org>
 
         * gc.c:  replaced rb_gc_stress with gc_getlimit and setlimit
                  update stack extent after every xmalloc and xrealloc
-                 export rb_gc_grow_direction if not known at compile time
+                 export rb_gc_stack_grow_direction if not known at compile time
                  removed dynamic adjustment of malloc_limit
                  removed workaround for obsolete gcc 2.7.2.3 bug                 
 
