@@ -7193,61 +7193,98 @@ rb_mod_define_method(argc, argv, mod)
     return body;
 }
 
-/* NK: added */
-
+/*
+ * call-seq:
+ *    meth.__file__  => String  
+ *
+ * returns the ruby source filename containing this method's definition
+ * raises ArgumentError if this method was not defined in ruby (i.e. native)
+ */
+ 
 static VALUE
 method_source_file_name(VALUE method)
 {
     struct METHOD *data;
-    const char *filename;
+    NODE *node;
 
-    Data_Get_Struct(method, struct METHOD, data);
-    filename = data->body->nd_file;
-    if (!filename) return Qnil;
-    return rb_str_new2(filename);
+    Data_Get_Struct(method, struct METHOD, data);   
+    if (node = data->body) {
+      const char *filename = node->nd_file;
+      if (filename)
+        return rb_str_new2(filename);
+    }
+    rb_raise(rb_eArgError, "native Method");
 }
+
+/*
+ * call-seq:
+ *    meth.__line__  => Fixnum  
+ *
+ * returns the starting ruby source lineno of this method of nil if unknown
+ * raises ArgumentError if this method was not defined in ruby (i.e. native)
+ */
+ 
 
 static VALUE
 method_source_line(VALUE method)
 {
     struct METHOD *data;
+    NODE *node;
 
     Data_Get_Struct(method, struct METHOD, data);
-    return INT2FIX( nd_line(data->body) );
+    if (node = data->body) {
+      int lineno = nd_line(node);
+      if (lineno)
+        return INT2FIX(nd_line(node));
+    }
+    rb_raise(rb_eArgError, "native Method");
 }
 
-/* NK: end */
 
-/* BAR: added */
 
+/*
+ * call-seq:
+ *    prc.__file__  => String  
+ *
+ * returns the ruby source filename containing this proc
+ *         or nil for proc{}
+ * raises ArgumentError if this proc was not defined in ruby (i.e. native)
+ */
+ 
 static VALUE
 proc_source_file_name(VALUE block)
 {
     struct BLOCK *data;
-    NODE *body;
     const char *filename;
+    NODE *node;
 
     Data_Get_Struct(block, struct BLOCK, data);
-    body=data->body;
-    if (!body) return Qnil;  //proc {} yields a nil body
-    filename = body->nd_file;
-    if (!filename) return Qnil;
-    return rb_str_new2(filename);
+    if (node = data->body)
+      return rb_str_new2(node->nd_file);
+    rb_raise(rb_eArgError, "native or empty Proc");
 }
 
+
+/*
+ * call-seq:
+ *    prc.__line__  => Fixnum  
+ *
+ * returns the starting ruby source lineno of this proc or nil if none known
+ * raises ArgumentError if this proc was not defined in ruby (i.e. native)
+ */
+ 
 static VALUE
 proc_source_line(VALUE block)
 {
     struct BLOCK *data;
-    NODE *body;
-
+    NODE *node;
+    
     Data_Get_Struct(block, struct BLOCK, data);
-    body=data->body;
-    if (!body) return Qnil;  //proc {} yields a nil body
-    return INT2FIX( nd_line(body) );
+    if (node = data->body)
+      return INT2FIX( nd_line(node) );
+    rb_raise(rb_eArgError, "native or empty Proc");
 }
 
-/* BAR: end */
 
 void
 Init_Proc()
@@ -7832,7 +7869,7 @@ rb_thread_restore_context(th, exit)
     if (!th->stk_ptr) rb_bug("unsaved context");
 
 #if STACK_DIRECTION > 0  /* stack grows upward */
-    if (&v < pos + th->stk_len) stack_extend(pos+stk_len - &v, th, exit);
+    if (&v < pos + th->stk_len) stack_extend(pos+th->stk_len - &v, th, exit);
 #else /* stack grows downward */
     pos -= th->stk_len;
     if (&v > pos) stack_extend(&v-pos, th, exit);
