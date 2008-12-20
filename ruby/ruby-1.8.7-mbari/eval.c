@@ -726,6 +726,7 @@ rb_attr(klass, id, read, write, ex)
     if (!name) {
 	rb_raise(rb_eArgError, "argument needs to be symbol or string");
     }
+    ruby_set_current_source(); /* for Method#__line__ */
     len = strlen(name)+2;
     buf = ALLOCA_N(char,len);
     snprintf(buf, len, "@%s", name);
@@ -2248,7 +2249,10 @@ rb_copy_node_scope(node, rval)
     NODE *node;
     NODE *rval;
 {
-    NODE *copy = NEW_NODE(NODE_SCOPE,0,rval,node->nd_next);
+    NODE *copy;
+    
+    ruby_set_current_source();  /* for Method#__line__ */
+    copy=NEW_NODE(NODE_SCOPE,0,rval,node->nd_next);
 
     if (node->nd_tbl) {
 	copy->nd_tbl = ALLOC_N(ID, node->nd_tbl[0]+1);
@@ -3878,7 +3882,8 @@ again:
   result = Qnil;
   if (node) {
     ruby_current_node = node;
-    
+    SET_CURRENT_SOURCE();
+
     switch (nd_type(node)) {
       case NODE_BLOCK:
 	while (node->nd_next) {
@@ -10119,6 +10124,7 @@ rb_mod_define_method(argc, argv, mod)
     else {
 	rb_raise(rb_eArgError, "wrong number of arguments (%d for 1)", argc);
     }
+    ruby_set_current_source(); /* for Method#__line__ */
     if (RDATA(body)->dmark == (RUBY_DATA_FUNC)bm_mark) {
 	node = NEW_DMETHOD(method_unbind(body));
     }
@@ -10149,6 +10155,98 @@ rb_mod_define_method(argc, argv, mod)
     rb_add_method(mod, id, node, noex);
     return body;
 }
+
+
+/*
+ * call-seq:
+ *    meth.__file__  => String  
+ *
+ * returns the filename containing this method's definition
+ * raises ArgumentError if method has no associated ruby source code
+ */
+ 
+static VALUE
+method_source_file_name(VALUE method)
+{
+    struct METHOD *data;
+    NODE *node;
+
+    Data_Get_Struct(method, struct METHOD, data);   
+    if (node = data->body) {
+      const char *filename = node->nd_file;
+      if (filename)
+        return rb_str_new2(filename);
+    }
+    rb_raise(rb_eArgError, "native Method");
+}
+
+/*
+ * call-seq:
+ *    meth.__line__  => Fixnum  
+ *
+ * returns the starting line number of this method
+ * raises ArgumentError if method has no associated ruby source code
+ */
+ 
+static VALUE
+method_source_line(VALUE method)
+{
+    struct METHOD *data;
+    NODE *node;
+
+    Data_Get_Struct(method, struct METHOD, data);
+    if (node = data->body) {
+      int lineno = nd_line(node);
+      if (lineno)
+        return INT2FIX(nd_line(node));
+    }
+    rb_raise(rb_eArgError, "native Method");
+}
+
+
+
+/*
+ * call-seq:
+ *    prc.__file__  => String  
+ *
+ * returns the filename where this proc is defined
+ * raises ArgumentError if proc has no associated ruby source
+ */
+ 
+static VALUE
+proc_source_file_name(VALUE block)
+{
+    struct BLOCK *data;
+    const char *filename;
+    NODE *node;
+
+    Data_Get_Struct(block, struct BLOCK, data);
+    if ((node = data->frame.node) || (node = data->body))
+      return rb_str_new2(node->nd_file);
+    rb_raise(rb_eArgError, "native Proc");
+}
+
+
+/*
+ * call-seq:
+ *    prc.__line__  => Fixnum  
+ *
+ * returns the starting line number of this proc
+ * raises ArgumentError if proc has no associated ruby source code
+ */
+ 
+static VALUE
+proc_source_line(VALUE block)
+{
+    struct BLOCK *data;
+    NODE *node;
+    
+    Data_Get_Struct(block, struct BLOCK, data);
+    if ((node = data->frame.node) || (node = data->body))
+      return INT2FIX( nd_line(node) );
+    rb_raise(rb_eArgError, "native Proc");
+}
+
 
 /*
  *  <code>Proc</code> objects are blocks of code that have been bound to
@@ -10201,6 +10299,8 @@ Init_Proc()
     rb_define_method(rb_cProc, "to_s", proc_to_s, 0);
     rb_define_method(rb_cProc, "to_proc", proc_to_self, 0);
     rb_define_method(rb_cProc, "binding", proc_binding, 0);
+    rb_define_method(rb_cProc, "__file__", proc_source_file_name, 0);
+    rb_define_method(rb_cProc, "__line__", proc_source_line, 0);
 
     rb_define_global_function("proc", proc_lambda, 0);
     rb_define_global_function("lambda", proc_lambda, 0);
@@ -10221,6 +10321,8 @@ Init_Proc()
     rb_define_method(rb_cMethod, "owner", method_owner, 0);
     rb_define_method(rb_cMethod, "unbind", method_unbind, 0);
     rb_define_method(rb_mKernel, "method", rb_obj_method, 1);
+    rb_define_method(rb_cMethod, "__file__", method_source_file_name, 0);
+    rb_define_method(rb_cMethod, "__line__", method_source_line, 0);
 
     rb_cUnboundMethod = rb_define_class("UnboundMethod", rb_cObject);
     rb_undef_alloc_func(rb_cUnboundMethod);
@@ -10233,6 +10335,8 @@ Init_Proc()
     rb_define_method(rb_cUnboundMethod, "name", method_name, 0);
     rb_define_method(rb_cUnboundMethod, "owner", method_owner, 0);
     rb_define_method(rb_cUnboundMethod, "bind", umethod_bind, 1);
+    rb_define_method(rb_cUnboundMethod, "__file__", method_source_file_name, 0);
+    rb_define_method(rb_cUnboundMethod, "__line__", method_source_line, 0);
     rb_define_method(rb_cModule, "instance_method", rb_mod_method, 1);
 }
 
