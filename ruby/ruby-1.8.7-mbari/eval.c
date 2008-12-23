@@ -5329,6 +5329,7 @@ rb_yield_0(val, self, klass, flags, avalue)
 		    tt->retval = result;
 		    JUMP_TAG(TAG_BREAK);
 		}
+                if (tt->tag == PROT_THREAD) break;
 		tt = tt->prev;
 	    }
 	    proc_jump_error(TAG_BREAK, result);
