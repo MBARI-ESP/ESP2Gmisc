@@ -2318,7 +2318,7 @@ eval_rescue(self, node)
   VALUE self;
   NODE *node;
 {
-  int state = 0;
+  int state;
   volatile VALUE result;
   
   retry_entry:
@@ -2371,7 +2371,7 @@ eval_ensure(self, node)
   VALUE self;
   NODE *node;
 {
-  int state = 0;
+  int state;
   volatile VALUE result;
 
   PUSH_TAG(PROT_NONE);
@@ -2425,6 +2425,73 @@ eval_fcall(self, node)
     END_CALLARGS;
 
     return rb_call(CLASS_OF(self),self,node->nd_mid,argc,argv,1);
+}
+
+static VALUE noinline
+eval_dot(self, node)
+  VALUE self;
+  NODE *node;
+{
+  VALUE result;
+  VALUE beg = rb_eval(self, node->nd_beg);
+  VALUE end = rb_eval(self, node->nd_end);
+  result = rb_range_new(beg, end, nd_type(node) == NODE_DOT3);
+  if (!node->nd_state) {
+    if (nd_type(node->nd_beg) == NODE_LIT && FIXNUM_P(node->nd_beg->nd_lit) &&
+        nd_type(node->nd_end) == NODE_LIT && FIXNUM_P(node->nd_end->nd_lit))
+    {
+        nd_set_type(node, NODE_LIT);
+        node->nd_lit = result;
+    }
+    else
+        node->nd_state = 1;
+  }
+  return result;
+}
+
+
+static VALUE noinline
+eval_flip2(self, node)
+  VALUE self;
+  NODE *node;
+{
+  if (ruby_scope->local_vars == 0) {
+      rb_bug("unexpected local variable");
+  }
+  if (!RTEST(ruby_scope->local_vars[node->nd_cnt])) {
+      if (RTEST(rb_eval(self, node->nd_beg))) {
+	  ruby_scope->local_vars[node->nd_cnt] = 
+	      RTEST(rb_eval(self, node->nd_end))?Qfalse:Qtrue;
+	  return Qtrue;
+      }
+      else
+	return Qfalse;
+  }
+  else {
+      if (RTEST(rb_eval(self, node->nd_end))) {
+	  ruby_scope->local_vars[node->nd_cnt] = Qfalse;
+      }
+      return Qtrue;
+  }
+}
+
+
+static VALUE noinline
+eval_flip3(self, node)
+  VALUE self;
+  NODE *node;
+{       
+  if (ruby_scope->local_vars == 0)
+      rb_bug("unexpected local variable");
+  if (!RTEST(ruby_scope->local_vars[node->nd_cnt]))
+    return ruby_scope->local_vars[node->nd_cnt] = 
+             RTEST(rb_eval(self, node->nd_beg)) ? Qtrue : Qfalse;
+  else{
+      if (RTEST(rb_eval(self, node->nd_end))) {
+	  ruby_scope->local_vars[node->nd_cnt] = Qfalse;
+      }
+      return Qtrue;
+  }
 }
 
 
@@ -3093,57 +3160,15 @@ again:
 
       case NODE_DOT2:
       case NODE_DOT3:
-        result = rb_range_new(rb_eval(self, node->nd_beg),
-			      rb_eval(self, node->nd_end),
-			      nd_type(node) == NODE_DOT3);
-        if (node->nd_state) break;
-        if (nd_type(node->nd_beg) == NODE_LIT && FIXNUM_P(node->nd_beg->nd_lit) &&
-	    nd_type(node->nd_end) == NODE_LIT && FIXNUM_P(node->nd_end->nd_lit))
-        {
-	    nd_set_type(node, NODE_LIT);
-	    node->nd_lit = result;
-        }
-        else {
-	    node->nd_state = 1;
-        }
+        result = eval_dot(self,node);
         break;
 
       case NODE_FLIP2:		/* like AWK */
-        if (ruby_scope->local_vars == 0) {
-	    rb_bug("unexpected local variable");
-        }
-        if (!RTEST(ruby_scope->local_vars[node->nd_cnt])) {
-	    if (RTEST(rb_eval(self, node->nd_beg))) {
-	        ruby_scope->local_vars[node->nd_cnt] = 
-		    RTEST(rb_eval(self, node->nd_end))?Qfalse:Qtrue;
-	        result = Qtrue;
-	    }
-	    else {
-	        result = Qfalse;
-	    }
-        }
-        else {
-	    if (RTEST(rb_eval(self, node->nd_end))) {
-	        ruby_scope->local_vars[node->nd_cnt] = Qfalse;
-	    }
-	    result = Qtrue;
-        }
+        result = eval_flip2(self,node);
         break;
 
       case NODE_FLIP3:		/* like SED */
-        if (ruby_scope->local_vars == 0) {
-	    rb_bug("unexpected local variable");
-        }
-        if (!RTEST(ruby_scope->local_vars[node->nd_cnt])) {
-	    result = RTEST(rb_eval(self, node->nd_beg)) ? Qtrue : Qfalse;
-	    ruby_scope->local_vars[node->nd_cnt] = result;
-        }
-        else {
-	    if (RTEST(rb_eval(self, node->nd_end))) {
-	        ruby_scope->local_vars[node->nd_cnt] = Qfalse;
-	    }
-	    result = Qtrue;
-        }
+        result = eval_flip3(self,node);
         break;
 
       case NODE_RETURN:
@@ -3153,13 +3178,13 @@ again:
         break;
 
       case NODE_ARGSCAT:
-        result = rb_ary_concat(rb_eval(self, node->nd_head),
-			       rb_eval(self, node->nd_body));
+        result = rb_eval(self, node->nd_head);
+        result = rb_ary_concat(result, rb_eval(self, node->nd_body));
         break;
 
       case NODE_ARGSPUSH:
-        result = rb_ary_push(rb_obj_dup(rb_eval(self, node->nd_head)),
-			     rb_eval(self, node->nd_body));
+        result = rb_obj_dup(rb_eval(self, node->nd_head));
+        result = rb_ary_push(result, rb_eval(self, node->nd_body));
         break;
 
       case NODE_CALL:
