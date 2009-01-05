@@ -1,3 +1,19 @@
+Sun Jan  4 20:15:36 2009  Brent Roman  <brent@mbari.org>
+
+        * eval.c:  eliminated up_stk_extent(), wipe_stack in rb_thread_switch
+        
+        * gc.c: removed lev counter args, check stack pointer instead
+                streamlined SET_STACK_END and STACK_END, stack_length(), etc.
+                added TOP_FRAME to use gcc's builtin frame_address
+                optimized is_heap_pointer()
+                gc_mark_rest() does not need to copy entire mark_stack!
+                added set_stack_size() to properly hande RLIM_INFINITY
+                
+        * rubysig.h:  repaired broken pseudo preemptive thread switching
+                      removed rb_gc_malloc_increase & limit
+                      replaced buggy __stack_grown* with __stack_past* macros
+        
+
 Tue Dec 19 20:15:36 2008  Brent Roman  <brent@mbari.org>
 
         * eval.c:  added (Method|Proc)#(__line__|__file__) methods
