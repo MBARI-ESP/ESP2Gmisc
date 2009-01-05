@@ -79,29 +79,31 @@ void rb_trap_restore_mask _((void));
 
 RUBY_EXTERN int rb_thread_critical;
 void rb_thread_schedule _((void));
-#if defined(HAVE_SETITIMER) || defined(_THREAD_SAFE)
-RUBY_EXTERN int rb_thread_pending;
 
-EXTERN size_t rb_gc_malloc_increase;
-EXTERN size_t rb_gc_malloc_limit;
-EXTERN VALUE *rb_gc_stack_end;
-EXTERN int *rb_gc_stack_grow_direction;  /* -1 for down or 1 for up */
+RUBY_EXTERN VALUE *rb_gc_stack_end;
+RUBY_EXTERN int rb_gc_stack_grow_direction;  /* -1 for down or 1 for up */
 #define __stack_zero_up(end,sp)  while (end >= ++sp) *sp=0
-#define __stack_grown_up  (rb_gc_stack_end > (VALUE *)alloca(0))
+#define __stack_past_up(end)  ((end) < (VALUE *)alloca(0))
+#define __stack_grow_up(top,depth) ((top)+(depth))
 #define __stack_zero_down(end,sp)  while (end <= --sp) *sp=0
-#define __stack_grown_down  (rb_gc_stack_end < (VALUE *)alloca(0))
+#define __stack_past_down(end)  ((end) > (VALUE *)alloca(0))
+#define __stack_grow_down(top,depth) ((top)-(depth))
 
 #if STACK_GROW_DIRECTION > 0
 #define __stack_zero(end,sp)  __stack_zero_up(end,sp)
-#define __stack_grown  __stack_grown_up
+#define __stack_past(end)  __stack_past_up(end)
+#define __stack_grow(top,depth)  __stack_grow_up(top,depth)
 #elif STACK_GROW_DIRECTION < 0
 #define __stack_zero(end,sp)  __stack_zero_down(end,sp)
-#define __stack_grown  __stack_grown_down
+#define __stack_past(end)  __stack_past_down(end)
+#define __stack_grow(top,depth)  __stack_grow_down(top,depth)
 #else  /* limp along if stack direction can't be determined at compile time */
 #define __stack_zero(end,sp) if (rb_gc_stack_grow_direction<0) \
         __stack_zero_down(end,sp); else __stack_zero_up(end,sp);
-#define __stack_grown  \
-        (rb_gc_stack_grow_direction<0 ? __stack_grown_down : __stack_grown_up)
+#define __stack_past(end)  (rb_gc_stack_grow_direction<0 ? \
+                            __stack_past_down(end) : __stack_past_up(end))
+#define __stack_grow(top,depth) (rb_gc_stack_grow_direction<0 ? \
+                       __stack_grow_down(top,depth) : __stack_grow_up(top,depth)
 #endif
  
 /*
@@ -120,9 +122,11 @@ EXTERN int *rb_gc_stack_grow_direction;  /* -1 for down or 1 for up */
   Update our record of maximum stack extent without zeroing unused stack
 */
 #define rb_gc_update_stack_extent() \
-    if __stack_grown rb_gc_stack_end = alloca(0);
+    if __stack_past(rb_gc_stack_end) rb_gc_stack_end = alloca(0);
 
 
+#if defined(HAVE_SETITIMER) || defined(_THREAD_SAFE)
+RUBY_EXTERN int rb_thread_pending;
 # define CHECK_INTS do {\
     rb_gc_wipe_stack(); \
     if (!(rb_prohibit_interrupt || rb_thread_critical)) {\
@@ -141,8 +145,8 @@ RUBY_EXTERN int rb_thread_tick;
 	    rb_thread_tick = THREAD_TICK;\
             rb_thread_schedule();\
 	}\
+        if (rb_trap_pending) rb_trap_exec();\
     }\
-    if (rb_trap_pending) rb_trap_exec();\
 } while (0)
 #endif
 
