@@ -177,7 +177,9 @@ ruby_xmalloc(size)
 	    rb_memerror();
 	}
     }
+#if STACK_WIPE_SITES & 0x100
     rb_gc_update_stack_extent();
+#endif
     return mem;
 }
 
@@ -217,7 +219,9 @@ ruby_xrealloc(ptr, size)
 	    rb_memerror();
         }
     }
+#if STACK_WIPE_SITES & 0x200
     rb_gc_update_stack_extent();
+#endif
     return mem;
 }
 
@@ -790,7 +794,9 @@ gc_mark_children(ptr)
 {
     RVALUE *obj = RANY(ptr);
 
+#if STACK_WIPE_SITES & 0x400
     rb_gc_update_stack_extent();
+#endif
     goto marking;		/* skip */
 
   again:
