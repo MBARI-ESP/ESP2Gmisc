@@ -142,13 +142,18 @@ RUBY_EXTERN int rb_gc_stack_grow_direction;  /* -1 for down or 1 for up */
                        __stack_grow_down(top,depth) : __stack_grow_up(top,depth)
 #endif
  
+#if defined(__GNUC__) && defined(__i386__)  /* can eliminate one stack frame */
+# define __set_sp(ptr)  VALUE *ptr; asm("movl %%esp, %0;": "=r"(ptr))
+#else
+# define __set_sp(ptr)  VALUE *ptr = alloc(0)
+#endif
 /*
   Zero the memory that was (recently) part of the stack, but is no longer.
   Invoke when stack is deep to mark its extent and when it's shallow to wipe it.
 */
 #define rb_gc_wipe_stack() {     \
   VALUE *end = rb_gc_stack_end;  \
-  VALUE *sp = alloca(0);         \
+  __set_sp(sp);                  \
   rb_gc_stack_end = sp;          \
   __stack_zero(end, sp);   \
 }
