@@ -129,6 +129,20 @@ static VALUE gc_increase(VALUE mod)
 }
 
 
+/*
+ *  call-seq:
+ *     GC.exorcise
+ *
+ *  Purge ghost references from recently freed stack space
+ *
+ */
+static VALUE gc_exorcise(VALUE mod)
+{
+  rb_gc_wipe_stack();
+  return Qnil;
+}
+
+
 static void run_final();
 static VALUE nomem_error;
 static void garbage_collect();
@@ -2085,6 +2099,7 @@ Init_GC()
     rb_define_singleton_method(rb_mGC, "limit", gc_getlimit, 0);
     rb_define_singleton_method(rb_mGC, "limit=", gc_setlimit, 1);
     rb_define_singleton_method(rb_mGC, "increase", gc_increase, 0);
+    rb_define_singleton_method(rb_mGC, "exorcise", gc_exorcise, 0);
     rb_define_method(rb_mGC, "garbage_collect", rb_gc_start, 0);
 
     rb_mObSpace = rb_define_module("ObjectSpace");
