@@ -12,7 +12,43 @@
 
 #ifndef SIG_H
 #define SIG_H
+
 #include <errno.h>
+
+/* STACK_WIPE_SITES determines where attempts are made to exorcise
+   "ghost object refereces" from the stack.
+   
+   0x001  -->  wipe stack just after every thread_switch
+   0x002  -->  wipe stack just after every EXEC_TAG()
+   0x004  -->  wipe stack in CHECK_INTS
+   0x010  -->  wipe stack in while & until loops
+   0x020  -->  wipe stack before yield() in iterators and outside eval.c
+   0x040  -->  wipe stack on catch and thread save context
+   0x100  -->  update stack extent on each object allocation
+   0x200  -->  update stack extent on each object reallocation
+   0x400  -->  update stack extent during GC marking passes
+   0x800  -->  update stack extent on each throw (use with 0x040)
+   
+   for most effective gc use 0x0707
+   for fastest micro-benchmarking use 0x0000
+   0x370 prevents most memory leaks caused by ghost references
+   other good trade offs are 0x0703, 0x0303 or even 0x003
+   
+   Note that it is redundant to wipe_stack in looping constructs if 
+   also doing so in CHECK_INTS.  It is also redundant to wipe_stack on
+   each thread_switch if wiping after every thread save context.
+*/
+#ifndef STACK_WIPE_SITES
+#define STACK_WIPE_SITES  0x370
+#endif
+
+#if (STACK_WIPE_SITES & 0x14) == 0x14
+#warning  wiping stack in CHECK_INTS makes wiping in loops redundant
+#endif
+#if (STACK_WIPE_SITES & 0x41) == 0x41
+#warning  wiping stack after thread save makes wiping on thread_switch redundant
+#endif
+
 
 #ifdef _WIN32
 typedef LONG rb_atomic_t;
@@ -107,16 +143,16 @@ RUBY_EXTERN int rb_gc_stack_grow_direction;  /* -1 for down or 1 for up */
 #endif
  
 /*
-  zero the memory that was (recently) part of the stack
-  but is no longer.  Invoke when stack is deep to mark its extent
-  and when it is shallow to wipe it
+  Zero the memory that was (recently) part of the stack, but is no longer.
+  Invoke when stack is deep to mark its extent and when it's shallow to wipe it.
 */
 #define rb_gc_wipe_stack() {     \
-  VALUE *sp = alloca(0);         \
   VALUE *end = rb_gc_stack_end;  \
+  VALUE *sp = alloca(0);         \
   rb_gc_stack_end = sp;          \
   __stack_zero(end, sp);   \
 }
+
 
 /*
   Update our record of maximum stack extent without zeroing unused stack
@@ -125,10 +161,16 @@ RUBY_EXTERN int rb_gc_stack_grow_direction;  /* -1 for down or 1 for up */
     if __stack_past(rb_gc_stack_end) rb_gc_stack_end = alloca(0);
 
 
+#if STACK_WIPE_SITES & 4
+# define CHECK_INTS_wipe_stack()  rb_gc_wipe_stack()
+#else
+# define CHECK_INTS_wipe_stack()  (void)0
+#endif
+
 #if defined(HAVE_SETITIMER) || defined(_THREAD_SAFE)
 RUBY_EXTERN int rb_thread_pending;
 # define CHECK_INTS do {\
-    rb_gc_wipe_stack(); \
+    CHECK_INTS_wipe_stack(); \
     if (!(rb_prohibit_interrupt || rb_thread_critical)) {\
         if (rb_thread_pending) rb_thread_schedule();\
 	if (rb_trap_pending) rb_trap_exec();\
@@ -139,7 +181,7 @@ RUBY_EXTERN int rb_thread_pending;
 RUBY_EXTERN int rb_thread_tick;
 #define THREAD_TICK 500
 #define CHECK_INTS do {\
-    rb_gc_wipe_stack(); \
+    CHECK_INTS_wipe_stack(); \
     if (!(rb_prohibit_interrupt || rb_thread_critical)) {\
 	if (rb_thread_tick-- <= 0) {\
 	    rb_thread_tick = THREAD_TICK;\
