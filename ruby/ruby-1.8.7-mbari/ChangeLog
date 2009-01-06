@@ -5,8 +5,10 @@ Mon Jan  5 20:15:36 2009  Brent Roman  <brent@mbari.org>
         * eval.c:  added wipeAfter and STACK_WIPE_SITES cofiguration options
         
         * gc.c: added STACK_WIPE_SITES cofiguration options
+                added GC.exorcise method
         
         * rubysig.h:  added STACK_WIPE_SITES cofiguration options
+                      when available, use gcc asm to optimize wipe_stack
         
         * version.h:  include STACK_WIPE_SITES options in MBARI release string
 
