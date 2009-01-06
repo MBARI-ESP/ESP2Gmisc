@@ -1028,7 +1028,23 @@ static struct tag *prot_tag;
 #define PROT_LAMBDA INT2FIX(2)	/* 5 */
 #define PROT_YIELD  INT2FIX(3)	/* 7 */
 
-#define EXEC_TAG()    ruby_setjmp(((void)0), prot_tag->buf)
+#if STACK_WIPE_SITES & 0x42
+static inline int wipeAfter(int status)
+{
+  rb_gc_wipe_stack();
+  return status;
+}
+#else
+#define wipeAfter(status) status
+#endif
+#if STACK_WIPE_SITES & 2
+#define wipeAfterTag(status) wipeAfter(status)
+#else
+#define wipeAfterTag(status) status
+#endif
+
+#define EXEC_TAG_0()  ruby_setjmp(((void)0), prot_tag->buf)
+#define EXEC_TAG()    wipeAfterTag(EXEC_TAG_0())
 
 #define JUMP_TAG(st) do {		\
     ruby_frame = prot_tag->frame;	\
@@ -1108,6 +1124,12 @@ static VALUE eval _((VALUE,VALUE,VALUE,const char*,int));
 static NODE *compile _((VALUE, const char*, int));
 
 static VALUE rb_yield_0 _((VALUE, VALUE, VALUE, int, int));
+
+#if STACK_WIPE_SITES & 0x20
+#define wipeBeforeYield()  rb_gc_wipe_stack()
+#else
+#define wipeBeforeYield()  (void)0
+#endif
 
 #define YIELD_LAMBDA_CALL 1
 #define YIELD_PROC_CALL   2
@@ -3072,6 +3094,9 @@ eval_while(self, node))
 	  goto while_out;
       do {
 	while_redo:
+#if STACK_WIPE_SITES & 0x10
+          rb_gc_wipe_stack();
+#endif
 	  rb_eval(self, node->nd_body);
 	while_next:
 	  ;
@@ -3114,6 +3139,9 @@ eval_until(self, node))
 	  goto until_out;
       do {
         until_redo:
+#if STACK_WIPE_SITES & 0x10
+          rb_gc_wipe_stack();
+#endif
 	  rb_eval(self, node->nd_body);
         until_next:
 	  ;
@@ -5340,6 +5368,7 @@ VALUE
 rb_yield(val)
     VALUE val;
 {
+    wipeBeforeYield();
     return rb_yield_0(val, 0, 0, 0, Qfalse);
 }
 
@@ -5388,6 +5417,7 @@ static VALUE
 loop_i()
 {
     for (;;) {
+        wipeBeforeYield();
 	rb_yield_0(Qundef, 0, 0, 0, Qfalse);
 	CHECK_INTS;
     }
@@ -10942,7 +10972,9 @@ static int
 rb_thread_switch(n)
     int n;
 {
+#if STACK_WIPE_SITES & 1
     rb_gc_wipe_stack();
+#endif
     rb_trap_immediate = (curr_thread->flags&0x100)?1:0;
     switch (n) {
       case 0:
@@ -10979,8 +11011,8 @@ rb_thread_switch(n)
     return 1;
 }
 
-#define THREAD_SAVE_CONTEXT(th) (rb_thread_switch( \
-                  ruby_setjmp(rb_thread_save_context(th), (th)->context)))
+#define THREAD_SAVE_CONTEXT(th) (rb_thread_switch( wipeAfter(\
+                  ruby_setjmp(rb_thread_save_context(th), (th)->context))))
 
 NORETURN(static void rb_thread_restore_context _((rb_thread_t,int)));
 NORETURN(NOINLINE(static void rb_thread_restore_context_0(rb_thread_t,int)));
@@ -13905,7 +13937,7 @@ rb_f_catch(dmy, tag)
 
     tag = ID2SYM(rb_to_id(tag));
     PUSH_TAG(tag);
-    if ((state = EXEC_TAG()) == 0) {
+    if ((state = wipeAfter(EXEC_TAG_0())) == 0) {
 	val = rb_yield_0(tag, 0, 0, 0, Qfalse);
     }
     else if (state == TAG_THROW && tag == prot_tag->dst) {
@@ -13973,6 +14005,9 @@ rb_f_throw(argc, argv)
     if (!tt) {
 	rb_name_error(SYM2ID(tag), "uncaught throw `%s'", rb_id2name(SYM2ID(tag)));
     }
+#if STACK_WIPE_SITES & 0x800
+    rb_gc_update_stack_extent();
+#endif
     rb_trap_restore_mask();
     JUMP_TAG(TAG_THROW);
 #ifndef __GNUC__
