@@ -1,3 +1,9 @@
+Tue Jan  6 20:15:36 2009  Brent Roman  <brent@mbari.org>
+
+        * rubysig.h:  added ARM and PPC asm support for getting Stack Pointer
+                      fall back to more portable means if other CPU or not GNUC
+        
+
 Mon Jan  5 20:15:36 2009  Brent Roman  <brent@mbari.org>
 
         * common.mk:  added dependency on rubysig.h to version.h     
