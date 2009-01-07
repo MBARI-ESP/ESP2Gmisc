@@ -142,18 +142,29 @@ RUBY_EXTERN int rb_gc_stack_grow_direction;  /* -1 for down or 1 for up */
                        __stack_grow_down(top,depth) : __stack_grow_up(top,depth)
 #endif
  
-#if defined(__GNUC__) && defined(__i386__)  /* can eliminate one stack frame */
-# define __set_sp(ptr)  VALUE *ptr; asm("movl %%esp, %0;": "=r"(ptr))
-#else
-# define __set_sp(ptr)  VALUE *ptr = alloc(0)
+#ifdef __GNUC__   /* get the stack pointer most efficiently */
+# ifdef __i386__  /* this improves runtimes by 1 to 2 % (really!) */
+#  define _set_sp(ptr)  VALUE *ptr; asm("movl %%esp, %0;": "=r"(ptr))
+# elif __ppc__
+#  define _set_sp(ptr)  VALUE *ptr; asm("addi %0, r1, 0": "=r"(ptr))
+# elif __arm__
+#  define _set_sp(ptr)  VALUE *ptr; asm("mov %0, sp": "=r"(ptr))
+# else  /* slower, but should work everywhere gcc does */
+#  define _set_sp(ptr)  VALUE *ptr = _get_tos();
+NOINLINE(static VALUE *_get_tos(void)) {return __builtin_frame_address(0);}
+# endif
+#else  /* slowest, but should work everwhere */
+#  define _set_sp(ptr)  VALUE *ptr = _get_tos();
+NOINLINE(static VALUE *_get_tos(void)) {VALUE tos; return &tos;}
 #endif
+
 /*
   Zero the memory that was (recently) part of the stack, but is no longer.
   Invoke when stack is deep to mark its extent and when it's shallow to wipe it.
 */
 #define rb_gc_wipe_stack() {     \
   VALUE *end = rb_gc_stack_end;  \
-  __set_sp(sp);                  \
+  _set_sp(sp);                   \
   rb_gc_stack_end = sp;          \
   __stack_zero(end, sp);   \
 }
