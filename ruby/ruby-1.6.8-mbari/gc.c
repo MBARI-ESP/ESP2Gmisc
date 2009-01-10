@@ -21,6 +21,10 @@
 #include <stdio.h>
 #include <setjmp.h>
 
+#ifdef HAVE_SYS_RESOURCE_H
+#include <sys/resource.h>
+#endif
+
 void re_free_registers _((struct re_registers*));
 void rb_io_fptr_finalize _((struct OpenFile*));
 
@@ -49,8 +53,6 @@ void *alloca ();
 # endif /* HAVE_ALLOCA_H */
 #endif /* __GNUC__ */
 
-static void run_final();
-
 #ifndef GC_MALLOC_LIMIT
 #if defined(MSDOS) || defined(__human68k__)
 #define GC_MALLOC_LIMIT 200000
@@ -59,29 +61,76 @@ static void run_final();
 #endif
 #endif
 
-size_t rb_gc_malloc_increase = 0;
-#define malloc_increase rb_gc_malloc_increase
-static unsigned long malloc_limit = GC_MALLOC_LIMIT;
-size_t rb_gc_malloc_limit = GC_MALLOC_LIMIT-GC_MALLOC_LIMIT/8;
+#ifndef GC_LEVEL_MAX  /*maximum # of VALUEs on 'C' stack during GC*/
+#define GC_LEVEL_MAX  (3*4096)
+#endif
 
+
+static VALUE *stack_limit, *stack_gc_limit;
+
+static size_t malloc_increase = 0;
+static size_t malloc_limit = GC_MALLOC_LIMIT;
+
+/*
+ *  call-seq:
+ *     GC.limit    => increase limit in bytes
+ *
+ *  Get the # of bytes that may be allocated before triggering
+ *  a mark and sweep by the garbarge collector to reclaim unused storage.
+ *
+ */
 static VALUE gc_getlimit(VALUE mod)
 {
   return ULONG2NUM(malloc_limit);
 }
 
+/*
+ *  call-seq:
+ *     GC.limit=   => updated increase limit in bytes
+ *
+ *  Set the # of bytes that may be allocated before triggering
+ *  a mark and sweep by the garbarge collector to reclaim unused storage.
+ *  Attempts to set the GC.limit= less than 0 will be ignored.
+ *
+ *     GC.limit=5000000   #=> 5000000
+ *     GC.limit           #=> 5000000
+ *     GC.limit=-50       #=> 5000000
+ *     GC.limit=0         #=> 0
+ *
+ */
 static VALUE gc_setlimit(VALUE mod, VALUE newLimit)
 {
   long limit = NUM2LONG(newLimit);
   if (limit < 0) return gc_getlimit(mod);
   malloc_limit = limit;
-  rb_gc_malloc_limit = malloc_limit - malloc_limit/8;
   return newLimit;
 }
 
 
+/*
+ *  call-seq:
+ *     GC.increase
+ *
+ *  Get # of bytes that have been allocated since the last mark & sweep
+ *
+ */
 static VALUE gc_increase(VALUE mod)
 {
   return ULONG2NUM(malloc_increase);
+}
+
+
+/*
+ *  call-seq:
+ *     GC.exorcise
+ *
+ *  Purge ghost references from recently freed stack space
+ *
+ */
+static VALUE gc_exorcise(VALUE mod)
+{
+  rb_gc_wipe_stack();
+  return Qnil;
 }
 
 
@@ -102,6 +151,10 @@ mem_error(mesg)
     exit(1);
 }
 
+static void run_final();
+static void garbage_collect();
+
+
 void *
 ruby_xmalloc(size)
     long size;
@@ -114,21 +167,20 @@ ruby_xmalloc(size)
     if (size == 0) size = 1;
     
     if ((malloc_increase += size) > malloc_limit) {
-	rb_gc();
+	garbage_collect();
         malloc_increase = size;
     }
     RUBY_CRITICAL(mem = malloc(size));
     if (!mem) {
-	rb_gc();
+	garbage_collect();
 	RUBY_CRITICAL(mem = malloc(size));
 	if (!mem) {
-	    if (size >= 10 * 1024 * 1024) {
-		rb_raise(rb_eNoMemError, "tried to allocate too big memory");
-	    }
 	    mem_error("failed to allocate memory");
 	}
     }
+#if STACK_WIPE_SITES & 0x100
     rb_gc_update_stack_extent();
+#endif
     return mem;
 }
 
@@ -157,18 +209,20 @@ ruby_xrealloc(ptr, size)
     if (!ptr) return xmalloc(size);
     if (size == 0) size = 1;
     if ((malloc_increase += size) > malloc_limit) {
-	rb_gc();
+	garbage_collect();
         malloc_increase = size;
     }
     RUBY_CRITICAL(mem = realloc(ptr, size));
     if (!mem) {
-	rb_gc();
+	garbage_collect();
 	RUBY_CRITICAL(mem = realloc(ptr, size));
 	if (!mem) {
 	    mem_error("failed to allocate memory(realloc)");
 	}
     }
+#if STACK_WIPE_SITES & 0x200
     rb_gc_update_stack_extent();
+#endif
     return mem;
 }
 
@@ -186,8 +240,22 @@ static int during_gc;
 static int need_call_final = 0;
 static st_table *finalizer_table = 0;
 
-static VALUE
-gc_enable()
+
+/*
+ *  call-seq:
+ *     GC.enable    => true or false
+ *
+ *  Enables garbage collection, returning <code>true</code> if garbage
+ *  collection was previously disabled.
+ *
+ *     GC.disable   #=> false
+ *     GC.enable    #=> true
+ *     GC.enable    #=> false
+ *
+ */
+
+VALUE
+rb_gc_enable()
 {
     int old = dont_gc;
 
@@ -195,8 +263,20 @@ gc_enable()
     return old;
 }
 
-static VALUE
-gc_disable()
+/*
+ *  call-seq:
+ *     GC.disable    => true or false
+ *
+ *  Disables garbage collection, returning <code>true</code> if garbage
+ *  collection was already disabled.
+ *
+ *     GC.disable   #=> false
+ *     GC.disable   #=> true
+ *
+ */
+
+VALUE
+rb_gc_disable()
 {
     int old = dont_gc;
 
@@ -246,6 +326,8 @@ rb_gc_unregister_address(addr)
     }
 }
 
+#undef GC_DEBUG
+
 void
 rb_global_variable(var)
     VALUE *var;
@@ -253,10 +335,14 @@ rb_global_variable(var)
     rb_gc_register_address(var);
 }
 
+#if defined(_MSC_VER) || defined(__BORLANDC__) || defined(__CYGWIN__)
+#pragma pack(push, 1) /* magic for reducing sizeof(RVALUE): 24 -> 20 */
+#endif
+
 typedef struct RVALUE {
     union {
 	struct {
-	    unsigned long flag;	/* always 0 for freed obj */
+	    unsigned long flags;	/* always 0 for freed obj */
 	    struct RVALUE *next;
 	} free;
 	struct RBasic  basic;
@@ -276,18 +362,29 @@ typedef struct RVALUE {
 	struct RVarmap varmap; 
 	struct SCOPE   scope;
     } as;
+#ifdef GC_DEBUG
+    char *file;
+    int   line;
+#endif
 } RVALUE;
+
+#if defined(_MSC_VER) || defined(__BORLANDC__) || defined(__CYGWIN__)
+#pragma pack(pop)
+#endif
 
 static RVALUE *freelist = 0;
 static RVALUE *deferred_final_list = 0;
 
 #define HEAPS_INCREMENT 10
-static RVALUE **heaps;
+static struct heaps_slot {
+    void *membase;
+    RVALUE *slot;
+    int limit;
+} *heaps;
 static int heaps_length = 0;
 static int heaps_used   = 0;
 
 #define HEAP_MIN_SLOTS 10000
-static int *heaps_limits;
 static int heap_slots = HEAP_MIN_SLOTS;
 
 #define FREE_MIN  4096
@@ -301,37 +398,49 @@ add_heap()
 
     if (heaps_used == heaps_length) {
 	/* Realloc heaps */
+	struct heaps_slot *p;
+	int length;
+
 	heaps_length += HEAPS_INCREMENT;
-	RUBY_CRITICAL(heaps = (heaps_used>0)?
-			(RVALUE**)realloc(heaps, heaps_length*sizeof(RVALUE*)):
-			(RVALUE**)malloc(heaps_length*sizeof(RVALUE*)));
-	if (heaps == 0) mem_error("heaps: can't alloc memory");
-	RUBY_CRITICAL(heaps_limits = (heaps_used>0)?
-			(int*)realloc(heaps_limits, heaps_length*sizeof(int)):
-			(int*)malloc(heaps_length*sizeof(int)));
-	if (heaps_limits == 0) mem_error("heaps_limits: can't alloc memory");
+	length = heaps_length*sizeof(struct heaps_slot);
+	RUBY_CRITICAL(
+	    if (heaps_used > 0) {
+		p = (struct heaps_slot *)realloc(heaps, length);
+		if (p) heaps = p;
+	    }
+	    else {
+		p = heaps = (struct heaps_slot *)malloc(length);
+	    });
+	if (p == 0) mem_error("can't realloc heap slot");
     }
 
     for (;;) {
-	RUBY_CRITICAL(p = heaps[heaps_used] = (RVALUE*)malloc(sizeof(RVALUE)*heap_slots));
-	heaps_limits[heaps_used] = heap_slots;
+	RUBY_CRITICAL(p = (RVALUE*)malloc(sizeof(RVALUE)*(heap_slots+1)));
 	if (p == 0) {
 	    if (heap_slots == HEAP_MIN_SLOTS) {
-		mem_error("add_heap: can't alloc memory");
+		mem_error("can't alloc heap slot");
 	    }
 	    heap_slots = HEAP_MIN_SLOTS;
 	    continue;
 	}
+        heaps[heaps_used].membase = p;
+        if ((VALUE)p % sizeof(RVALUE) == 0)
+            heap_slots += 1;
+        else
+            p = (RVALUE*)((VALUE)p + sizeof(RVALUE) - ((VALUE)p % sizeof(RVALUE)));
+        heaps[heaps_used].slot = p;
+        heaps[heaps_used].limit = heap_slots;
 	break;
     }
     pend = p + heap_slots;
     if (lomem == 0 || lomem > p) lomem = p;
     if (himem < pend) himem = pend;
     heaps_used++;
-    heap_slots *= 2;
+    heap_slots *= 1.8;
+    if (heap_slots <= 0) heap_slots = HEAP_MIN_SLOTS;
 
     while (p < pend) {
-	p->as.free.flag = 0;
+	p->as.free.flags = 0;
 	p->as.free.next = freelist;
 	freelist = p;
 	p++;
@@ -339,16 +448,29 @@ add_heap()
 }
 #define RANY(o) ((RVALUE*)(o))
 
+int 
+rb_during_gc()
+{
+    return during_gc;
+}
+
 VALUE
 rb_newobj()
 {
     VALUE obj;
 
-    if (!freelist) rb_gc();
+    if (during_gc)
+	rb_bug("object allocation during garbage collection phase");
+
+    if (!malloc_limit || !freelist) garbage_collect();
 
     obj = (VALUE)freelist;
     freelist = freelist->as.free.next;
     MEMZERO((void*)obj, RVALUE, 1);
+#ifdef GC_DEBUG
+    RANY(obj)->file = ruby_sourcefile;
+    RANY(obj)->line = ruby_sourceline;
+#endif
     return obj;
 }
 
@@ -370,27 +492,96 @@ rb_data_object_alloc(klass, datap, dmark, dfree)
 
 extern st_table *rb_class_tbl;
 VALUE *rb_gc_stack_start = 0;
-VALUE *rb_gc_stack_end = (VALUE *)STACK_DIRECTION;
+#ifdef __ia64
+VALUE *rb_gc_register_stack_start = 0;
+#endif
+
+VALUE *rb_gc_stack_end = (VALUE *)STACK_GROW_DIRECTION;
 
 
-static inline int
-is_pointer_to_heap(ptr)
-    void *ptr;
+#ifdef DJGPP
+/* set stack size (http://www.delorie.com/djgpp/v2faq/faq15_9.html) */
+unsigned int _stklen = 0x180000; /* 1.5 kB */
+#endif
+
+#if defined(DJGPP) || defined(_WIN32_WCE)
+static unsigned int STACK_LEVEL_MAX = 65535;
+#elif defined(__human68k__)
+unsigned int _stacksize = 262144;
+# define STACK_LEVEL_MAX (_stacksize - 4096)
+# undef HAVE_GETRLIMIT
+#elif defined(HAVE_GETRLIMIT) || defined(_WIN32)
+static unsigned int STACK_LEVEL_MAX = 655300;
+#else
+# define STACK_LEVEL_MAX 655300
+#endif
+
+#ifdef C_ALLOCA
+# define SET_STACK_END VALUE stack_end; alloca(0);
+# define STACK_END (&stack_end)
+#else
+# define SET_STACK_END ((void)0)
+# define STACK_END (VALUE *)alloca(0)
+# if defined(__GNUC__) && defined(USE_BUILTIN_FRAME_ADDRESS)
+#  if ( __GNUC__ == 3 && __GNUC_MINOR__ > 0 ) || __GNUC__ > 3
+#    define TOP_FRAME (VALUE *)__builtin_frame_address(0)
+#  endif
+# endif
+#endif
+#ifndef TOP_FRAME
+# define TOP_FRAME STACK_END
+#endif
+#if STACK_GROW_DIRECTION < 0
+# define STACK_LENGTH(start)  ((start) - TOP_FRAME)
+#elif STACK_GROW_DIRECTION > 0
+# define STACK_LENGTH(start)  (TOP_FRAME - (start) + 1)
+#else
+# define STACK_LENGTH(start)  ((TOP_FRAME < (start)) ? \
+                                 (start) - TOP_FRAME : TOP_FRAME - (start) + 1)
+#endif
+#if STACK_GROW_DIRECTION > 0
+# define STACK_UPPER(x, a, b) a
+#else
+# define STACK_UPPER(x, a, b) b
+#endif
+
+int
+stack_length(start)
+    VALUE *start;
 {
-    register RVALUE *p = RANY(ptr);
-    register RVALUE *heap_org;
-    register long i;
+    SET_STACK_END;
+    return STACK_LENGTH(start);
+}
 
-    if (p < lomem || p > himem) return Qfalse;
+int
+ruby_stack_check()
+{
+    return __stack_past(stack_limit);
+}
 
-    /* check if p looks like a pointer */
-    for (i=0; i < heaps_used; i++) {
-	heap_org = heaps[i];
-	if (heap_org <= p && p < heap_org + heaps_limits[i] &&
-	    ((((char*)p)-((char*)heap_org))%sizeof(RVALUE)) == 0)
-	    return Qtrue;
+#define MARK_STACK_MAX 1024
+static VALUE mark_stack[MARK_STACK_MAX];
+static VALUE *mark_stack_ptr;
+static int mark_stack_overflow;
+
+static void
+init_mark_stack()
+{
+    mark_stack_overflow = 0;
+    mark_stack_ptr = mark_stack;
+}
+
+#define MARK_STACK_EMPTY (mark_stack_ptr == mark_stack)
+
+static inline void
+push_mark_stack(VALUE ptr)
+{
+    if (!mark_stack_overflow) {
+	if (mark_stack_ptr - mark_stack < MARK_STACK_MAX)
+	    *mark_stack_ptr++ = ptr;
+	else
+	    mark_stack_overflow = 1;
     }
-    return Qfalse;
 }
 
 static st_table *source_filenames;
@@ -421,7 +612,7 @@ mark_source_filename(f)
     }
 }
 
-static enum st_retval
+static int
 sweep_source_filename(key, value)
     char *key, *value;
 {
@@ -435,33 +626,78 @@ sweep_source_filename(key, value)
     }
 }
 
+#define gc_mark(ptr) rb_gc_mark(ptr)
+static void gc_mark_children _((VALUE ptr));
+
+static void
+gc_mark_all()
+{
+    RVALUE *p, *pend;
+    struct heaps_slot *heap = heaps+heaps_used;
+
+    init_mark_stack();
+    while (--heap >= heaps) {
+	p = heap->slot; pend = p + heap->limit;
+	while (p < pend) {
+	    if ((p->as.basic.flags & FL_MARK) &&
+		(p->as.basic.flags != FL_MARK)) {
+		gc_mark_children((VALUE)p);
+	    }
+	    p++;
+	}
+    }
+}
+
+static void
+gc_mark_rest()
+{
+    VALUE tmp_arry[MARK_STACK_MAX];
+    unsigned stackLen = mark_stack_ptr - mark_stack;
+    VALUE *p = tmp_arry + stackLen;
+    
+    MEMCPY(tmp_arry, mark_stack, VALUE, stackLen);
+
+    init_mark_stack();
+    while(--p >= tmp_arry) gc_mark_children(*p);
+}
+
+static inline int
+is_pointer_to_heap(ptr)
+    void *ptr;
+{
+    RVALUE *p = RANY(ptr);
+    struct heaps_slot *heap;
+
+    if (p < lomem || p > himem || (VALUE)p % sizeof(RVALUE)) return Qfalse;
+
+    /* check if p looks like a pointer */
+    heap = heaps+heaps_used;
+    while (--heap >= heaps) 
+      if (p >= heap->slot && p < heap->slot + heap->limit)
+        return Qtrue;
+    return Qfalse;
+}
+
 static void
 mark_locations_array(x, n)
-    register VALUE *x;
-    register long n;
+    VALUE *x;
+    size_t n;
 {
+    VALUE v;
     while (n--) {
-	if (is_pointer_to_heap((void *)*x)) {
-	    rb_gc_mark(*x);
+        v = *x;
+	if (is_pointer_to_heap((void *)v)) {
+	    gc_mark(v);
 	}
 	x++;
     }
 }
 
-void
+void inline
 rb_gc_mark_locations(start, end)
     VALUE *start, *end;
 {
-    VALUE *tmp;
-    long n;
-
-    if (start > end) {
-	tmp = start;
-	start = end;
-	end = tmp;
-    }
-    n = end - start;
-    mark_locations_array(start,n);
+    mark_locations_array(start,end - start);
 }
 
 static int
@@ -469,7 +705,7 @@ mark_entry(key, value)
     ID key;
     VALUE value;
 {
-    rb_gc_mark(value);
+    gc_mark(value);
     return ST_CONTINUE;
 }
 
@@ -480,14 +716,15 @@ rb_mark_tbl(tbl)
     if (!tbl) return;
     st_foreach(tbl, mark_entry, 0);
 }
+#define mark_tbl(tbl)  rb_mark_tbl(tbl)
 
 static int
-mark_hashentry(key, value)
+mark_keyvalue(key, value)
     VALUE key;
     VALUE value;
 {
-    rb_gc_mark(key);
-    rb_gc_mark(value);
+    gc_mark(key);
+    gc_mark(value);
     return ST_CONTINUE;
 }
 
@@ -496,216 +733,58 @@ rb_mark_hash(tbl)
     st_table *tbl;
 {
     if (!tbl) return;
-    st_foreach(tbl, mark_hashentry, 0);
+    st_foreach(tbl, mark_keyvalue, 0);
 }
+#define mark_hash(tbl)  rb_mark_hash(tbl)
 
 void
 rb_gc_mark_maybe(obj)
     VALUE obj;
 {
     if (is_pointer_to_heap((void *)obj)) {
-	rb_gc_mark(obj);
+	gc_mark(obj);
     }
 }
-
-#ifdef DEBUG_REACHABILITY
-VALUE rbx_reach_test_obj      = Qnil;
-VALUE rbx_reach_test_result   = Qnil;
-VALUE rbx_reach_test_path     = Qnil;
-int   rbx_reach_test_flag     = 0;
-int   rbx_reach_test_len      = 0;
-
-// based on gc_sweep()
-static void
-rbx_gc_unmark()
-{
-    RVALUE *p, *pend;
-    int i, used = heaps_used;
-
-    for (i = 0; i < used; i++) {
-	p = heaps[i]; pend = p + heaps_limits[i];
-	while (p < pend) {
-	    RBASIC(p)->flags &= ~FL_MARK;
-	    p++;
-	}
-    }
-}
-
-
-// based on rb_gc
-static VALUE
-rbx_reachability_paths(mod, obj)
-    VALUE mod;
-    VALUE obj;
-{
-    int i;
-    VALUE result;
-    struct gc_list *list;
-    struct FRAME * frame;
-    jmp_buf save_regs_gc_mark;
-#ifdef C_ALLOCA
-    VALUE stack_end;
-    alloca(0);
-# define STACK_END (&stack_end)
-#else
-# if defined(__GNUC__) && (defined(__i386__) || defined(__mc68000__))
-    VALUE *stack_end = __builtin_frame_address(0);
-
-# else
-    VALUE *stack_end = alloca(1);
-# endif
-# define STACK_END (stack_end)
-#endif
-
-    if (rbx_reach_test_obj != Qnil ||
-        rbx_reach_test_result != Qnil ||
-        rbx_reach_test_path != Qnil)
-      rb_raise(rb_eRuntimeError, "reachability_paths called recursively");
-
-    if (!rbx_reach_test_flag) {
-      rbx_reach_test_flag = 1;
-      rb_global_variable(&rbx_reach_test_result);
-      rb_global_variable(&rbx_reach_test_path);
-    }
-
-    rbx_reach_test_obj    = obj;
-    rbx_reach_test_result = rb_ary_new();
-    rbx_reach_test_path   = rb_ary_new();
-    rbx_reach_test_len    = 0;
-    
-    printf("Checking frame stack...\n");
-    /* mark frame stack */
-    i = 0;
-    for (frame = ruby_frame; frame; frame = frame->prev) {
-        char buf[100];
-        sprintf(buf, "frame %d: %s line %d", i, frame->file, frame->line);
-        rb_ary_store(rbx_reach_test_path, rbx_reach_test_len, rb_str_new2(buf));
-        rbx_reach_test_len++;
-	rb_gc_mark_frame(frame);
-        rbx_reach_test_len--;
-        i++;
-        
-	if (frame->tmp) {
-            int ti = 0;
-	    struct FRAME *tmp = frame->tmp;
-	    while (tmp) {
-                sprintf(buf, "tmp frame %d: %s line %d", ti, frame->file, frame->line);
-                rb_ary_store(rbx_reach_test_path, rbx_reach_test_len, rb_str_new2(buf));
-                rbx_reach_test_len++;
-		rb_gc_mark_frame(tmp);
-                rbx_reach_test_len--;
-                ti++;
-		tmp = tmp->prev;
-	    }
-	}
-    }
-    printf("Checking ruby_class...\n");
-    rb_gc_mark(ruby_class);
-    printf("Checking ruby_scope...\n");
-    rb_gc_mark(ruby_scope);
-    printf("Checking ruby_dyna_vars...\n");
-    rb_gc_mark(ruby_dyna_vars);
-    printf("Checking finalizer_table...\n");
-    if (finalizer_table) {
-	rb_mark_tbl(finalizer_table);
-    }
-
-    FLUSH_REGISTER_WINDOWS;
-    /* This assumes that all registers are saved into the jmp_buf */
-    setjmp(save_regs_gc_mark);
-    printf("Checking save_regs_gc_mark...\n");
-    mark_locations_array((VALUE*)save_regs_gc_mark, sizeof(save_regs_gc_mark) / sizeof(VALUE *));
-    printf("Checking stack_start...\n");
-    rb_gc_mark_locations(rb_gc_stack_start, (VALUE*)STACK_END);
-#if defined(__human68k__)
-    rb_gc_mark_locations((VALUE*)((char*)rb_gc_stack_start + 2),
-			 (VALUE*)((char*)STACK_END + 2));
-#endif
-    printf("Checking threads...\n");
-    rb_gc_mark_threads();
-
-    /* mark protected global variables */
-    printf("Checking C globals...\n");
-    for (list = Global_List; list; list = list->next) {
-        char buf[100];
-        sprintf(buf, "C global %d", i);
-        rb_ary_store(rbx_reach_test_path, rbx_reach_test_len, rb_str_new2(buf));
-        rbx_reach_test_len++;
-	rb_gc_mark(*list->varptr);
-        rbx_reach_test_len--;
-        i++;
-    }
-    printf("Checking end_proc...\n");
-    rb_mark_end_proc();
-    printf("Checking global_tbl...\n");
-    rb_gc_mark_global_tbl();    // see changes in variable.c
-
-    printf("Checking class_tbl...\n");
-    rb_mark_tbl(rb_class_tbl);
-    printf("Checking trap_list...\n");
-    rb_gc_mark_trap_list();
-
-    /* mark generic instance variables for special constants */
-    printf("Checking generic_ivar_tbl...\n");
-    rb_mark_generic_ivar_tbl();
-
-    printf("Unmarking...\n");
-    rbx_gc_unmark();
-
-    printf("Done.\n");
-
-    result = rbx_reach_test_result;
-
-    rbx_reach_test_obj    = Qnil;
-    rbx_reach_test_result = Qnil;
-    rbx_reach_test_path   = Qnil;
-    
-    return result;
-}
-#endif
-
 
 void
 rb_gc_mark(ptr)
     VALUE ptr;
 {
-    register RVALUE *obj = RANY(ptr);
-#ifdef DEBUG_REACHABILITY
-    int save_reach_test_len;
-    
-    // save position in path array
-    save_reach_test_len = rbx_reach_test_len;
-#endif
+    RVALUE *obj = RANY(ptr);
 
-  Top:
-#ifdef DEBUG_REACHABILITY
-    if (rb_special_const_p((VALUE)obj)) goto Done; /* special const not marked */
-    if (obj->as.basic.flags == 0) goto Done;       /* free cell */
-
-    if (rbx_reach_test_obj != Qnil &&
-        (obj->as.basic.flags & T_MASK) != T_NODE) {
-      if ((VALUE)obj == rbx_reach_test_obj) {
-        printf("  ...found, after %d steps!\n", rbx_reach_test_len);
-        rb_ary_push(rbx_reach_test_result,
-          rb_ary_new4(rbx_reach_test_len, RARRAY(rbx_reach_test_path)->ptr));
-      }
-      else {
-        rb_ary_store(rbx_reach_test_path, rbx_reach_test_len, (VALUE)obj);
-        rbx_reach_test_len++;
-      }
-    }
-
-    if (obj->as.basic.flags & FL_MARK) goto Done;  /* already marked */
-#else
-    if (rb_special_const_p((VALUE)obj)) return; /* special const not marked */
+    if (rb_special_const_p(ptr)) return; /* special const not marked */
     if (obj->as.basic.flags == 0) return;       /* free cell */
     if (obj->as.basic.flags & FL_MARK) return;  /* already marked */
-#endif
-
     obj->as.basic.flags |= FL_MARK;
 
+    if (__stack_past(stack_gc_limit))
+      push_mark_stack(ptr);
+    else{
+      gc_mark_children(ptr);
+    }
+}
+
+static void
+gc_mark_children(ptr)
+    VALUE ptr;
+{
+    RVALUE *obj = RANY(ptr);
+
+#if STACK_WIPE_SITES & 0x400
+    rb_gc_update_stack_extent();
+#endif
+    goto marking;		/* skip */
+
+  again:
+    obj = RANY(ptr);
+    if (rb_special_const_p(ptr)) return; /* special const not marked */
+    if (obj->as.basic.flags == 0) return;       /* free cell */
+    if (obj->as.basic.flags & FL_MARK) return;  /* already marked */
+    obj->as.basic.flags |= FL_MARK;
+
+  marking:
     if (FL_TEST(obj, FL_EXIVAR)) {
-	rb_mark_generic_ivar((VALUE)obj);
+	rb_mark_generic_ivar(ptr);
     }
 
     switch (obj->as.basic.flags & T_MASK) {
@@ -725,7 +804,7 @@ rb_gc_mark(ptr)
 	  case NODE_MASGN:
 	  case NODE_RESCUE:
 	  case NODE_RESBODY:
-	    rb_gc_mark((VALUE)obj->as.node.u2.node);
+	    gc_mark((VALUE)obj->as.node.u2.node);
 	    /* fall through */
 	  case NODE_BLOCK:	/* 1,3 */
 	  case NODE_ARRAY:
@@ -739,14 +818,14 @@ rb_gc_mark(ptr)
 	  case NODE_CALL:
 	  case NODE_DEFS:
 	  case NODE_OP_ASGN1:
-	    rb_gc_mark((VALUE)obj->as.node.u1.node);
+	    gc_mark((VALUE)obj->as.node.u1.node);
 	    /* fall through */
 	  case NODE_SUPER:	/* 3 */
 	  case NODE_FCALL:
 	  case NODE_DEFN:
 	  case NODE_NEWLINE:
-	    obj = RANY(obj->as.node.u3.node);
-	    goto Top;
+	    ptr = (VALUE)obj->as.node.u3.node;
+	    goto again;
 
 	  case NODE_WHILE:	/* 1,2 */
 	  case NODE_UNTIL:
@@ -762,7 +841,7 @@ rb_gc_mark(ptr)
 	  case NODE_MATCH3:
 	  case NODE_OP_ASGN_OR:
 	  case NODE_OP_ASGN_AND:
-	    rb_gc_mark((VALUE)obj->as.node.u1.node);
+	    gc_mark((VALUE)obj->as.node.u1.node);
 	    /* fall through */
 	  case NODE_METHOD:	/* 2 */
 	  case NODE_NOT:
@@ -777,8 +856,8 @@ rb_gc_mark(ptr)
 	  case NODE_MODULE:
 	  case NODE_COLON3:
 	  case NODE_OPT_N:
-	    obj = RANY(obj->as.node.u2.node);
-	    goto Top;
+	    ptr = (VALUE)obj->as.node.u2.node;
+	    goto again;
 
 	  case NODE_HASH:	/* 1 */
 	  case NODE_LIT:
@@ -792,15 +871,15 @@ rb_gc_mark(ptr)
 	  case NODE_YIELD:
 	  case NODE_COLON2:
 	  case NODE_ARGS:
-	    obj = RANY(obj->as.node.u1.node);
-	    goto Top;
+	    ptr = (VALUE)obj->as.node.u1.node;
+	    goto again;
 
 	  case NODE_SCOPE:	/* 2,3 */
 	  case NODE_CLASS:
 	  case NODE_BLOCK_PASS:
-	    rb_gc_mark((VALUE)obj->as.node.u3.node);
-	    obj = RANY(obj->as.node.u2.node);
-	    goto Top;
+	    gc_mark((VALUE)obj->as.node.u3.node);
+	    ptr = (VALUE)obj->as.node.u2.node;
+	    goto again;
 
 	  case NODE_ZARRAY:	/* - */
 	  case NODE_ZSUPER:
@@ -830,58 +909,53 @@ rb_gc_mark(ptr)
 	  case NODE_ALLOCA:
 	    mark_locations_array((VALUE*)obj->as.node.u1.value,
 				 obj->as.node.u3.cnt);
-	    obj = RANY(obj->as.node.u2.node);
-	    goto Top;
+	    ptr = (VALUE)obj->as.node.u2.node;
+	    goto again;
 #endif
 
 	  default:
 	    if (is_pointer_to_heap(obj->as.node.u1.node)) {
-		rb_gc_mark((VALUE)obj->as.node.u1.node);
+		gc_mark((VALUE)obj->as.node.u1.node);
 	    }
 	    if (is_pointer_to_heap(obj->as.node.u2.node)) {
-		rb_gc_mark((VALUE)obj->as.node.u2.node);
+		gc_mark((VALUE)obj->as.node.u2.node);
 	    }
 	    if (is_pointer_to_heap(obj->as.node.u3.node)) {
-		obj = RANY(obj->as.node.u3.node);
-		goto Top;
+		ptr = (VALUE)obj->as.node.u3.node;
+		goto again;
 	    }
 	}
-#ifdef DEBUG_REACHABILITY
-	goto Done;
-#else
 	return;			/* no need to mark class. */
-#endif
     }
 
-    rb_gc_mark(obj->as.basic.klass);
+    gc_mark(obj->as.basic.klass);
     switch (obj->as.basic.flags & T_MASK) {
       case T_ICLASS:
       case T_CLASS:
       case T_MODULE:
-	rb_gc_mark(obj->as.klass.super);
-	rb_mark_tbl(obj->as.klass.m_tbl);
-	rb_mark_tbl(obj->as.klass.iv_tbl);
-	break;
+	mark_tbl(obj->as.klass.m_tbl);
+	mark_tbl(obj->as.klass.iv_tbl);
+        ptr = obj->as.klass.super;
+	goto again;
 
       case T_ARRAY:
 	{
-	    int i, len = obj->as.array.len;
-	    VALUE *ptr = obj->as.array.ptr;
-
-	    for (i=0; i < len; i++)
-		rb_gc_mark(*ptr++);
+          VALUE *ptr = obj->as.array.ptr;
+          VALUE *pend = ptr + obj->as.array.len;
+          while (ptr < pend)
+	     gc_mark(*ptr++);
 	}
 	break;
 
       case T_HASH:
-	rb_mark_hash(obj->as.hash.tbl);
-	rb_gc_mark(obj->as.hash.ifnone);
-	break;
+	mark_hash(obj->as.hash.tbl);
+	ptr = obj->as.hash.ifnone;
+        goto again;
 
       case T_STRING:
 	if (obj->as.string.orig) {
-	    obj = RANY(obj->as.string.orig);
-	    goto Top;
+	  ptr = obj->as.string.orig;
+	  goto again;
 	}
 	break;
 
@@ -890,7 +964,7 @@ rb_gc_mark(ptr)
 	break;
 
       case T_OBJECT:
-	rb_mark_tbl(obj->as.object.iv_tbl);
+	mark_tbl(obj->as.object.iv_tbl);
 	break;
 
       case T_FILE:
@@ -902,15 +976,15 @@ rb_gc_mark(ptr)
 
       case T_MATCH:
 	if (obj->as.match.str) {
-	    obj = RANY(obj->as.match.str);
-	    goto Top;
+	    ptr = obj->as.match.str;
+	    goto again;
 	}
 	break;
 
       case T_VARMAP:
-	rb_gc_mark(obj->as.varmap.val);
-	obj = RANY(obj->as.varmap.next);
-	goto Top;
+	gc_mark(obj->as.varmap.val);
+	ptr = (VALUE) obj->as.varmap.next;
+	goto again;
 	break;
 
       case T_SCOPE:
@@ -919,19 +993,17 @@ rb_gc_mark(ptr)
 	    VALUE *vars = &obj->as.scope.local_vars[-1];
 
 	    while (n--) {
-		rb_gc_mark(*vars);
-		vars++;
+		gc_mark(*vars++);
 	    }
 	}
 	break;
 
       case T_STRUCT:
 	{
-	    int i, len = obj->as.rstruct.len;
 	    VALUE *ptr = obj->as.rstruct.ptr;
-
-	    for (i=0; i < len; i++)
-		rb_gc_mark(*ptr++);
+            VALUE *pend = ptr + obj->as.rstruct.len;
+            while (ptr < pend)
+	       gc_mark(*ptr++);
 	}
 	break;
 
@@ -940,58 +1012,101 @@ rb_gc_mark(ptr)
 	       obj->as.basic.flags & T_MASK, (unsigned long)obj,
 	       is_pointer_to_heap(obj) ? "corrupted object" : "non object");
     }
-#ifdef DEBUG_REACHABILITY
-  Done:
-    // restore position in array
-    rbx_reach_test_len = save_reach_test_len;
-#endif
-    rb_gc_update_stack_extent();
 }
 
 static void obj_free _((VALUE));
+
+static void
+finalize_list(p)
+    RVALUE *p;
+{
+    while (p) {
+	RVALUE *tmp = p->as.free.next;
+	run_final((VALUE)p);
+	if (!FL_TEST(p, FL_SINGLETON)) { /* not freeing page */
+	    p->as.free.flags = 0;
+	    p->as.free.next = freelist;
+	    freelist = p;
+	}
+	p = tmp;
+    }
+}
+
+static void
+free_unused_heaps()
+{
+    int i, j;
+
+    for (i = j = 1; j < heaps_used; i++) {
+	if (heaps[i].limit == 0) {
+	    free(heaps[i].membase);
+	    heaps_used--;
+	}
+	else {
+	    if (i != j) {
+		heaps[j] = heaps[i];
+	    }
+	    j++;
+	}
+    }
+}
+
+void rb_gc_abort_threads(void);
 
 static void
 gc_sweep()
 {
     RVALUE *p, *pend, *final_list;
     int freed = 0;
-    int i, used = heaps_used;
+    int i;
+    unsigned long free_min = 0;
+
+    for (i = 0; i < heaps_used; i++) {
+        free_min += heaps[i].limit;
+    }
+    free_min /= 5;
+    if (free_min < FREE_MIN)
+        free_min = FREE_MIN;
 
     if (ruby_in_compile && ruby_parser_stack_on_heap()) {
 	/* should not reclaim nodes during compilation
            if yacc's semantic stack is not allocated on machine stack */
-	for (i = 0; i < used; i++) {
-	    p = heaps[i]; pend = p + heaps_limits[i];
+	for (i = 0; i < heaps_used; i++) {
+	    p = heaps[i].slot; pend = p + heaps[i].limit;
 	    while (p < pend) {
 		if (!(p->as.basic.flags&FL_MARK) && BUILTIN_TYPE(p) == T_NODE)
-		    rb_gc_mark((VALUE)p);
+		    gc_mark((VALUE)p);
 		p++;
 	    }
 	}
     }
 
     mark_source_filename(ruby_sourcefile);
+    if (source_filenames) {
     st_foreach(source_filenames, sweep_source_filename, 0);
+    }
 
     freelist = 0;
     final_list = deferred_final_list;
     deferred_final_list = 0;
-    for (i = 0; i < used; i++) {
+    for (i = 0; i < heaps_used; i++) {
 	int n = 0;
+	RVALUE *free = freelist;
+	RVALUE *final = final_list;
 
-	p = heaps[i]; pend = p + heaps_limits[i];
+	p = heaps[i].slot; pend = p + heaps[i].limit;
 	while (p < pend) {
 	    if (!(p->as.basic.flags & FL_MARK)) {
 		if (p->as.basic.flags) {
 		    obj_free((VALUE)p);
 		}
 		if (need_call_final && FL_TEST(p, FL_FINALIZE)) {
-		    p->as.free.flag = FL_MARK; /* remain marked */
+		    p->as.free.flags = FL_MARK; /* remain marked */
 		    p->as.free.next = final_list;
 		    final_list = p;
 		}
 		else {
-		    p->as.free.flag = 0;
+		    p->as.free.flags = 0;
 		    p->as.free.next = freelist;
 		    freelist = p;
 		}
@@ -999,44 +1114,45 @@ gc_sweep()
 	    }
 	    else if (RBASIC(p)->flags == FL_MARK) {
 		/* objects to be finalized */
-		/* do notning remain marked */
+		/* do nothing remain marked */
 	    }
 	    else {
 		RBASIC(p)->flags &= ~FL_MARK;
 	    }
 	    p++;
 	}
+	if (n == heaps[i].limit && freed > free_min) {
+	    RVALUE *pp;
+
+	    heaps[i].limit = 0;
+	    for (pp = final_list; pp != final; pp = pp->as.free.next) {
+		pp->as.free.flags |= FL_SINGLETON; /* freeing page mark */
+	    }
+	    freelist = free;	/* cancel this page from freelist */
+	}
+	else {
 	freed += n;
     }
-    if (freed < FREE_MIN) {
+    }
+    malloc_increase = 0;
+    if (freed < free_min) {
 	add_heap();
     }
     during_gc = 0;
 
     /* clear finalization list */
     if (final_list) {
-	RVALUE *tmp;
-
-	if (rb_prohibit_interrupt || ruby_in_compile) {
 	    deferred_final_list = final_list;
 	    return;
 	}
-
-	for (p = final_list; p; p = tmp) {
-	    tmp = p->as.free.next;
-	    run_final((VALUE)p);
-	    p->as.free.flag = 0;
-	    p->as.free.next = freelist;
-	    freelist = p;
-	}
-    }
+    free_unused_heaps();
 }
 
 void
 rb_gc_force_recycle(p)
     VALUE p;
 {
-    RANY(p)->as.free.flag = 0;
+    RANY(p)->as.free.flags = 0;
     RANY(p)->as.free.next = freelist;
     freelist = RANY(p);
 }
@@ -1180,6 +1296,8 @@ rb_gc_mark_frame(frame)
 
 #ifdef __GNUC__
 #if defined(__human68k__) || defined(DJGPP)
+#undef rb_setjmp
+#undef rb_jmp_buf
 #if defined(__human68k__)
 typedef unsigned long rb_jmp_buf[8];
 __asm__ (".even\n\
@@ -1188,9 +1306,6 @@ _rb_setjmp:\n\
 	movem.l	d3-d7/a3-a5,(a0)\n\
 	moveq.l	#0,d0\n\
 	rts");
-#ifdef setjmp
-#undef setjmp
-#endif
 #else
 #if defined(DJGPP)
 typedef unsigned long rb_jmp_buf[6];
@@ -1211,42 +1326,33 @@ _rb_setjmp:\n\
 #endif
 #endif
 int rb_setjmp (rb_jmp_buf);
-#define jmp_buf rb_jmp_buf
-#define setjmp rb_setjmp
 #endif /* __human68k__ or DJGPP */
 #endif /* __GNUC__ */
 
-void
-rb_gc()
+static void
+garbage_collect()
 {
     struct gc_list *list;
     struct FRAME * frame;
     jmp_buf save_regs_gc_mark;
-#ifdef C_ALLOCA
-    VALUE stack_end;
-    alloca(0);
-# define STACK_END (&stack_end)
-#else
-# if defined(__GNUC__) && (defined(__i386__) || defined(__mc68000__))
-    VALUE *stack_end = __builtin_frame_address(0);
-# else
-    VALUE *stack_end = alloca(1);
-# endif
-# define STACK_END (stack_end)
-#endif
+    SET_STACK_END;
 
+#ifdef HAVE_NATIVETHREAD
+    if (!is_ruby_native_thread()) {
+	rb_bug("cross-thread violation on rb_gc()");
+    }
+#endif
     if (dont_gc || during_gc) {
-	if (!freelist || malloc_increase > malloc_limit) {
-	    malloc_increase = 0;
+	if (!freelist) {
 	    add_heap();
 	}
 	return;
     }
-
-    malloc_increase = 0;
-
     if (during_gc) return;
     during_gc++;
+
+    stack_gc_limit = __stack_grow(STACK_END, GC_LEVEL_MAX);
+    init_mark_stack();
 
     /* mark frame stack */
     for (frame = ruby_frame; frame; frame = frame->prev) {
@@ -1263,23 +1369,37 @@ rb_gc()
     rb_gc_mark((VALUE)ruby_scope);
     rb_gc_mark((VALUE)ruby_dyna_vars);
     if (finalizer_table) {
-	rb_mark_tbl(finalizer_table);
+	mark_tbl(finalizer_table);
     }
 
     FLUSH_REGISTER_WINDOWS;
-    /* This assumes that all registers are saved into the jmp_buf */
+    /* This assumes that all registers are saved into the jmp_buf (and stack) */
     setjmp(save_regs_gc_mark);
     mark_locations_array((VALUE*)save_regs_gc_mark, sizeof(save_regs_gc_mark) / sizeof(VALUE *));
-    rb_gc_mark_locations(rb_gc_stack_start, (VALUE*)STACK_END);
-#if defined(__human68k__)
-    rb_gc_mark_locations((VALUE*)((char*)rb_gc_stack_start + 2),
-			 (VALUE*)((char*)STACK_END + 2));
+#if STACK_GROW_DIRECTION < 0
+    rb_gc_mark_locations((VALUE*)TOP_FRAME, rb_gc_stack_start);
+#elif STACK_GROW_DIRECTION > 0
+    rb_gc_mark_locations(rb_gc_stack_start, (VALUE*)TOP_FRAME + 1);
+#else
+    if (rb_gc_stack_grow_direction < 0)
+	rb_gc_mark_locations((VALUE*)TOP_FRAME, rb_gc_stack_start);
+    else
+	rb_gc_mark_locations(rb_gc_stack_start, (VALUE*)TOP_FRAME + 1);
+#endif
+#ifdef __ia64
+    /* mark backing store (flushed register window on the stack) */
+    /* the basic idea from guile GC code                         */
+    rb_gc_mark_locations(rb_gc_register_stack_start, (VALUE*)rb_ia64_bsp());
+#endif
+#if defined(__human68k__) || defined(__mc68000__)
+    rb_gc_mark_locations((VALUE*)((char*)STACK_END + 2),
+			 (VALUE*)((char*)rb_gc_stack_start + 2));
 #endif
     rb_gc_mark_threads();
 
     /* mark protected global variables */
     for (list = Global_List; list; list = list->next) {
-	rb_gc_mark(*list->varptr);
+	rb_gc_mark_maybe(*list->varptr);
     }
     rb_mark_end_proc();
     rb_gc_mark_global_tbl();
@@ -1292,51 +1412,209 @@ rb_gc()
 
     rb_gc_mark_parser();
 
+    /* gc_mark objects whose marking are not completed*/
+    do {
+	while (!MARK_STACK_EMPTY) {
+	    if (mark_stack_overflow){
+		gc_mark_all();
+	    }
+	    else {
+		gc_mark_rest();
+	    }
+	}
+	rb_gc_abort_threads();
+    } while (!MARK_STACK_EMPTY);
+
     gc_sweep();
 }
 
-static VALUE
-gc_start()
+
+void
+rb_gc_finalize_deferred()
+{
+    RVALUE *p = deferred_final_list;
+
+    deferred_final_list = 0;
+    if (p) {
+	finalize_list(p);
+	free_unused_heaps();
+    }
+}
+
+
+void
+rb_gc()
+{
+    garbage_collect();
+    rb_gc_finalize_deferred();
+}
+
+/*
+ *  call-seq:
+ *     GC.start                     => nil
+ *     gc.garbage_collect           => nil
+ *     ObjectSpace.garbage_collect  => nil
+ *
+ *  Initiates garbage collection, unless manually disabled.
+ *
+ */
+
+VALUE
+rb_gc_start()
 {
     rb_gc();
     return Qnil;
 }
 
-#if !defined(__human68k__)
-static int
-stack_growup_p(addr)
-    VALUE *addr;
-{
-    VALUE dummy;
 
-    if (&dummy > addr) return Qtrue;
-    return Qfalse;
+void
+ruby_set_stack_size(size)
+    size_t size;
+{
+#ifndef STACK_LEVEL_MAX
+    STACK_LEVEL_MAX = size / sizeof(VALUE);
+#endif
+    stack_limit = __stack_grow(rb_gc_stack_start, STACK_LEVEL_MAX-GC_LEVEL_MAX);
+}
+
+static void
+set_stack_size(void)
+{
+#ifdef HAVE_GETRLIMIT
+  struct rlimit rlim;
+  if (getrlimit(RLIMIT_STACK, &rlim) == 0) {
+    rlim_t maxStackBytes = rlim.rlim_cur;
+    if (maxStackBytes != RLIM_INFINITY &&
+        maxStackBytes^(size_t)maxStackBytes == 0) {
+      size_t space = (size_t)maxStackBytes/5;
+      if (space > 1024*1024) space = 1024*1024;
+      ruby_set_stack_size(rlim.rlim_cur - space);
+      return;
+    }
 }
 #endif
+  ruby_set_stack_size(STACK_LEVEL_MAX*sizeof(VALUE));
+}
 
 void
 Init_stack(addr)
     VALUE *addr;
 {
-#if defined(__human68k__)
-    extern void *_SEND;
-    rb_gc_stack_start = _SEND;
-#else
-    if (!addr) addr = (VALUE *)&addr;
-    if (rb_gc_stack_start) {
-	if (stack_growup_p(addr)) {
-	    if (rb_gc_stack_start > --addr)
-		rb_gc_stack_start = addr;
-	}
-	else {
-	    if (rb_gc_stack_start < ++addr)
-		rb_gc_stack_start = addr;
-	}
-	return;
+#ifdef __ia64
+    if (rb_gc_register_stack_start == 0) {
+# if defined(__FreeBSD__)
+        /*
+         * FreeBSD/ia64 currently does not have a way for a process to get the
+         * base address for the RSE backing store, so hardcode it.
+         */
+        rb_gc_register_stack_start = (4ULL<<61);
+# elif defined(HAVE___LIBC_IA64_REGISTER_BACKING_STORE_BASE)
+#  pragma weak __libc_ia64_register_backing_store_base
+        extern unsigned long __libc_ia64_register_backing_store_base;
+        rb_gc_register_stack_start = (VALUE*)__libc_ia64_register_backing_store_base;
+# endif
     }
+    {
+        VALUE *bsp = (VALUE*)rb_ia64_bsp();
+        if (rb_gc_register_stack_start == 0 ||
+            bsp < rb_gc_register_stack_start) {
+            rb_gc_register_stack_start = bsp;
+        }
+    }
+#endif
+#if defined(_WIN32) || defined(__CYGWIN__)
+    MEMORY_BASIC_INFORMATION m;
+    memset(&m, 0, sizeof(m));
+    VirtualQuery(&m, &m, sizeof(m));
+    rb_gc_stack_start =
+	STACK_UPPER((VALUE *)&m, (VALUE *)m.BaseAddress,
+		    (VALUE *)((char *)m.BaseAddress + m.RegionSize) - 1);
+#elif defined(STACK_END_ADDRESS)
+    {
+        extern void *STACK_END_ADDRESS;
+        rb_gc_stack_start = STACK_END_ADDRESS;
+    }
+#else
+    if (!addr) addr = (void *)&addr;
+    STACK_UPPER(&addr, addr, ++addr);
+    if (rb_gc_stack_start) {
+	if (STACK_UPPER(&addr,
+			rb_gc_stack_start > addr,
+			rb_gc_stack_start < addr))
+		rb_gc_stack_start = addr;
+	return;
+	}
+		rb_gc_stack_start = addr;
+#endif
+    set_stack_size();
+}
+
+void ruby_init_stack(VALUE *addr
+#ifdef __ia64
+    , void *bsp
+#endif
+    )
+{
+    if (!rb_gc_stack_start ||
+        STACK_UPPER(&addr,
+                    rb_gc_stack_start > addr,
+                    rb_gc_stack_start < addr)) {
     rb_gc_stack_start = addr;
+    }
+#ifdef __ia64
+    if (!rb_gc_register_stack_start ||
+        (VALUE*)bsp < rb_gc_register_stack_start) {
+        rb_gc_register_stack_start = (VALUE*)bsp;
+    }
+#endif
+#ifdef HAVE_GETRLIMIT
+    set_stack_size();
+#elif defined _WIN32
+    {
+	MEMORY_BASIC_INFORMATION mi;
+	DWORD size;
+	DWORD space;
+
+	if (VirtualQuery(&mi, &mi, sizeof(mi))) {
+	    size = (char *)mi.BaseAddress - (char *)mi.AllocationBase;
+	    space = size / 5;
+	    if (space > 1024*1024) space = 1024*1024;
+	    ruby_set_stack_size(size - space);
+	}
+    }
 #endif
 }
+
+/*
+ * Document-class: ObjectSpace
+ *
+ *  The <code>ObjectSpace</code> module contains a number of routines
+ *  that interact with the garbage collection facility and allow you to
+ *  traverse all living objects with an iterator.
+ *
+ *  <code>ObjectSpace</code> also provides support for object
+ *  finalizers, procs that will be called when a specific object is
+ *  about to be destroyed by garbage collection.
+ *
+ *     include ObjectSpace
+ *
+ *
+ *     a = "A"
+ *     b = "B"
+ *     c = "C"
+ *
+ *
+ *     define_finalizer(a, proc {|id| puts "Finalizer one on #{id}" })
+ *     define_finalizer(a, proc {|id| puts "Finalizer two on #{id}" })
+ *     define_finalizer(b, proc {|id| puts "Finalizer three on #{id}" })
+ *
+ *  <em>produces:</em>
+ *
+ *     Finalizer three on 537763470
+ *     Finalizer one on 537763480
+ *     Finalizer two on 537763480
+ *
+ */
 
 void
 Init_heap()
@@ -1356,10 +1634,11 @@ os_live_obj()
     for (i = 0; i < heaps_used; i++) {
 	RVALUE *p, *pend;
 
-	p = heaps[i]; pend = p + heaps_limits[i];
+	p = heaps[i].slot; pend = p + heaps[i].limit;
 	for (;p < pend; p++) {
 	    if (p->as.basic.flags) {
-		switch (TYPE(p)) {
+		switch (BUILTIN_TYPE(p)) {
+                  case T_NONE:
 		  case T_ICLASS:
 		  case T_VARMAP:
 		  case T_SCOPE:
@@ -1375,7 +1654,6 @@ os_live_obj()
 	    }
 	}
     }
-
     return INT2FIX(n);
 }
 
@@ -1389,10 +1667,11 @@ os_obj_of(of)
     for (i = 0; i < heaps_used; i++) {
 	RVALUE *p, *pend;
 
-	p = heaps[i]; pend = p + heaps_limits[i];
+	p = heaps[i].slot; pend = p + heaps[i].limit;
 	for (;p < pend; p++) {
 	    if (p->as.basic.flags) {
-		switch (TYPE(p)) {
+		switch (BUILTIN_TYPE(p)) {
+                  case T_NONE:
 		  case T_ICLASS:
 		  case T_VARMAP:
 		  case T_SCOPE:
@@ -1410,9 +1689,41 @@ os_obj_of(of)
 	    }
 	}
     }
-
     return INT2FIX(n);
 }
+
+/*
+ *  call-seq:
+ *     ObjectSpace.each_object([module]) {|obj| ... } => fixnum
+ *
+ *  Calls the block once for each living, nonimmediate object in this
+ *  Ruby process. If <i>module</i> is specified, calls the block
+ *  for only those classes or modules that match (or are a subclass of)
+ *  <i>module</i>. Returns the number of objects found. Immediate
+ *  objects (<code>Fixnum</code>s, <code>Symbol</code>s
+ *  <code>true</code>, <code>false</code>, and <code>nil</code>) are
+ *  never returned. In the example below, <code>each_object</code>
+ *  returns both the numbers we defined and several constants defined in
+ *  the <code>Math</code> module.
+ *
+ *     a = 102.7
+ *     b = 95       # Won't be returned
+ *     c = 12345678987654321
+ *     count = ObjectSpace.each_object(Numeric) {|x| p x }
+ *     puts "Total count: #{count}"
+ *
+ *  <em>produces:</em>
+ *
+ *     12345678987654321
+ *     102.7
+ *     2.71828182845905
+ *     3.14159265358979
+ *     2.22044604925031e-16
+ *     1.7976931348623157e+308
+ *     2.2250738585072e-308
+ *     Total count: 7
+ *
+ */
 
 static VALUE
 os_each_obj(argc, argv)
@@ -1464,7 +1775,7 @@ static VALUE
 call_final(os, obj)
     VALUE os, obj;
 {
-    rb_warn("ObjectSpace::call_final is deprecated; use define_finalizer");
+    rb_warn("ObjectSpace::call_finalizer is deprecated; use define_finalizer");
     need_call_final = 1;
     FL_SET(obj, FL_FINALIZE);
     return obj;
@@ -1474,8 +1785,6 @@ static VALUE
 undefine_final(os, obj)
     VALUE os, obj;
 {
-    VALUE table;
-
     if (finalizer_table) {
 	st_delete(finalizer_table, &obj, 0);
     }
@@ -1558,7 +1867,7 @@ rb_gc_call_finalizer_at_exit()
 	    }
 	}
 	for (i = 0; i < heaps_used; i++) {
-	    p = heaps[i]; pend = p + heaps_limits[i];
+	    p = heaps[i].slot; pend = p + heaps[i].limit;
 	    while (p < pend) {
 		if (FL_TEST(p, FL_FINALIZE)) {
 		    FL_UNSET(p, FL_FINALIZE);
@@ -1569,13 +1878,13 @@ rb_gc_call_finalizer_at_exit()
 	    }
 	}
     }
-    /* run data object's finaliers */
+    /* run data object's finalizers */
     for (i = 0; i < heaps_used; i++) {
-	p = heaps[i]; pend = p + heaps_limits[i];
+	p = heaps[i].slot; pend = p + heaps[i].limit;
 	while (p < pend) {
 	    if (BUILTIN_TYPE(p) == T_DATA &&
 		DATA_PTR(p) && RANY(p)->as.data.dfree) {
-		p->as.free.flag = 0;
+		p->as.free.flags = 0;
 		if ((long)RANY(p)->as.data.dfree == -1) {
 		    RUBY_CRITICAL(free(DATA_PTR(p)));
 		}
@@ -1584,13 +1893,26 @@ rb_gc_call_finalizer_at_exit()
 		}
 	    }
 	    else if (BUILTIN_TYPE(p) == T_FILE) {
-		p->as.free.flag = 0;
+		p->as.free.flags = 0;
 		rb_io_fptr_finalize(RANY(p)->as.file.fptr);
 	    }
 	    p++;
 	}
     }
 }
+
+/*
+ *  call-seq:
+ *     ObjectSpace._id2ref(object_id) -> an_object
+ *
+ *  Converts an object id to a reference to the object. May not be
+ *  called on an object id passed as a parameter to a finalizer.
+ *
+ *     s = "I am a string"                    #=> "I am a string"
+ *     r = ObjectSpace._id2ref(s.object_id)   #=> "I am a string"
+ *     r == s                                 #=> true
+ *
+ */
 
 static VALUE
 id2ref(obj, id)
@@ -1618,27 +1940,47 @@ id2ref(obj, id)
     return (VALUE)ptr;
 }
 
+/*
+ *  Document-method: __id__
+ *  Document-method: object_id
+ *
+ *  call-seq:
+ *     obj.__id__       => fixnum
+ *     obj.object_id    => fixnum
+ *
+ *  Returns an integer identifier for <i>obj</i>. The same number will
+ *  be returned on all calls to <code>id</code> for a given object, and
+ *  no two active objects will share an id.
+ *  <code>Object#object_id</code> is a different concept from the
+ *  <code>:name</code> notation, which returns the symbol id of
+ *  <code>name</code>. Replaces the deprecated <code>Object#id</code>.
+ */
+
+
+/*
+ *  The <code>GC</code> module provides an interface to Ruby's mark and
+ *  sweep garbage collection mechanism. Some of the underlying methods
+ *  are also available via the <code>ObjectSpace</code> module.
+ */
+
 void
 Init_GC()
 {
     VALUE rb_mObSpace;
 
     rb_mGC = rb_define_module("GC");
-    rb_define_singleton_method(rb_mGC, "start", gc_start, 0);
-    rb_define_singleton_method(rb_mGC, "enable", gc_enable, 0);
-    rb_define_singleton_method(rb_mGC, "disable", gc_disable, 0);
+    rb_define_singleton_method(rb_mGC, "start", rb_gc_start, 0);
+    rb_define_singleton_method(rb_mGC, "enable", rb_gc_enable, 0);
+    rb_define_singleton_method(rb_mGC, "disable", rb_gc_disable, 0);
     rb_define_singleton_method(rb_mGC, "limit", gc_getlimit, 0);
     rb_define_singleton_method(rb_mGC, "limit=", gc_setlimit, 1);
     rb_define_singleton_method(rb_mGC, "increase", gc_increase, 0);
-    rb_define_method(rb_mGC, "garbage_collect", gc_start, 0);
-
-#ifdef DEBUG_REACHABILITY
-    rb_define_singleton_method(rb_mGC, "reachability_paths", rbx_reachability_paths, 1);
-#endif
+    rb_define_singleton_method(rb_mGC, "exorcise", gc_exorcise, 0);
+    rb_define_method(rb_mGC, "garbage_collect", rb_gc_start, 0);
 
     rb_mObSpace = rb_define_module("ObjectSpace");
     rb_define_module_function(rb_mObSpace, "each_object", os_each_obj, -1);
-    rb_define_module_function(rb_mObSpace, "garbage_collect", gc_start, 0);
+    rb_define_module_function(rb_mObSpace, "garbage_collect", rb_gc_start, 0);
     rb_define_module_function(rb_mObSpace, "add_finalizer", add_final, 1);
     rb_define_module_function(rb_mObSpace, "remove_finalizer", rm_final, 1);
     rb_define_module_function(rb_mObSpace, "finalizers", finals, 0);
