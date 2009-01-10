@@ -22,10 +22,6 @@
 #include <setjmp.h>
 #include <sys/types.h>
 
-#ifdef HAVE_SYS_TIME_H
-#include <sys/time.h>
-#endif
-
 #ifdef HAVE_SYS_RESOURCE_H
 #include <sys/resource.h>
 #endif
@@ -141,6 +137,23 @@ static VALUE gc_exorcise(VALUE mod)
   rb_gc_wipe_stack();
   return Qnil;
 }
+
+
+/*
+  Zero memory that was (recently) part of the stack, but is no longer.
+  Invoke when stack is deep to mark its extent and when it's shallow to wipe it.
+*/
+void rb_gc_wipe_stack(void)
+{
+  VALUE *stack_end = rb_gc_stack_end;
+  VALUE *sp = (VALUE *)STACK_END;
+  rb_gc_stack_end = sp;
+  if (__stack_past(sp, stack_end)) {
+    sp = alloca(__stack_depth((char *)stack_end, (char *)sp));
+    __stack_zero(stack_end, sp);
+  }
+}
+
 
 
 static void run_final();
@@ -530,18 +543,6 @@ static unsigned int STACK_LEVEL_MAX = 655300;
 # define STACK_LEVEL_MAX 655300
 #endif
 
-#ifdef C_ALLOCA
-# define SET_STACK_END VALUE stack_end; alloca(0);
-# define STACK_END (&stack_end)
-#else
-# define SET_STACK_END ((void)0)
-# define STACK_END (VALUE *)alloca(0)
-# if defined(__GNUC__) && defined(USE_BUILTIN_FRAME_ADDRESS)
-#  if ( __GNUC__ == 3 && __GNUC_MINOR__ > 0 ) || __GNUC__ > 3
-#    define TOP_FRAME (VALUE *)__builtin_frame_address(0)
-#  endif
-# endif
-#endif
 #ifndef TOP_FRAME
 # define TOP_FRAME STACK_END
 #endif
@@ -581,7 +582,8 @@ ruby_stack_length(start, base)
 int
 ruby_stack_check()
 {
-    return __stack_past(stack_limit);
+    SET_STACK_END;
+    return __stack_past(stack_limit, STACK_END);
 }
 
 #define MARK_STACK_MAX 1024
@@ -735,20 +737,14 @@ mark_entry(key, value)
     return ST_CONTINUE;
 }
 
-static void
-mark_tbl(tbl)
+void
+rb_mark_tbl(tbl)
     st_table *tbl;
 {
     if (!tbl) return;
     st_foreach(tbl, mark_entry, 0);
 }
-
-void
-rb_mark_tbl(tbl)
-    st_table *tbl;
-{
-    mark_tbl(tbl);
-}
+#define mark_tbl(tbl)  rb_mark_tbl(tbl)
 
 static int
 mark_keyvalue(key, value)
@@ -760,20 +756,14 @@ mark_keyvalue(key, value)
     return ST_CONTINUE;
 }
 
-static void
-mark_hash(tbl)
+void
+rb_mark_hash(tbl)
     st_table *tbl;
 {
     if (!tbl) return;
     st_foreach(tbl, mark_keyvalue, 0);
 }
-
-void
-rb_mark_hash(tbl)
-    st_table *tbl;
-{
-    mark_hash(tbl);
-}
+#define mark_hash(tbl)  rb_mark_hash(tbl)
 
 void
 rb_gc_mark_maybe(obj)
@@ -789,13 +779,14 @@ rb_gc_mark(ptr)
     VALUE ptr;
 {
     RVALUE *obj = RANY(ptr);
+    SET_STACK_END;
     
     if (rb_special_const_p(ptr)) return; /* special const not marked */
     if (obj->as.basic.flags == 0) return;       /* free cell */
     if (obj->as.basic.flags & FL_MARK) return;  /* already marked */
     obj->as.basic.flags |= FL_MARK;
 
-    if (__stack_past(stack_gc_limit))
+    if (__stack_past(stack_gc_limit, STACK_END))
       push_mark_stack(ptr);
     else{
       gc_mark_children(ptr);
@@ -960,7 +951,8 @@ gc_mark_children(ptr)
 		gc_mark((VALUE)obj->as.node.u2.node);
 	    }
 	    if (is_pointer_to_heap(obj->as.node.u3.node)) {
-		gc_mark((VALUE)obj->as.node.u3.node);
+                ptr = (VALUE)obj->as.node.u3.node;
+                goto again;
 	    }
 	}
         return;	/* no need to mark class. */
@@ -1043,12 +1035,10 @@ gc_mark_children(ptr)
 
       case T_STRUCT:
 	{
-	    long len = obj->as.rstruct.len;
 	    VALUE *ptr = obj->as.rstruct.ptr;
-
-	    while (len--) {
-		gc_mark(*ptr++);
-	    }
+            VALUE *pend = ptr + obj->as.rstruct.len;
+            while (ptr < pend)
+	       gc_mark(*ptr++);
 	}
 	break;
 
