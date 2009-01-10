@@ -118,63 +118,76 @@ void rb_thread_schedule _((void));
 
 RUBY_EXTERN VALUE *rb_gc_stack_end;
 RUBY_EXTERN int rb_gc_stack_grow_direction;  /* -1 for down or 1 for up */
-#define __stack_zero_up(end,sp)  while (end >= ++sp) *sp=0
-#define __stack_past_up(end)  ((end) < (VALUE *)alloca(0))
-#define __stack_grow_up(top,depth) ((top)+(depth))
-#define __stack_zero_down(end,sp)  while (end <= --sp) *sp=0
-#define __stack_past_down(end)  ((end) > (VALUE *)alloca(0))
-#define __stack_grow_down(top,depth) ((top)-(depth))
 
 #if STACK_GROW_DIRECTION > 0
+
+/* clear stack space between end and sp (not including *sp) */
 #define __stack_zero(end,sp)  __stack_zero_up(end,sp)
-#define __stack_past(end)  __stack_past_up(end)
+
+/* true if top has grown past limit, i.e. top deeper than limit */
+#define __stack_past(limit,top)  __stack_past_up(limit,top)
+
+/* depth of mid below stack top */
+#define __stack_depth(top,mid)   __stack_depth_up(top,mid)
+
+/* stack pointer top adjusted to include depth more items */
 #define __stack_grow(top,depth)  __stack_grow_up(top,depth)
+
+
 #elif STACK_GROW_DIRECTION < 0
 #define __stack_zero(end,sp)  __stack_zero_down(end,sp)
-#define __stack_past(end)  __stack_past_down(end)
+#define __stack_past(limit,top)  __stack_past_down(limit,top)
+#define __stack_depth(top,mid)   __stack_depth_down(top,mid)
 #define __stack_grow(top,depth)  __stack_grow_down(top,depth)
+
 #else  /* limp along if stack direction can't be determined at compile time */
 #define __stack_zero(end,sp) if (rb_gc_stack_grow_direction<0) \
         __stack_zero_down(end,sp); else __stack_zero_up(end,sp);
-#define __stack_past(end)  (rb_gc_stack_grow_direction<0 ? \
-                            __stack_past_down(end) : __stack_past_up(end))
+#define __stack_past(limit,top)  (rb_gc_stack_grow_direction<0 ? \
+                      __stack_past_down(limit,top) : __stack_past_up(limit,top))
+#define __stack_depth(top,mid) (rb_gc_stack_grow_direction<0 ? \
+                       __stack_depth_down(top,mid) : __stack_depth_up(top,mid))
 #define __stack_grow(top,depth) (rb_gc_stack_grow_direction<0 ? \
-                       __stack_grow_down(top,depth) : __stack_grow_up(top,depth)
+                      __stack_grow_down(top,depth) : __stack_grow_up(top,depth))
 #endif
  
-#ifdef __GNUC__   /* get the stack pointer most efficiently */
-# ifdef __i386__  /* this improves runtimes by 1 to 2 % (really!) */
-#  define _set_sp(ptr)  VALUE *ptr; asm("movl %%esp, %0;": "=r"(ptr))
-# elif __ppc__
-#  define _set_sp(ptr)  VALUE *ptr; asm("addi %0, r1, 0": "=r"(ptr))
-# elif __arm__
-#  define _set_sp(ptr)  VALUE *ptr; asm("mov %0, sp": "=r"(ptr))
-# else  /* slower, but should work everywhere gcc does */
-#  define _set_sp(ptr)  VALUE *ptr = _get_tos();
-NOINLINE(static VALUE *_get_tos(void)) {return __builtin_frame_address(0);}
+#define __stack_zero_up(end,sp)  while (end >= ++sp) *sp=0
+#define __stack_past_up(limit,top)  ((limit) < (top))
+#define __stack_depth_up(top,mid) ((top) - (mid))
+#define __stack_grow_up(top,depth) ((top)+(depth))
+
+#define __stack_zero_down(end,sp)  while (end <= --sp) *sp=0
+#define __stack_past_down(limit,top)  ((limit) > (top))
+#define __stack_depth_down(top,mid) ((mid) - (top))
+#define __stack_grow_down(top,depth) ((top)-(depth))
+
+#ifdef C_ALLOCA
+# define SET_STACK_END VALUE stack_end
+# define STACK_END (&stack_end)
+#else
+# define SET_STACK_END ((void)0)
+# define STACK_END (VALUE *)alloca(0)
+# if defined(__GNUC__) && defined(USE_BUILTIN_FRAME_ADDRESS)
+#  if ( __GNUC__ == 3 && __GNUC_MINOR__ > 0 ) || __GNUC__ > 3
+#    define TOP_FRAME (VALUE *)__builtin_frame_address(0)
+#  endif
 # endif
-#else  /* slowest, but should work everwhere */
-#  define _set_sp(ptr)  VALUE *ptr = _get_tos();
-NOINLINE(static VALUE *_get_tos(void)) {VALUE tos; return &tos;}
 #endif
 
 /*
-  Zero the memory that was (recently) part of the stack, but is no longer.
+  Zero memory that was (recently) part of the stack, but is no longer.
   Invoke when stack is deep to mark its extent and when it's shallow to wipe it.
 */
-#define rb_gc_wipe_stack() {     \
-  VALUE *end = rb_gc_stack_end;  \
-  _set_sp(sp);                   \
-  rb_gc_stack_end = sp;          \
-  __stack_zero(end, sp);   \
-}
-
+void rb_gc_wipe_stack(void);
 
 /*
   Update our record of maximum stack extent without zeroing unused stack
 */
-#define rb_gc_update_stack_extent() \
-    if __stack_past(rb_gc_stack_end) rb_gc_stack_end = alloca(0);
+#define rb_gc_update_stack_extent() do { \
+    SET_STACK_END; \
+    VALUE *sp = STACK_END; \
+    if __stack_past(rb_gc_stack_end, sp) rb_gc_stack_end = sp; \
+} while(0)
 
 
 #if STACK_WIPE_SITES & 4
