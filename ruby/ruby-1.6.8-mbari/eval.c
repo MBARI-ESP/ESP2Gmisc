@@ -103,16 +103,7 @@ struct timeval {
 #include <sys/select.h>
 #endif
 
-#ifdef HAVE_SYS_RESOURCE_H
-#include <sys/resource.h>
-#endif
-
 #include <sys/stat.h>
-
-#if !defined(STACK_DIRECTION) || (STACK_DIRECTION != 1 && STACK_DIRECTION != -1)
-#error STACK_DIRECTION must be predetermined.  Set it to -1 or 1
-#endif
-
 
 
 VALUE rb_cProc;
@@ -794,14 +785,23 @@ static struct tag *prot_tag;
 #define PROT_FUNC   -1
 #define PROT_THREAD -2
 
-#define EXEC_TAG()    (FLUSH_REGISTER_WINDOWS, ckstk(setjmp(prot_tag->buf)))
-
-static inline 
-int ckstk(int status)
+#if STACK_WIPE_SITES & 0x42
+static inline int wipeAfter(int status)
 {
-  rb_gc_update_stack_extent();
+  rb_gc_wipe_stack();
   return status;
 }
+#else
+#define wipeAfter(status) status
+#endif
+#if STACK_WIPE_SITES & 2
+#define wipeAfterTag(status) wipeAfter(status)
+#else
+#define wipeAfterTag(status) status
+#endif
+
+#define EXEC_TAG_0()  (FLUSH_REGISTER_WINDOWS, setjmp(prot_tag->buf))
+#define EXEC_TAG()    wipeAfterTag(EXEC_TAG_0())
 
 #define JUMP_TAG(st) {			\
     ruby_frame = prot_tag->frame;	\
@@ -880,6 +880,12 @@ static void scope_dup _((struct SCOPE *));
 static VALUE rb_eval _((VALUE,NODE*));
 static VALUE eval _((VALUE,VALUE,VALUE,char*,int));
 static NODE *compile _((VALUE, char*, int));
+
+#if STACK_WIPE_SITES & 0x20
+#define wipeBeforeYield()  rb_gc_wipe_stack()
+#else
+#define wipeBeforeYield()  (void)0
+#endif
 
 static VALUE rb_yield_0 _((VALUE, VALUE, VALUE, int));
 static VALUE rb_call _((VALUE,VALUE,ID,int,VALUE*,int));
@@ -2116,6 +2122,9 @@ eval_while(self, node)
 	  goto while_out;
       do {
 	while_redo:
+#if STACK_WIPE_SITES & 0x10
+          rb_gc_wipe_stack();
+#endif
 	  rb_eval(self, node->nd_body);
 	while_next:
 	  ;
@@ -2152,6 +2161,9 @@ eval_until(self, node)
 	  goto until_out;
       do {
 	until_redo:
+#if STACK_WIPE_SITES & 0x10
+          rb_gc_wipe_stack();
+#endif
 	  rb_eval(self, node->nd_body);
 	until_next:
 	  ;
@@ -3941,6 +3953,7 @@ VALUE
 rb_yield(val)
     VALUE val;
 {
+    wipeBeforeYield();
     return rb_yield_0(val, 0, 0, 0);
 }
 
@@ -3948,6 +3961,7 @@ static VALUE
 rb_f_loop()
 {
     for (;;) {
+        wipeBeforeYield();
 	rb_yield_0(Qnil, 0, 0, 0);
 	CHECK_INTS;
     }
@@ -4408,54 +4422,11 @@ rb_undefined(obj, id, argc, argv, call_status)
     return rb_funcall2(obj, missing, argc+1, nargv);
 }
 
-#ifdef DJGPP
-static unsigned int STACK_LEVEL_MAX = 65535;
-#else
-#ifdef __human68k__
-extern unsigned int _stacksize;
-# define STACK_LEVEL_MAX (_stacksize - 4096)
-#undef HAVE_GETRLIMIT
-#else
-#ifdef HAVE_GETRLIMIT
-static unsigned int STACK_LEVEL_MAX = 655300;
-#else
-# define STACK_LEVEL_MAX 655300
-#endif
-#endif
-#endif
-
-extern VALUE *rb_gc_stack_start;
-static inline size_t
-stack_length(start)
-    VALUE *start;
-{
-#ifdef C_ALLOCA
-    VALUE stack_end;
-    alloca(0);
-# define STACK_END (&stack_end)
-#else
-# if defined(__GNUC__) && (defined(__i386__) || defined(__m68k__))
-    VALUE *stack_end = __builtin_frame_address(0);
-# else
-    VALUE *stack_end = alloca(1);
-# endif
-# define STACK_END (stack_end)
-#endif
-
-#if defined(sparc) || defined(__sparc__)
-    return start - STACK_END + 0x80;
-#elif STACK_DIRECTION<0
-    return start - STACK_END;
-#else
-    return STACK_END - start;
-#endif
-}
-
 void
 rb_stack_check()
 {
     static int overflowing = 0;
-    if (!overflowing && stack_length(rb_gc_stack_start) > STACK_LEVEL_MAX) {
+    if (!overflowing && ruby_stack_check()) {
 	int state;
 	overflowing = 1;
 	PUSH_TAG(PROT_NONE);
@@ -6292,19 +6263,6 @@ Init_eval()
     rb_global_variable(&trace_func);
 
     rb_define_virtual_variable("$SAFE", safe_getter, safe_setter);
-
-#ifdef HAVE_GETRLIMIT
-    {
-	struct rlimit rlim;
-
-	if (getrlimit(RLIMIT_STACK, &rlim) == 0) {
-	    double space = (double)rlim.rlim_cur*0.2;
-
-	    if (space > 1024*1024) space = 1024*1024;
-	    STACK_LEVEL_MAX = (rlim.rlim_cur - space) / sizeof(VALUE);
-	}
-    }
-#endif
 }
 
 VALUE rb_f_autoload();
@@ -7681,7 +7639,7 @@ thread_mark(th)
     
     stkBase = (void *)th->stk_start;
     stkSize = th->stk_len * sizeof(VALUE);
-#if STACK_DIRECTION < 0
+#if STACK_GROW_DIRECTION < 0
     stkBase -= stkSize;
 #endif
     stkShift = (void *)th->stk_ptr - stkBase;
@@ -7744,6 +7702,23 @@ rb_gc_mark_threads()
     } END_FOREACH(th);
 }
 
+void
+rb_gc_abort_threads()
+{
+    rb_thread_t th;
+
+    if (!main_thread)
+        return;
+
+    FOREACH_THREAD_FROM(main_thread, th) {
+	if (FL_TEST(th->thread, FL_MARK)) continue;
+	if (th->status == THREAD_STOPPED) {
+	    th->status = THREAD_TO_KILL;
+	    rb_gc_mark(th->thread);
+	}
+    } END_FOREACH_FROM(main_thread, th);
+}
+
 static void
 thread_free(th)
     rb_thread_t th;
@@ -7794,7 +7769,7 @@ rb_thread_save_context(th)
     static VALUE tval;
 
     len = stack_length(pos);
-#if STACK_DIRECTION < 0
+#if STACK_GROW_DIRECTION < 0
     pos -= len;
 #endif
     if (len > th->stk_max)
@@ -7836,6 +7811,9 @@ static int
 thread_switch(n)
     int n;
 {
+#if STACK_WIPE_SITES & 1
+    rb_gc_wipe_stack();
+#endif
     switch (n) {
       case 0:
 	return 0;
@@ -7866,7 +7844,7 @@ thread_switch(n)
 
 #define THREAD_SAVE_CONTEXT(th) \
     (rb_thread_save_context(th),\
-     thread_switch((FLUSH_REGISTER_WINDOWS, ckstk(setjmp((th)->context)))))
+     thread_switch(wipeAfter((FLUSH_REGISTER_WINDOWS, setjmp((th)->context)))))
 
 static void rb_thread_restore_context _((rb_thread_t,int));
 
@@ -7893,7 +7871,7 @@ rb_thread_restore_context(th, exit)
 
     if (!th->stk_ptr) rb_bug("unsaved context");
 
-#if STACK_DIRECTION > 0  /* stack grows upward */
+#if STACK_GROW_DIRECTION > 0  /* stack grows upward */
     if (&v < pos + th->stk_len) stack_extend(pos+th->stk_len - &v, th, exit);
 #else /* stack grows downward */
     pos -= th->stk_len;
@@ -8735,6 +8713,8 @@ rb_thread_abort_exc_set(thread, val)
     return val;
 }
 
+extern VALUE *rb_gc_stack_start;
+
 #define THREAD_ALLOC(th) do {\
     th = ALLOC(struct thread);\
 \
@@ -8854,7 +8834,7 @@ rb_thread_start_0(fn, arg, th_arg)
     enum thread_status status;
     int state;
 
-    th_arg->stk_start = (VALUE *)(ruby_frame+(STACK_DIRECTION<0));
+    th_arg->stk_start = (VALUE *)(ruby_frame+(STACK_GROW_DIRECTION<0));
 
 #if defined(HAVE_SETITIMER)
     if (!thread_init) {
@@ -9526,7 +9506,7 @@ rb_f_catch(dmy, tag)
 
     t = rb_to_id(tag);
     PUSH_TAG(t);
-    if ((state = EXEC_TAG()) == 0) {
+    if ((state = wipeAfter(EXEC_TAG_0())) == 0) {
 	val = rb_yield_0(tag, 0, 0, 0);
     }
     else if (state == TAG_THROW && t == prot_tag->dst) {

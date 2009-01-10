@@ -278,4 +278,4 @@ struct.@OBJEXT@: struct.c ruby.h config.h defines.h intern.h
 time.@OBJEXT@: time.c ruby.h config.h defines.h intern.h
 util.@OBJEXT@: util.c ruby.h config.h defines.h intern.h util.h
 variable.@OBJEXT@: variable.c ruby.h config.h defines.h intern.h env.h node.h st.h
-version.@OBJEXT@: version.c ruby.h config.h defines.h intern.h version.h
+version.@OBJEXT@: version.c ruby.h rubysig.h config.h defines.h intern.h version.h
