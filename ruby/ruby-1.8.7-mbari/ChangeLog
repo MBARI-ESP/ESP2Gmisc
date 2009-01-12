@@ -12,6 +12,8 @@ Sun Jan 11 20:15:36 2009  Brent Roman  <brent@mbari.org>
                 added STACK_END parameters to __stack_past() invocations
                 exploited missed opportunities for tail recursion in markchilren
                 
+        * version.h:  bumped date
+
 
 Mon Jan  5 20:15:36 2009  Brent Roman  <brent@mbari.org>
 
