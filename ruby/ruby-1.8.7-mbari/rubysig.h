@@ -32,23 +32,30 @@
    0x1*** -->  call dummy rb_wipe_stack() (for debugging and profiling)
    0x2*** -->  safe, portable stack clearing in memory allocated with alloca
    0x3*** -->  use faster, but less safe stack clearing in unallocated stack
+   0x4*** -->  use fastest, but least safe stack clearing (with inline code)
    
    for most effective gc use 0x*707
    for fastest micro-benchmarking use 0x0000
-   0x*370 prevents most memory leaks caused by ghost references
-   other good trade offs are 0x*703, 0x*303 or even 0x*03
+   0x*270 prevents most memory leaks caused by ghost references
+   other good trade offs are 0x*370, 0x*703, 0x*303 or even 0x*03
    
    In general, you may lessen the default -mpreferred-stack-boundary
    only if using less safe stack clearing (0x3***).  Lessening the
    stack alignment with portable stack clearing (0x2***) may fail to clear 
    all ghost references off the stack.
    
+   When using 0x3*** or 0x4*** on x86 machines, compiling with 
+   -fomit-frame-pointer may be necessary to prevent gcc from 
+   inserting push %ebp between reading the stack
+   pointer and clearing the ghost references.  This base pointer will be
+   cleared by the rb_gc_stack_wipe(), resulting in a segfault. 
+   
    Note that it is redundant to wipe_stack in looping constructs if 
    also doing so in CHECK_INTS.  It is also redundant to wipe_stack on
    each thread_switch if wiping after every thread save context.
 */
 #ifndef STACK_WIPE_SITES
-#define STACK_WIPE_SITES  0x3370
+#define STACK_WIPE_SITES  0x2370
 #endif
 
 #if (STACK_WIPE_SITES & 0x14) == 0x14
@@ -171,35 +178,51 @@ RUBY_EXTERN int rb_gc_stack_grow_direction;  /* -1 for down or 1 for up */
 #define __stack_depth_down(top,mid) ((mid) - (top))
 #define __stack_grow_down(top,depth) ((top)-(depth))
 
-#ifdef C_ALLOCA
-# define SET_STACK_END VALUE stack_end
-# define STACK_END (&stack_end)
-#else
-# define SET_STACK_END ((void)0)
-# define STACK_END (VALUE *)alloca(0)
-# if defined(__GNUC__) && defined(USE_BUILTIN_FRAME_ADDRESS)
-#  if ( __GNUC__ == 3 && __GNUC_MINOR__ > 0 ) || __GNUC__ > 3
-#    define TOP_FRAME (VALUE *)__builtin_frame_address(0)
-#  endif
+
+#ifdef __GNUC__   /* get the stack pointer most accurately */
+#define __defspfn(asmb)  \
+static inline VALUE *__sp(void) \
+{ \
+  VALUE *sp; asm(asmb); \
+  return sp; \
+}
+# ifdef __i386__
+  __defspfn("movl %%esp, %0": "=r"(sp))
+# elif __ppc__  /* alloc(0) does not return the stack pointer. MUST USE asm */
+   __defspfn("addi %0, r1, 0": "=r"(sp))
+# elif __arm__
+   __defspfn("mov %0, sp": "=r"(sp))
+# else  /* should work everywhere gcc does */
+#  define __sp()  (alloca(0))
 # endif
+#elif HAVE_ALLOCA
+# define __sp()  (alloca(0))
+else
+RUBY_EXTERN VALUE *__sp(void);
 #endif
 
 /*
   Zero memory that was (recently) part of the stack, but is no longer.
   Invoke when stack is deep to mark its extent and when it's shallow to wipe it.
 */
-#if STACK_WIPE_METHOD
-void rb_gc_wipe_stack(void);
-#else
+#if STACK_WIPE_METHOD == 0
 #define rb_gc_wipe_stack() ((void)0)
+#elif STACK_WIPE_METHOD == 4
+#define rb_gc_wipe_stack() {     \
+  VALUE *end = rb_gc_stack_end;  \
+  VALUE *sp = __sp();            \
+  rb_gc_stack_end = sp;          \
+  __stack_zero(end, sp);   \
+}
+#else
+RUBY_EXTERN void rb_gc_wipe_stack(void);
 #endif
 
 /*
   Update our record of maximum stack extent without zeroing unused stack
 */
 #define rb_gc_update_stack_extent() do { \
-    SET_STACK_END; \
-    VALUE *sp = STACK_END; \
+    VALUE *sp = __sp(); \
     if __stack_past(rb_gc_stack_end, sp) rb_gc_stack_end = sp; \
 } while(0)
 
