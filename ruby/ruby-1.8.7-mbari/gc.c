@@ -139,23 +139,6 @@ static VALUE gc_exorcise(VALUE mod)
 }
 
 
-/*
-  Zero memory that was (recently) part of the stack, but is no longer.
-  Invoke when stack is deep to mark its extent and when it's shallow to wipe it.
-*/
-void rb_gc_wipe_stack(void)
-{
-  VALUE *stack_end = rb_gc_stack_end;
-  VALUE *sp = (VALUE *)STACK_END;
-  rb_gc_stack_end = sp;
-  if (__stack_past(sp, stack_end)) {
-    sp = alloca(__stack_depth((char *)stack_end, (char *)sp));
-    __stack_zero(stack_end, sp);
-  }
-}
-
-
-
 static void run_final();
 static VALUE nomem_error;
 static void garbage_collect();
@@ -555,9 +538,9 @@ static unsigned int STACK_LEVEL_MAX = 655300;
                                  (start) - TOP_FRAME : TOP_FRAME - (start) + 1)
 #endif
 #if STACK_GROW_DIRECTION > 0
-# define STACK_UPPER(x, a, b) a
+# define STACK_UPPER(a, b) a
 #elif STACK_GROW_DIRECTION < 0
-# define STACK_UPPER(x, a, b) b
+# define STACK_UPPER(a, b) b
 #else
 int rb_gc_stack_grow_direction;
 static int
@@ -567,7 +550,7 @@ stack_grow_direction(addr)
     SET_STACK_END;
     return rb_gc_stack_grow_direction = STACK_END > addr ? 1 : -1;
 }
-# define STACK_UPPER(x, a, b) (rb_gc_stack_grow_direction > 0 ? a : b)
+# define STACK_UPPER(a, b) (rb_gc_stack_grow_direction > 0 ? a : b)
 #endif
 
 int
@@ -575,7 +558,7 @@ ruby_stack_length(start, base)
     VALUE *start, **base;
 {
     SET_STACK_END;
-    if (base) *base = STACK_UPPER(TOP_FRAME, start, TOP_FRAME);
+    if (base) *base = STACK_UPPER(start, TOP_FRAME);
     return STACK_LENGTH(start);
 }
 
@@ -585,6 +568,34 @@ ruby_stack_check()
     SET_STACK_END;
     return __stack_past(stack_limit, STACK_END);
 }
+
+/*
+  Zero memory that was (recently) part of the stack, but is no longer.
+  Invoke when stack is deep to mark its extent and when it's shallow to wipe it.
+*/
+#if STACK_WIPE_METHOD
+void rb_gc_wipe_stack(void)
+{
+  VALUE *stack_end = rb_gc_stack_end;
+  VALUE *sp = (VALUE *)STACK_END;
+  rb_gc_stack_end = sp;
+#if STACK_WIPE_METHOD == 1
+#warning clearing of "ghost references" from the call stack has been disabled
+#elif STACK_WIPE_METHOD == 2  /* alloca ghost stack before clearing it */
+  if (__stack_past(sp, stack_end)) {
+    size_t bytes = __stack_depth((char *)stack_end, (char *)sp);
+    STACK_UPPER(sp = alloca(bytes), stack_end = alloca(bytes));
+    __stack_zero(stack_end, sp);
+  }
+#elif STACK_WIPE_METHOD == 3  /* clear unallocated area past stack pointer */
+  __stack_zero(stack_end, sp);  /* will crash if compiler pushes a temp. here */
+#else
+#error unsupported method of clearing ghost references from the stack
+#endif
+}
+#else
+#warning clearing of "ghost references" from the call stack completely disabled
+#endif
 
 #define MARK_STACK_MAX 1024
 static VALUE mark_stack[MARK_STACK_MAX];
@@ -1545,7 +1556,7 @@ Init_stack(addr)
     memset(&m, 0, sizeof(m));
     VirtualQuery(&m, &m, sizeof(m));
     rb_gc_stack_start =
-	STACK_UPPER((VALUE *)&m, (VALUE *)m.BaseAddress,
+	STACK_UPPER((VALUE *)m.BaseAddress,
 		    (VALUE *)((char *)m.BaseAddress + m.RegionSize) - 1);
 #elif defined(STACK_END_ADDRESS)
     {
@@ -1554,10 +1565,9 @@ Init_stack(addr)
     }
 #else
     if (!addr) addr = (void *)&addr;
-    STACK_UPPER(&addr, addr, ++addr);
+    STACK_UPPER(addr, ++addr);
     if (rb_gc_stack_start) {
-	if (STACK_UPPER(&addr,
-			rb_gc_stack_start > addr,
+	if (STACK_UPPER(rb_gc_stack_start > addr,
 			rb_gc_stack_start < addr))
 	    rb_gc_stack_start = addr;
 	return;
@@ -1574,8 +1584,7 @@ void ruby_init_stack(VALUE *addr
     )
 {
     if (!rb_gc_stack_start ||
-        STACK_UPPER(&addr,
-                    rb_gc_stack_start > addr,
+        STACK_UPPER(rb_gc_stack_start > addr,
                     rb_gc_stack_start < addr)) {
         rb_gc_stack_start = addr;
     }
