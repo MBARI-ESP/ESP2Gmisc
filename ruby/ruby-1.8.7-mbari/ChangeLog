@@ -1,8 +1,17 @@
-Tue Jan  6 20:15:36 2009  Brent Roman  <brent@mbari.org>
+Sun Jan 11 20:15:36 2009  Brent Roman  <brent@mbari.org>
 
-        * rubysig.h:  added ARM and PPC asm support for getting Stack Pointer
-                      fall back to more portable means if other CPU or not GNUC
+        * rubysig.h:  added support for multiple STACK_WIPE_METHODs
+                      added __stack_depth()
+                      added 2nd param to stack_past()
+                      __sp() returns stack pointer in an efficent, portable way                     
         
+        * gc.c: STACK_END uses __sp()
+                STACK_UPPER now takes only two parameters
+                added rb_gc_wipe_stack()               
+                rb_mark_tbl() and mark_hash() implemented as #define macros
+                added STACK_END parameters to __stack_past() invocations
+                exploited missed opportunities for tail recursion in markchilren
+                
 
 Mon Jan  5 20:15:36 2009  Brent Roman  <brent@mbari.org>
 
