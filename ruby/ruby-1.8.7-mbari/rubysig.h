@@ -16,30 +16,39 @@
 #include <errno.h>
 
 /* STACK_WIPE_SITES determines where attempts are made to exorcise
-   "ghost object refereces" from the stack.
+   "ghost object refereces" from the stack and how the stack is cleared:
    
-   0x001  -->  wipe stack just after every thread_switch
-   0x002  -->  wipe stack just after every EXEC_TAG()
-   0x004  -->  wipe stack in CHECK_INTS
-   0x010  -->  wipe stack in while & until loops
-   0x020  -->  wipe stack before yield() in iterators and outside eval.c
-   0x040  -->  wipe stack on catch and thread save context
-   0x100  -->  update stack extent on each object allocation
-   0x200  -->  update stack extent on each object reallocation
-   0x400  -->  update stack extent during GC marking passes
-   0x800  -->  update stack extent on each throw (use with 0x040)
+   0x*001 -->  wipe stack just after every thread_switch
+   0x*002 -->  wipe stack just after every EXEC_TAG()
+   0x*004 -->  wipe stack in CHECK_INTS
+   0x*010 -->  wipe stack in while & until loops
+   0x*020 -->  wipe stack before yield() in iterators and outside eval.c
+   0x*040 -->  wipe stack on catch and thread save context
+   0x*100 -->  update stack extent on each object allocation
+   0x*200 -->  update stack extent on each object reallocation
+   0x*400 -->  update stack extent during GC marking passes
+   0x*800 -->  update stack extent on each throw (use with 0x040)
+   0x0*** -->  do not even call rb_wipe_stack()
+   0x1*** -->  call dummy rb_wipe_stack() (for debugging and profiling)
+   0x2*** -->  safe, portable stack clearing in memory allocated with alloca
+   0x3*** -->  use faster, but less safe stack clearing in unallocated stack
    
-   for most effective gc use 0x0707
+   for most effective gc use 0x*707
    for fastest micro-benchmarking use 0x0000
-   0x370 prevents most memory leaks caused by ghost references
-   other good trade offs are 0x0703, 0x0303 or even 0x003
+   0x*370 prevents most memory leaks caused by ghost references
+   other good trade offs are 0x*703, 0x*303 or even 0x*03
+   
+   In general, you may lessen the default -mpreferred-stack-boundary
+   only if using less safe stack clearing (0x3***).  Lessening the
+   stack alignment with portable stack clearing (0x2***) may fail to clear 
+   all ghost references off the stack.
    
    Note that it is redundant to wipe_stack in looping constructs if 
    also doing so in CHECK_INTS.  It is also redundant to wipe_stack on
    each thread_switch if wiping after every thread save context.
 */
 #ifndef STACK_WIPE_SITES
-#define STACK_WIPE_SITES  0x370
+#define STACK_WIPE_SITES  0x3370
 #endif
 
 #if (STACK_WIPE_SITES & 0x14) == 0x14
@@ -49,6 +58,7 @@
 #warning  wiping stack after thread save makes wiping on thread_switch redundant
 #endif
 
+#define STACK_WIPE_METHOD (STACK_WIPE_SITES>>12)
 
 #ifdef _WIN32
 typedef LONG rb_atomic_t;
@@ -178,7 +188,11 @@ RUBY_EXTERN int rb_gc_stack_grow_direction;  /* -1 for down or 1 for up */
   Zero memory that was (recently) part of the stack, but is no longer.
   Invoke when stack is deep to mark its extent and when it's shallow to wipe it.
 */
+#if STACK_WIPE_METHOD
 void rb_gc_wipe_stack(void);
+#else
+#define rb_gc_wipe_stack() ((void)0)
+#endif
 
 /*
   Update our record of maximum stack extent without zeroing unused stack
