@@ -526,6 +526,27 @@ static unsigned int STACK_LEVEL_MAX = 655300;
 # define STACK_LEVEL_MAX 655300
 #endif
 
+#if !defined(__GNUC__) && !HAVE_ALLOCA
+  /* portable way to return an approximate stack pointer */
+VALUE *__sp(void) {
+  VALUE tos;
+  return &tos;
+}
+#endif
+
+#ifdef C_ALLOCA
+# define SET_STACK_END VALUE stack_end
+# define STACK_END (&stack_end)
+#else
+# define SET_STACK_END ((void)0)
+# define STACK_END (VALUE *)__sp()
+# if defined(__GNUC__) && defined(USE_BUILTIN_FRAME_ADDRESS)
+#  if ( __GNUC__ == 3 && __GNUC_MINOR__ > 0 ) || __GNUC__ > 3
+#    define TOP_FRAME (VALUE *)__builtin_frame_address(0)
+#  endif
+# endif
+#endif
+
 #ifndef TOP_FRAME
 # define TOP_FRAME STACK_END
 #endif
@@ -537,6 +558,7 @@ static unsigned int STACK_LEVEL_MAX = 655300;
 # define STACK_LENGTH(start)  ((TOP_FRAME < (start)) ? \
                                  (start) - TOP_FRAME : TOP_FRAME - (start) + 1)
 #endif
+
 #if STACK_GROW_DIRECTION > 0
 # define STACK_UPPER(a, b) a
 #elif STACK_GROW_DIRECTION < 0
@@ -573,11 +595,12 @@ ruby_stack_check()
   Zero memory that was (recently) part of the stack, but is no longer.
   Invoke when stack is deep to mark its extent and when it's shallow to wipe it.
 */
+#if STACK_WIPE_METHOD != 4
 #if STACK_WIPE_METHOD
 void rb_gc_wipe_stack(void)
 {
   VALUE *stack_end = rb_gc_stack_end;
-  VALUE *sp = (VALUE *)STACK_END;
+  VALUE *sp = (VALUE *)__sp();
   rb_gc_stack_end = sp;
 #if STACK_WIPE_METHOD == 1
 #warning clearing of "ghost references" from the call stack has been disabled
@@ -587,7 +610,7 @@ void rb_gc_wipe_stack(void)
     STACK_UPPER(sp = alloca(bytes), stack_end = alloca(bytes));
     __stack_zero(stack_end, sp);
   }
-#elif STACK_WIPE_METHOD == 3  /* clear unallocated area past stack pointer */
+#elif STACK_WIPE_METHOD == 3    /* clear unallocated area past stack pointer */
   __stack_zero(stack_end, sp);  /* will crash if compiler pushes a temp. here */
 #else
 #error unsupported method of clearing ghost references from the stack
@@ -595,6 +618,7 @@ void rb_gc_wipe_stack(void)
 }
 #else
 #warning clearing of "ghost references" from the call stack completely disabled
+#endif
 #endif
 
 #define MARK_STACK_MAX 1024
