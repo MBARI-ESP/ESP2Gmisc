@@ -1,3 +1,14 @@
+Sun Jan 13 20:15:36 2009  Brent Roman  <brent@mbari.org>
+
+        * rubysig.h:  moved #defs to configure alloca here from gc.c
+                      added missing # to #else
+        
+        * gc.c: removed #defs to configurure alloca
+                set_stack_size must handle signed rlim_t for Darwin & BSD Unix
+                
+        * version.h:  bumped date
+
+
 Sun Jan 11 20:15:36 2009  Brent Roman  <brent@mbari.org>
 
         * rubysig.h:  added support for multiple STACK_WIPE_METHODs
