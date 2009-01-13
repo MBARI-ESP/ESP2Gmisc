@@ -39,25 +39,6 @@ void rb_io_fptr_finalize _((struct rb_io_t*));
 int _setjmp(), _longjmp();
 #endif
 
-/* Make alloca work the best possible way.  */
-#ifdef __GNUC__
-# ifndef atarist
-#  ifndef alloca
-#   define alloca __builtin_alloca
-#  endif
-# endif /* atarist */
-#else
-# ifdef HAVE_ALLOCA_H
-#  include <alloca.h>
-# else
-#  ifndef _AIX
-#   ifndef alloca /* predefined by HP cc +Olibcalls */
-void *alloca ();
-#   endif
-#  endif /* AIX */
-# endif /* HAVE_ALLOCA_H */
-#endif /* __GNUC__ */
-
 #ifndef GC_MALLOC_LIMIT
 #if defined(MSDOS) || defined(__human68k__)
 #define GC_MALLOC_LIMIT 200000
@@ -1536,13 +1517,16 @@ set_stack_size(void)
 #ifdef HAVE_GETRLIMIT
   struct rlimit rlim;
   if (getrlimit(RLIMIT_STACK, &rlim) == 0) {
-    rlim_t maxStackBytes = rlim.rlim_cur;
-    if (maxStackBytes != RLIM_INFINITY &&
-        maxStackBytes^(size_t)maxStackBytes == 0) {
-      size_t space = (size_t)maxStackBytes/5;
-      if (space > 1024*1024) space = 1024*1024;
-      ruby_set_stack_size(rlim.rlim_cur - space);
-      return;
+    if (rlim.rlim_cur > 0 && rlim.rlim_cur != RLIM_INFINITY) {
+      size_t maxStackBytes = rlim.rlim_cur;
+      if (rlim.rlim_cur != maxStackBytes)
+        maxStackBytes = -1;
+      {
+        size_t space = maxStackBytes/5;
+        if (space > 1024*1024) space = 1024*1024;
+        ruby_set_stack_size(maxStackBytes - space);
+        return;
+      }
     }
   }
 #endif
