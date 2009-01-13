@@ -36,8 +36,8 @@
    
    for most effective gc use 0x*707
    for fastest micro-benchmarking use 0x0000
-   0x*270 prevents most memory leaks caused by ghost references
-   other good trade offs are 0x*370, 0x*703, 0x*303 or even 0x*03
+   0x*370 prevents most memory leaks caused by ghost references
+   other good trade offs are 0x*270, 0x*703, 0x*303 or even 0x*03
    
    In general, you may lessen the default -mpreferred-stack-boundary
    only if using less safe stack clearing (0x3***).  Lessening the
