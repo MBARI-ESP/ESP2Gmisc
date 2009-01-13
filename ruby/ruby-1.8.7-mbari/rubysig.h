@@ -178,6 +178,24 @@ RUBY_EXTERN int rb_gc_stack_grow_direction;  /* -1 for down or 1 for up */
 #define __stack_depth_down(top,mid) ((mid) - (top))
 #define __stack_grow_down(top,depth) ((top)-(depth))
 
+/* Make alloca work the best possible way.  */
+#ifdef __GNUC__
+# ifndef atarist
+#  ifndef alloca
+#   define alloca __builtin_alloca
+#  endif
+# endif /* atarist */
+#else
+# ifdef HAVE_ALLOCA_H
+#  include <alloca.h>
+# else
+#  ifndef _AIX
+#   ifndef alloca /* predefined by HP cc +Olibcalls */
+void *alloca ();
+#   endif
+#  endif /* AIX */
+# endif /* HAVE_ALLOCA_H */
+#endif /* __GNUC__ */
 
 #ifdef __GNUC__   /* get the stack pointer most accurately */
 #define __defspfn(asmb)  \
@@ -197,7 +215,7 @@ static inline VALUE *__sp(void) \
 # endif
 #elif HAVE_ALLOCA
 # define __sp()  (alloca(0))
-else
+#else
 RUBY_EXTERN VALUE *__sp(void);
 #endif
 
