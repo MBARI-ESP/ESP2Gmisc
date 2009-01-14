@@ -32,27 +32,6 @@ void rb_io_fptr_finalize _((struct OpenFile*));
 #define setjmp(env) _setjmp(env)
 #endif
 
-/* Make alloca work the best possible way.  */
-#ifdef __GNUC__
-# ifndef atarist
-#  ifndef alloca
-#   define alloca __builtin_alloca
-#  endif
-# endif /* atarist */
-#else
-# ifdef HAVE_ALLOCA_H
-#  include <alloca.h>
-# else
-#  ifdef _AIX
- #pragma alloca
-#  else
-#   ifndef alloca /* predefined by HP cc +Olibcalls */
-void *alloca ();
-#   endif
-#  endif /* AIX */
-# endif /* HAVE_ALLOCA_H */
-#endif /* __GNUC__ */
-
 #ifndef GC_MALLOC_LIMIT
 #if defined(MSDOS) || defined(__human68k__)
 #define GC_MALLOC_LIMIT 200000
@@ -516,18 +495,27 @@ static unsigned int STACK_LEVEL_MAX = 655300;
 # define STACK_LEVEL_MAX 655300
 #endif
 
+#if !defined(__GNUC__) && !HAVE_ALLOCA
+  /* portable way to return an approximate stack pointer */
+VALUE *__sp(void) {
+  VALUE tos;
+  return &tos;
+}
+#endif
+
 #ifdef C_ALLOCA
-# define SET_STACK_END VALUE stack_end; alloca(0);
+# define SET_STACK_END VALUE stack_end
 # define STACK_END (&stack_end)
 #else
 # define SET_STACK_END ((void)0)
-# define STACK_END (VALUE *)alloca(0)
+# define STACK_END (VALUE *)__sp()
 # if defined(__GNUC__) && defined(USE_BUILTIN_FRAME_ADDRESS)
 #  if ( __GNUC__ == 3 && __GNUC_MINOR__ > 0 ) || __GNUC__ > 3
 #    define TOP_FRAME (VALUE *)__builtin_frame_address(0)
 #  endif
 # endif
 #endif
+
 #ifndef TOP_FRAME
 # define TOP_FRAME STACK_END
 #endif
@@ -539,10 +527,11 @@ static unsigned int STACK_LEVEL_MAX = 655300;
 # define STACK_LENGTH(start)  ((TOP_FRAME < (start)) ? \
                                  (start) - TOP_FRAME : TOP_FRAME - (start) + 1)
 #endif
+
 #if STACK_GROW_DIRECTION > 0
-# define STACK_UPPER(x, a, b) a
+# define STACK_UPPER(a, b) a
 #else
-# define STACK_UPPER(x, a, b) b
+# define STACK_UPPER(a, b) b
 #endif
 
 int
@@ -556,8 +545,39 @@ stack_length(start)
 int
 ruby_stack_check()
 {
-    return __stack_past(stack_limit);
+    SET_STACK_END;
+    return __stack_past(stack_limit, STACK_END);
 }
+
+/*
+  Zero memory that was (recently) part of the stack, but is no longer.
+  Invoke when stack is deep to mark its extent and when it's shallow to wipe it.
+*/
+#if STACK_WIPE_METHOD != 4
+#if STACK_WIPE_METHOD
+void rb_gc_wipe_stack(void)
+{
+  VALUE *stack_end = rb_gc_stack_end;
+  VALUE *sp = (VALUE *)__sp();
+  rb_gc_stack_end = sp;
+#if STACK_WIPE_METHOD == 1
+#warning clearing of "ghost references" from the call stack has been disabled
+#elif STACK_WIPE_METHOD == 2  /* alloca ghost stack before clearing it */
+  if (__stack_past(sp, stack_end)) {
+    size_t bytes = __stack_depth((char *)stack_end, (char *)sp);
+    STACK_UPPER(sp = alloca(bytes), stack_end = alloca(bytes));
+    __stack_zero(stack_end, sp);
+  }
+#elif STACK_WIPE_METHOD == 3    /* clear unallocated area past stack pointer */
+  __stack_zero(stack_end, sp);  /* will crash if compiler pushes a temp. here */
+#else
+#error unsupported method of clearing ghost references from the stack
+#endif
+}
+#else
+#warning clearing of "ghost references" from the call stack completely disabled
+#endif
+#endif
 
 #define MARK_STACK_MAX 1024
 static VALUE mark_stack[MARK_STACK_MAX];
@@ -751,13 +771,14 @@ rb_gc_mark(ptr)
     VALUE ptr;
 {
     RVALUE *obj = RANY(ptr);
-
+    SET_STACK_END;
+    
     if (rb_special_const_p(ptr)) return; /* special const not marked */
     if (obj->as.basic.flags == 0) return;       /* free cell */
     if (obj->as.basic.flags & FL_MARK) return;  /* already marked */
     obj->as.basic.flags |= FL_MARK;
 
-    if (__stack_past(stack_gc_limit))
+    if (__stack_past(stack_gc_limit, STACK_END))
       push_mark_stack(ptr);
     else{
       gc_mark_children(ptr);
@@ -983,7 +1004,7 @@ gc_mark_children(ptr)
 
       case T_VARMAP:
 	gc_mark(obj->as.varmap.val);
-	ptr = (VALUE) obj->as.varmap.next;
+	ptr = (VALUE)obj->as.varmap.next;
 	goto again;
 	break;
 
@@ -1083,7 +1104,7 @@ gc_sweep()
 
     mark_source_filename(ruby_sourcefile);
     if (source_filenames) {
-    st_foreach(source_filenames, sweep_source_filename, 0);
+        st_foreach(source_filenames, sweep_source_filename, 0);
     }
 
     freelist = 0;
@@ -1131,8 +1152,8 @@ gc_sweep()
 	    freelist = free;	/* cancel this page from freelist */
 	}
 	else {
-	freed += n;
-    }
+	    freed += n;
+	}
     }
     malloc_increase = 0;
     if (freed < free_min) {
@@ -1142,9 +1163,9 @@ gc_sweep()
 
     /* clear finalization list */
     if (final_list) {
-	    deferred_final_list = final_list;
-	    return;
-	}
+	deferred_final_list = final_list;
+	return;
+    }
     free_unused_heaps();
 }
 
@@ -1483,15 +1504,18 @@ set_stack_size(void)
 #ifdef HAVE_GETRLIMIT
   struct rlimit rlim;
   if (getrlimit(RLIMIT_STACK, &rlim) == 0) {
-    rlim_t maxStackBytes = rlim.rlim_cur;
-    if (maxStackBytes != RLIM_INFINITY &&
-        maxStackBytes^(size_t)maxStackBytes == 0) {
-      size_t space = (size_t)maxStackBytes/5;
-      if (space > 1024*1024) space = 1024*1024;
-      ruby_set_stack_size(rlim.rlim_cur - space);
-      return;
+    if (rlim.rlim_cur > 0 && rlim.rlim_cur != RLIM_INFINITY) {
+      size_t maxStackBytes = rlim.rlim_cur;
+      if (rlim.rlim_cur != maxStackBytes)
+        maxStackBytes = -1;
+      {
+        size_t space = maxStackBytes/5;
+        if (space > 1024*1024) space = 1024*1024;
+        ruby_set_stack_size(maxStackBytes - space);
+        return;
+      }
     }
-}
+  }
 #endif
   ruby_set_stack_size(STACK_LEVEL_MAX*sizeof(VALUE));
 }
@@ -1527,7 +1551,7 @@ Init_stack(addr)
     memset(&m, 0, sizeof(m));
     VirtualQuery(&m, &m, sizeof(m));
     rb_gc_stack_start =
-	STACK_UPPER((VALUE *)&m, (VALUE *)m.BaseAddress,
+	STACK_UPPER((VALUE *)m.BaseAddress,
 		    (VALUE *)((char *)m.BaseAddress + m.RegionSize) - 1);
 #elif defined(STACK_END_ADDRESS)
     {
@@ -1536,15 +1560,14 @@ Init_stack(addr)
     }
 #else
     if (!addr) addr = (void *)&addr;
-    STACK_UPPER(&addr, addr, ++addr);
+    STACK_UPPER(addr, ++addr);
     if (rb_gc_stack_start) {
-	if (STACK_UPPER(&addr,
-			rb_gc_stack_start > addr,
+	if (STACK_UPPER(rb_gc_stack_start > addr,
 			rb_gc_stack_start < addr))
-		rb_gc_stack_start = addr;
+	    rb_gc_stack_start = addr;
 	return;
-	}
-		rb_gc_stack_start = addr;
+    }
+    rb_gc_stack_start = addr;
 #endif
     set_stack_size();
 }
@@ -1556,10 +1579,9 @@ void ruby_init_stack(VALUE *addr
     )
 {
     if (!rb_gc_stack_start ||
-        STACK_UPPER(&addr,
-                    rb_gc_stack_start > addr,
+        STACK_UPPER(rb_gc_stack_start > addr,
                     rb_gc_stack_start < addr)) {
-    rb_gc_stack_start = addr;
+        rb_gc_stack_start = addr;
     }
 #ifdef __ia64
     if (!rb_gc_register_stack_start ||
