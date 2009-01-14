@@ -16,28 +16,48 @@
 /* STACK_WIPE_SITES determines where attempts are made to exorcise
    "ghost object refereces" from the stack.
    
-   0x001  -->  wipe stack just after every thread_switch
-   0x002  -->  wipe stack just after every EXEC_TAG()
-   0x004  -->  wipe stack in CHECK_INTS
-   0x010  -->  wipe stack in while & until loops
-   0x020  -->  wipe stack before yield() in iterators and outside eval.c
-   0x040  -->  wipe stack on catch and thread save context
-   0x100  -->  update stack extent on each object allocation
-   0x200  -->  update stack extent on each object reallocation
-   0x400  -->  update stack extent during GC marking passes
-   0x800  -->  update stack extent on each throw (use with 0x040)
+   0x*001 -->  wipe stack just after every thread_switch
+   0x*002 -->  wipe stack just after every EXEC_TAG()
+   0x*004 -->  wipe stack in CHECK_INTS
+   0x*010 -->  wipe stack in while & until loops
+   0x*020 -->  wipe stack before yield() in iterators and outside eval.c
+   0x*040 -->  wipe stack on catch and thread save context
+   0x*100 -->  update stack extent on each object allocation
+   0x*200 -->  update stack extent on each object reallocation
+   0x*400 -->  update stack extent during GC marking passes
+   0x*800 -->  update stack extent on each throw (use with 0x040)
+   0x0*** -->  do not even call rb_wipe_stack()
+   0x1*** -->  call dummy rb_wipe_stack() (for debugging and profiling)
+   0x2*** -->  safe, portable stack clearing in memory allocated with alloca
+   0x3*** -->  use faster, but less safe stack clearing in unallocated stack
+   0x4*** -->  use fastest, but least safe stack clearing (with inline code)
    
-   for most effective gc use 0x0707
+   for most effective gc use 0x*707
    for fastest micro-benchmarking use 0x0000
-   0x370 prevents most memory leaks caused by ghost references
-   other good trade offs are 0x0703, 0x0303 or even 0x003
+   0x*370 prevents most memory leaks caused by ghost references
+   other good trade offs are 0x*270, 0x*703, 0x*303 or even 0x*03
+   
+   In general, you may lessen the default -mpreferred-stack-boundary
+   only if using less safe stack clearing (0x3***).  Lessening the
+   stack alignment with portable stack clearing (0x2***) may fail to clear 
+   all ghost references off the stack.
+   
+   When using 0x3*** or 0x4*** on x86 machines, compiling with 
+   -fomit-frame-pointer may be necessary to prevent gcc from 
+   inserting push %ebp between reading the stack
+   pointer and clearing the ghost references.  This base pointer will be
+   cleared by the rb_gc_stack_wipe(), resulting in a segfault. 
    
    Note that it is redundant to wipe_stack in looping constructs if 
    also doing so in CHECK_INTS.  It is also redundant to wipe_stack on
    each thread_switch if wiping after every thread save context.
 */
 #ifndef STACK_WIPE_SITES
-#define STACK_WIPE_SITES  0x370
+# ifdef __i386__
+#  define STACK_WIPE_SITES  0x3370
+#else
+#  define STACK_WIPE_SITES  0x4370
+# endif
 #endif
 
 #if (STACK_WIPE_SITES & 0x14) == 0x14
@@ -47,6 +67,7 @@
 #warning  wiping stack after thread save makes wiping on thread_switch redundant
 #endif
 
+#define STACK_WIPE_METHOD (STACK_WIPE_SITES>>12)
 
 #ifdef NT
 typedef LONG rb_atomic_t;
@@ -103,59 +124,115 @@ void rb_thread_schedule _((void));
 #define THREAD_INTERRUPTABLE  (!(rb_prohibit_interrupt | rb_thread_critical))
 
 EXTERN VALUE *rb_gc_stack_end;
-#define __stack_zero_up(end,sp)  while (end >= ++sp) *sp=0
-#define __stack_past_up(end)  ((end) < (VALUE *)alloca(0))
-#define __stack_grow_up(top,depth) ((top)+(depth))
-#define __stack_zero_down(end,sp)  while (end <= --sp) *sp=0
-#define __stack_past_down(end)  ((end) > (VALUE *)alloca(0))
-#define __stack_grow_down(top,depth) ((top)-(depth))
 
-#define STACK_GROW_DIRECTION STACK_DIRECTION
+#define STACK_GROW_DIRECTION  STACK_DIRECTION
 #if STACK_GROW_DIRECTION > 0
+
+/* clear stack space between end and sp (not including *sp) */
 #define __stack_zero(end,sp)  __stack_zero_up(end,sp)
-#define __stack_past(end)  __stack_past_up(end)
+
+/* true if top has grown past limit, i.e. top deeper than limit */
+#define __stack_past(limit,top)  __stack_past_up(limit,top)
+
+/* depth of mid below stack top */
+#define __stack_depth(top,mid)   __stack_depth_up(top,mid)
+
+/* stack pointer top adjusted to include depth more items */
 #define __stack_grow(top,depth)  __stack_grow_up(top,depth)
+
+
 #elif STACK_GROW_DIRECTION < 0
 #define __stack_zero(end,sp)  __stack_zero_down(end,sp)
-#define __stack_past(end)  __stack_past_down(end)
+#define __stack_past(limit,top)  __stack_past_down(limit,top)
+#define __stack_depth(top,mid)   __stack_depth_down(top,mid)
 #define __stack_grow(top,depth)  __stack_grow_down(top,depth)
-#else
-#error STACK_GROW_DIRECTION must be predetermined.  Set it to -1 or 1
-#endif
 
-#ifdef __GNUC__   /* get the stack pointer most efficiently */
-# ifdef __i386__  /* this improves runtimes by 1 to 2 % (really!) */
-#  define _set_sp(ptr)  VALUE *ptr; asm("movl %%esp, %0": "=r"(ptr))
-# elif __ppc__
-#  define _set_sp(ptr)  VALUE *ptr; asm("addi %0, r1, 0": "=r"(ptr))
+#else  /* limp along if stack direction can't be determined at compile time */
+#define __stack_zero(end,sp) if (rb_gc_stack_grow_direction<0) \
+        __stack_zero_down(end,sp); else __stack_zero_up(end,sp);
+#define __stack_past(limit,top)  (rb_gc_stack_grow_direction<0 ? \
+                      __stack_past_down(limit,top) : __stack_past_up(limit,top))
+#define __stack_depth(top,mid) (rb_gc_stack_grow_direction<0 ? \
+                       __stack_depth_down(top,mid) : __stack_depth_up(top,mid))
+#define __stack_grow(top,depth) (rb_gc_stack_grow_direction<0 ? \
+                      __stack_grow_down(top,depth) : __stack_grow_up(top,depth))
+#endif
+ 
+#define __stack_zero_up(end,sp)  while (end >= ++sp) *sp=0
+#define __stack_past_up(limit,top)  ((limit) < (top))
+#define __stack_depth_up(top,mid) ((top) - (mid))
+#define __stack_grow_up(top,depth) ((top)+(depth))
+
+#define __stack_zero_down(end,sp)  while (end <= --sp) *sp=0
+#define __stack_past_down(limit,top)  ((limit) > (top))
+#define __stack_depth_down(top,mid) ((mid) - (top))
+#define __stack_grow_down(top,depth) ((top)-(depth))
+
+/* Make alloca work the best possible way.  */
+#ifdef __GNUC__
+# ifndef atarist
+#  ifndef alloca
+#   define alloca __builtin_alloca
+#  endif
+# endif /* atarist */
+#else
+# ifdef HAVE_ALLOCA_H
+#  include <alloca.h>
+# else
+#  ifndef _AIX
+#   ifndef alloca /* predefined by HP cc +Olibcalls */
+void *alloca ();
+#   endif
+#  endif /* AIX */
+# endif /* HAVE_ALLOCA_H */
+#endif /* __GNUC__ */
+
+#ifdef __GNUC__   /* get the stack pointer most accurately */
+#define __defspfn(asmb)  \
+static inline VALUE *__sp(void) \
+{ \
+  VALUE *sp; asm(asmb); \
+  return sp; \
+}
+# ifdef __i386__
+  __defspfn("movl %%esp, %0": "=r"(sp))
+# elif __ppc__  /* alloc(0) does not return the stack pointer. MUST USE asm */
+   __defspfn("addi %0, r1, 0": "=r"(sp))
 # elif __arm__
-#  define _set_sp(ptr)  VALUE *ptr; asm("mov %0, sp": "=r"(ptr))
-# else  /* slower, but should work everywhere gcc does */
-#  define _set_sp(ptr)  VALUE *ptr = _get_tos();
- __attribute__ ((noinline)) 
-static VALUE *_get_tos(void) {return __builtin_frame_address(0);}
+   __defspfn("mov %0, sp": "=r"(sp))
+# else  /* should work everywhere gcc does */
+#  define __sp()  (alloca(0))
 # endif
-#else  /* slowest, but should work everwhere */
-#  define _set_sp(ptr)  VALUE *ptr = _get_tos();
-static VALUE *_get_tos(void) {VALUE tos; return &tos;}
+#elif HAVE_ALLOCA
+# define __sp()  (alloca(0))
+#else
+EXTERN VALUE *__sp(void);
 #endif
 
 /*
   Zero the memory that was (recently) part of the stack, but is no longer.
   Invoke when stack is deep to mark its extent and when it's shallow to wipe it.
 */
+#if STACK_WIPE_METHOD == 0
+#define rb_gc_wipe_stack() ((void)0)
+#elif STACK_WIPE_METHOD == 4
 #define rb_gc_wipe_stack() {     \
   VALUE *end = rb_gc_stack_end;  \
-  _set_sp(sp);                   \
+  VALUE *sp = __sp();            \
   rb_gc_stack_end = sp;          \
   __stack_zero(end, sp);   \
 }
+#else
+EXTERN void rb_gc_wipe_stack(void);
+#endif
 
 /*
   Update our record of maximum stack extent without zeroing unused stack
 */
-#define rb_gc_update_stack_extent() \
-    if __stack_past(rb_gc_stack_end) rb_gc_stack_end = alloca(0);
+#define rb_gc_update_stack_extent() do { \
+    VALUE *sp = __sp(); \
+    if __stack_past(rb_gc_stack_end, sp) rb_gc_stack_end = sp; \
+} while(0)
 
 
 #if STACK_WIPE_SITES & 4
