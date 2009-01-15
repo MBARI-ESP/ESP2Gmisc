@@ -1,3 +1,13 @@
+Wed Jan 14 20:15:36 2009  Brent Roman  <brent@mbari.org>
+
+        * eval.c:     declare wipe_after with gnu always_inline attribute
+        
+        * rubysig.h:  use alloca(0) to get sp for all CPU except PowerPC
+                      (less likely to trash stack when clearing it)
+        
+        * version.h:  bumped date
+
+
 Sun Jan 13 20:15:36 2009  Brent Roman  <brent@mbari.org>
 
         * rubysig.h:  moved #defs to configure alloca here from gc.c
