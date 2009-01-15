@@ -786,6 +786,9 @@ static struct tag *prot_tag;
 #define PROT_THREAD -2
 
 #if STACK_WIPE_SITES & 0x42
+#ifdef __GNUC__
+static inline int wipeAfter(int) __attribute__((always_inline));
+#endif
 static inline int wipeAfter(int status)
 {
   rb_gc_wipe_stack();
