@@ -737,7 +737,7 @@ mark_locations_array(x, n)
     }
 }
 
-void
+void inline
 rb_gc_mark_locations(start, end)
     VALUE *start, *end;
 {
