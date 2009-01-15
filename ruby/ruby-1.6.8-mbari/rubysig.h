@@ -53,11 +53,7 @@
    each thread_switch if wiping after every thread save context.
 */
 #ifndef STACK_WIPE_SITES
-# ifdef __i386__
-#  define STACK_WIPE_SITES  0x3370
-#else
 #  define STACK_WIPE_SITES  0x4370
-# endif
 #endif
 
 #if (STACK_WIPE_SITES & 0x14) == 0x14
@@ -194,13 +190,9 @@ static inline VALUE *__sp(void) \
   VALUE *sp; asm(asmb); \
   return sp; \
 }
-# ifdef __i386__
-  __defspfn("movl %%esp, %0": "=r"(sp))
-# elif __ppc__  /* alloc(0) does not return the stack pointer. MUST USE asm */
+# if __ppc__  /* alloc(0) does not return the stack pointer. MUST USE asm */
    __defspfn("addi %0, r1, 0": "=r"(sp))
-# elif __arm__
-   __defspfn("mov %0, sp": "=r"(sp))
-# else  /* should work everywhere gcc does */
+# else
 #  define __sp()  (alloca(0))
 # endif
 #elif HAVE_ALLOCA
