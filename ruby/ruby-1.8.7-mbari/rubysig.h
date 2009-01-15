@@ -204,12 +204,8 @@ static inline VALUE *__sp(void) \
   VALUE *sp; asm(asmb); \
   return sp; \
 }
-# ifdef __i386__
-  __defspfn("movl %%esp, %0": "=r"(sp))
-# elif __ppc__  /* alloc(0) does not return the stack pointer. MUST USE asm */
+# if __ppc__  /* alloc(0) does not return the stack pointer. MUST USE asm */
    __defspfn("addi %0, r1, 0": "=r"(sp))
-# elif __arm__
-   __defspfn("mov %0, sp": "=r"(sp))
 # else  /* should work everywhere gcc does */
 #  define __sp()  (alloca(0))
 # endif
