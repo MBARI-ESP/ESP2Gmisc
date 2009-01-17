@@ -1,3 +1,13 @@
+Fri Jan 16 20:15:36 2009  Brent Roman  <brent@mbari.org>
+
+        * gc.c:     added GC_STACK_PAD, renamed stack_gc_limit->gc_stack_limit
+                    optionally wipe the entire GC stack after each gc pass
+        
+        * rubysig.h:  default STACK_WIPE_SITES changed to 0x4770
+        
+        * version.h:  bumped date
+
+
 Wed Jan 14 20:15:36 2009  Brent Roman  <brent@mbari.org>
 
         * eval.c:     declare wipe_after with gnu always_inline attribute
