@@ -41,11 +41,14 @@ void rb_io_fptr_finalize _((struct OpenFile*));
 #endif
 
 #ifndef GC_LEVEL_MAX  /*maximum # of VALUEs on 'C' stack during GC*/
-#define GC_LEVEL_MAX  (3*4096)
+#define GC_LEVEL_MAX  (8000)
 #endif
+#ifndef GC_STACK_PAD
+#define GC_STACK_PAD  (80)  /* extra padding VALUEs for GC stack */
+#endif
+#define GC_STACK_MAX  (GC_LEVEL_MAX+GC_STACK_PAD)
 
-
-static VALUE *stack_limit, *stack_gc_limit;
+static VALUE *stack_limit, *gc_stack_limit;
 
 static size_t malloc_increase = 0;
 static size_t malloc_limit = GC_MALLOC_LIMIT;
@@ -778,7 +781,7 @@ rb_gc_mark(ptr)
     if (obj->as.basic.flags & FL_MARK) return;  /* already marked */
     obj->as.basic.flags |= FL_MARK;
 
-    if (__stack_past(stack_gc_limit, STACK_END))
+    if (__stack_past(gc_stack_limit, STACK_END))
       push_mark_stack(ptr);
     else{
       gc_mark_children(ptr);
@@ -791,9 +794,6 @@ gc_mark_children(ptr)
 {
     RVALUE *obj = RANY(ptr);
 
-#if STACK_WIPE_SITES & 0x400
-    rb_gc_update_stack_extent();
-#endif
     goto marking;		/* skip */
 
   again:
@@ -1372,7 +1372,7 @@ garbage_collect()
     if (during_gc) return;
     during_gc++;
 
-    stack_gc_limit = __stack_grow(STACK_END, GC_LEVEL_MAX);
+    gc_stack_limit = __stack_grow(STACK_END, GC_LEVEL_MAX);
     init_mark_stack();
 
     /* mark frame stack */
@@ -1446,7 +1446,17 @@ garbage_collect()
 	rb_gc_abort_threads();
     } while (!MARK_STACK_EMPTY);
 
+#if STACK_WIPE_SITES & 0x400
+    {
+      VALUE *paddedLimit = __stack_grow(gc_stack_limit, GC_STACK_PAD);
+      if (__stack_past(rb_gc_stack_end, paddedLimit))
+        rb_gc_stack_end = paddedLimit;
+    }   
+#endif
     gc_sweep();
+#if STACK_WIPE_SITES & 0x400
+    rb_gc_wipe_stack();  /* wipe the whole stack area reserved for this gc */
+#endif
 }
 
 
@@ -1495,7 +1505,7 @@ ruby_set_stack_size(size)
 #ifndef STACK_LEVEL_MAX
     STACK_LEVEL_MAX = size / sizeof(VALUE);
 #endif
-    stack_limit = __stack_grow(rb_gc_stack_start, STACK_LEVEL_MAX-GC_LEVEL_MAX);
+    stack_limit = __stack_grow(rb_gc_stack_start, STACK_LEVEL_MAX-GC_STACK_MAX);
 }
 
 static void

@@ -55,7 +55,7 @@
    each thread_switch if wiping after every thread save context.
 */
 #ifndef STACK_WIPE_SITES
-#define STACK_WIPE_SITES  0x2370
+#define STACK_WIPE_SITES  0x4770
 #endif
 
 #if (STACK_WIPE_SITES & 0x14) == 0x14
