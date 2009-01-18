@@ -204,7 +204,7 @@ static inline VALUE *__sp(void) \
   VALUE *sp; asm(asmb); \
   return sp; \
 }
-# if __ppc__  /* alloc(0) does not return the stack pointer. MUST USE asm */
+# ifdef __ppc__  /* alloc(0) does not return the stack pointer. MUST USE asm */
    __defspfn("addi %0, r1, 0": "=r"(sp))
 # else  /* should work everywhere gcc does */
 #  define __sp()  (alloca(0))
