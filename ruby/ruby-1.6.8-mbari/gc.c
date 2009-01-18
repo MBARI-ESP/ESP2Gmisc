@@ -41,10 +41,10 @@ void rb_io_fptr_finalize _((struct OpenFile*));
 #endif
 
 #ifndef GC_LEVEL_MAX  /*maximum # of VALUEs on 'C' stack during GC*/
-#define GC_LEVEL_MAX  (8000)
+#define GC_LEVEL_MAX  8000
 #endif
 #ifndef GC_STACK_PAD
-#define GC_STACK_PAD  (80)  /* extra padding VALUEs for GC stack */
+#define GC_STACK_PAD  200  /* extra padding VALUEs for GC stack */
 #endif
 #define GC_STACK_MAX  (GC_LEVEL_MAX+GC_STACK_PAD)
 
@@ -147,8 +147,8 @@ ruby_xmalloc(size)
 	rb_raise(rb_eNoMemError, "negative allocation size (or too big)");
     }
     if (size == 0) size = 1;
-    
-    if ((malloc_increase += size) > malloc_limit) {
+
+    if ((malloc_increase+=size) > malloc_limit) {
 	garbage_collect();
         malloc_increase = size;
     }
@@ -190,7 +190,7 @@ ruby_xrealloc(ptr, size)
     }
     if (!ptr) return xmalloc(size);
     if (size == 0) size = 1;
-    if ((malloc_increase += size) > malloc_limit) {
+    if ((malloc_increase+=size) > malloc_limit) {
 	garbage_collect();
         malloc_increase = size;
     }
@@ -200,7 +200,7 @@ ruby_xrealloc(ptr, size)
 	RUBY_CRITICAL(mem = realloc(ptr, size));
 	if (!mem) {
 	    mem_error("failed to allocate memory(realloc)");
-	}
+        }
     }
 #if STACK_WIPE_SITES & 0x200
     rb_gc_update_stack_extent();
@@ -341,7 +341,7 @@ typedef struct RVALUE {
 	struct RFile   file;
 	struct RNode   node;
 	struct RMatch  match;
-	struct RVarmap varmap; 
+	struct RVarmap varmap;
 	struct SCOPE   scope;
     } as;
 #ifdef GC_DEBUG
@@ -606,7 +606,7 @@ push_mark_stack(VALUE ptr)
 	    mark_stack_overflow = 1;
     }
 }
-
+    
 static st_table *source_filenames;
 
 char *
@@ -674,8 +674,12 @@ gc_mark_all()
 static void
 gc_mark_rest()
 {
+    size_t stackLen = mark_stack_ptr - mark_stack;
+#if HAVE_ALLOCA
+    VALUE *tmp_arry = alloca(stackLen*sizeof(VALUE));
+#else
     VALUE tmp_arry[MARK_STACK_MAX];
-    unsigned stackLen = mark_stack_ptr - mark_stack;
+#endif
     VALUE *p = tmp_arry + stackLen;
     
     MEMCPY(tmp_arry, mark_stack, VALUE, stackLen);
@@ -942,11 +946,11 @@ gc_mark_children(ptr)
 		gc_mark((VALUE)obj->as.node.u2.node);
 	    }
 	    if (is_pointer_to_heap(obj->as.node.u3.node)) {
-		ptr = (VALUE)obj->as.node.u3.node;
-		goto again;
+                ptr = (VALUE)obj->as.node.u3.node;
+                goto again;
 	    }
 	}
-	return;			/* no need to mark class. */
+        return;	/* no need to mark class. */
     }
 
     gc_mark(obj->as.basic.klass);
@@ -956,27 +960,27 @@ gc_mark_children(ptr)
       case T_MODULE:
 	mark_tbl(obj->as.klass.m_tbl);
 	mark_tbl(obj->as.klass.iv_tbl);
-        ptr = obj->as.klass.super;
+	ptr = obj->as.klass.super;
 	goto again;
 
       case T_ARRAY:
 	{
-          VALUE *ptr = obj->as.array.ptr;
-          VALUE *pend = ptr + obj->as.array.len;
+	    VALUE *ptr = obj->as.array.ptr;
+            VALUE *pend = ptr + obj->as.array.len;
           while (ptr < pend)
-	     gc_mark(*ptr++);
-	}
+		gc_mark(*ptr++);
+	    }
 	break;
 
       case T_HASH:
 	mark_hash(obj->as.hash.tbl);
 	ptr = obj->as.hash.ifnone;
-        goto again;
+	goto again;
 
       case T_STRING:
 	if (obj->as.string.orig) {
 	  ptr = obj->as.string.orig;
-	  goto again;
+	    goto again;
 	}
 	break;
 
@@ -1350,8 +1354,20 @@ int rb_setjmp (rb_jmp_buf);
 #endif /* __human68k__ or DJGPP */
 #endif /* __GNUC__ */
 
+
+
+#if HAVE_ALLOCA
+
+static void
+garbage_collect_0(VALUE *top_frame)
+
+#else
+
 static void
 garbage_collect()
+#define top_frame TOP_FRAME
+
+#endif
 {
     struct gc_list *list;
     struct FRAME * frame;
@@ -1377,7 +1393,7 @@ garbage_collect()
 
     /* mark frame stack */
     for (frame = ruby_frame; frame; frame = frame->prev) {
-	rb_gc_mark_frame(frame); 
+	rb_gc_mark_frame(frame);
 	if (frame->tmp) {
 	    struct FRAME *tmp = frame->tmp;
 	    while (tmp) {
@@ -1446,18 +1462,36 @@ garbage_collect()
 	rb_gc_abort_threads();
     } while (!MARK_STACK_EMPTY);
 
-#if STACK_WIPE_SITES & 0x400
+#if HAVE_ALLOCA
+    gc_sweep();
+}
+
+static void
+garbage_collect()
+{  /* allocate a large frame to ensure app stack cannot grow into GC stack */
+  VALUE *sp = __sp();
+  if (__stack_past (sp, stack_limit)) {
+    volatile char *spacer = alloca(__stack_depth((void*)stack_limit,(void*)sp));
+  }
+  garbage_collect_0(TOP_FRAME);
+}
+
+#else /* when no alloca() available */
+
+# if STACK_WIPE_SITES & 0x400
     {
       VALUE *paddedLimit = __stack_grow(gc_stack_limit, GC_STACK_PAD);
       if (__stack_past(rb_gc_stack_end, paddedLimit))
         rb_gc_stack_end = paddedLimit;
     }   
-#endif
+# endif
     gc_sweep();
-#if STACK_WIPE_SITES & 0x400
+# if STACK_WIPE_SITES & 0x400
     rb_gc_wipe_stack();  /* wipe the whole stack area reserved for this gc */
-#endif
+# endif
 }
+# undef top_frame
+#endif
 
 
 void
@@ -1703,7 +1737,7 @@ os_obj_of(of)
 	for (;p < pend; p++) {
 	    if (p->as.basic.flags) {
 		switch (BUILTIN_TYPE(p)) {
-                  case T_NONE:
+		  case T_NONE:
 		  case T_ICLASS:
 		  case T_VARMAP:
 		  case T_SCOPE:
@@ -1768,8 +1802,8 @@ os_each_obj(argc, argv)
 	return os_live_obj();
     }
     else {
-	return os_obj_of(of);
-    }
+    return os_obj_of(of);
+}
 }
 
 static VALUE finalizers;
@@ -1878,7 +1912,7 @@ run_final(obj)
 	for (i=0; i<RARRAY(table)->len; i++) {
 	    args[0] = RARRAY(table)->ptr[i];
 	    rb_protect(run_single_final, (VALUE)args, &status);
-	}
+}
     }
 }
 
@@ -1891,7 +1925,7 @@ rb_gc_call_finalizer_at_exit()
     /* run finalizers */
     if (need_call_final) {
 	if (deferred_final_list) {
-	    p = deferred_final_list;
+	p = deferred_final_list;
 	    while (p) {
 		RVALUE *tmp = p;
 		p = p->as.free.next;
