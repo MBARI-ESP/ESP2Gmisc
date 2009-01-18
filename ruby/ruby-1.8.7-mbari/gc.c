@@ -48,10 +48,10 @@ int _setjmp(), _longjmp();
 #endif
 
 #ifndef GC_LEVEL_MAX  /*maximum # of VALUEs on 'C' stack during GC*/
-#define GC_LEVEL_MAX  (8000)
+#define GC_LEVEL_MAX  8000
 #endif
 #ifndef GC_STACK_PAD
-#define GC_STACK_PAD  (80)  /* extra padding VALUEs for GC stack */
+#define GC_STACK_PAD  200  /* extra padding VALUEs for GC stack */
 #endif
 #define GC_STACK_MAX  (GC_LEVEL_MAX+GC_STACK_PAD)
 
@@ -698,8 +698,12 @@ gc_mark_all()
 static void
 gc_mark_rest()
 {
+    size_t stackLen = mark_stack_ptr - mark_stack;
+#if HAVE_ALLOCA
+    VALUE *tmp_arry = alloca(stackLen*sizeof(VALUE));
+#else
     VALUE tmp_arry[MARK_STACK_MAX];
-    unsigned stackLen = mark_stack_ptr - mark_stack;
+#endif
     VALUE *p = tmp_arry + stackLen;
     
     MEMCPY(tmp_arry, mark_stack, VALUE, stackLen);
@@ -1376,8 +1380,20 @@ int rb_setjmp (rb_jmp_buf);
 #endif /* __human68k__ or DJGPP */
 #endif /* __GNUC__ */
 
+
+
+#if HAVE_ALLOCA
+
+static void
+garbage_collect_0(VALUE *top_frame)
+
+#else
+
 static void
 garbage_collect()
+#define top_frame TOP_FRAME
+
+#endif
 {
     struct gc_list *list;
     struct FRAME * frame;
@@ -1425,14 +1441,14 @@ garbage_collect()
     rb_setjmp(save_regs_gc_mark);
     mark_locations_array((VALUE*)save_regs_gc_mark, sizeof(save_regs_gc_mark) / sizeof(VALUE *));
 #if STACK_GROW_DIRECTION < 0
-    rb_gc_mark_locations((VALUE*)TOP_FRAME, rb_gc_stack_start);
+    rb_gc_mark_locations(top_frame, rb_gc_stack_start);
 #elif STACK_GROW_DIRECTION > 0
-    rb_gc_mark_locations(rb_gc_stack_start, (VALUE*)TOP_FRAME + 1);
+    rb_gc_mark_locations(rb_gc_stack_start, top_frame + 1);
 #else
     if (rb_gc_stack_grow_direction < 0)
-	rb_gc_mark_locations((VALUE*)TOP_FRAME, rb_gc_stack_start);
+	rb_gc_mark_locations(top_frame, rb_gc_stack_start);
     else
-	rb_gc_mark_locations(rb_gc_stack_start, (VALUE*)TOP_FRAME + 1);
+	rb_gc_mark_locations(rb_gc_stack_start, top_frame + 1);
 #endif
 #ifdef __ia64
     /* mark backing store (flushed register window on the stack) */
@@ -1473,18 +1489,36 @@ garbage_collect()
 	rb_gc_abort_threads();
     } while (!MARK_STACK_EMPTY);
 
-#if STACK_WIPE_SITES & 0x400
+#if HAVE_ALLOCA
+    gc_sweep();
+}
+
+static void
+garbage_collect()
+{  /* allocate a large frame to ensure app stack cannot grow into GC stack */
+  VALUE *sp = __sp();
+  if (__stack_past (sp, stack_limit)) {
+    volatile char *spacer = alloca(__stack_depth((void*)stack_limit,(void*)sp));
+  }
+  garbage_collect_0(TOP_FRAME);
+}
+
+#else /* when no alloca() available */
+
+# if STACK_WIPE_SITES & 0x400
     {
       VALUE *paddedLimit = __stack_grow(gc_stack_limit, GC_STACK_PAD);
       if (__stack_past(rb_gc_stack_end, paddedLimit))
         rb_gc_stack_end = paddedLimit;
     }   
-#endif
+# endif
     gc_sweep();
-#if STACK_WIPE_SITES & 0x400
+# if STACK_WIPE_SITES & 0x400
     rb_gc_wipe_stack();  /* wipe the whole stack area reserved for this gc */
-#endif
+# endif
 }
+# undef top_frame
+#endif
 
 void
 rb_gc()
@@ -1518,7 +1552,7 @@ ruby_set_stack_size(size)
 #ifndef STACK_LEVEL_MAX
     STACK_LEVEL_MAX = size / sizeof(VALUE);
 #endif
-    stack_limit = __stack_grow(rb_gc_stack_start, STACK_LEVEL_MAX-GC_LEVEL_MAX);
+    stack_limit = __stack_grow(rb_gc_stack_start, STACK_LEVEL_MAX-GC_STACK_MAX);
 }
 
 static void

@@ -1,3 +1,10 @@
+Sat Jan 17 20:15:36 2009  Brent Roman  <brent@mbari.org>
+
+        * gc.c:     use separate gc stack so it never need be wiped
+
+        * version.h:  bumped date
+
+
 Fri Jan 16 20:15:36 2009  Brent Roman  <brent@mbari.org>
 
         * gc.c:     added GC_STACK_PAD, renamed stack_gc_limit->gc_stack_limit
