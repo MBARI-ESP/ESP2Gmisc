@@ -32,7 +32,8 @@
    0x1*** -->  call dummy rb_wipe_stack() (for debugging and profiling)
    0x2*** -->  safe, portable stack clearing in memory allocated with alloca
    0x3*** -->  use faster, but less safe stack clearing in unallocated stack
-   0x4*** -->  use fastest, but least safe stack clearing (with inline code)
+   0x4*** -->  use faster, but less safe stack clearing (with inline code)
+   0x5*** -->  use fastest, but least safe stack clearing (x86 assembly code)
    
    for most effective gc use 0x*707
    for fastest micro-benchmarking use 0x0000
@@ -212,6 +213,8 @@ static inline VALUE *__sp(void) \
 }
 # ifdef __ppc__  /* alloc(0) does not return the stack pointer. MUST USE asm */
    __defspfn("addi %0, r1, 0": "=r"(sp))
+# elif STACK_WIPE_METHOD==5 && defined __i386__
+  __defspfn("movl %%esp, %0": "=r"(sp))
 # else  /* should work everywhere gcc does */
 #  define __sp()  (alloca(0))
 # endif
@@ -227,7 +230,7 @@ RUBY_EXTERN VALUE *__sp(void);
 */
 #if STACK_WIPE_METHOD == 0
 #define rb_gc_wipe_stack() ((void)0)
-#elif STACK_WIPE_METHOD == 4
+#elif STACK_WIPE_METHOD >= 4
 #define rb_gc_wipe_stack() {     \
   VALUE *end = rb_gc_stack_end;  \
   VALUE *sp = __sp();            \
