@@ -1,3 +1,12 @@
+Sun Jan 18 20:15:36 2009  Brent Roman  <brent@mbari.org>
+
+        * rubysig.h:  added support for STACK_WIPE_METHOD==5 (x86 asm)
+
+        * gc.c:       allow another STACK_WIPE_METHOD
+
+        * version.h:  bumped date
+
+
 Sat Jan 17 20:15:36 2009  Brent Roman  <brent@mbari.org>
 
         * gc.c:     use separate gc stack so it never need be wiped
