@@ -206,6 +206,8 @@ static inline VALUE *__sp(void) \
 }
 # ifdef __ppc__  /* alloc(0) does not return the stack pointer. MUST USE asm */
    __defspfn("addi %0, r1, 0": "=r"(sp))
+# elif defined __arm__  /* asm performs better than alloc(0) */
+   __defspfn("mov %0, sp": "=r"(sp))
 # else  /* should work everywhere gcc does */
 #  define __sp()  (alloca(0))
 # endif
