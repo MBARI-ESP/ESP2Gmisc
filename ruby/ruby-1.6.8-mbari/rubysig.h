@@ -14,7 +14,7 @@
 #define SIG_H
 
 /* STACK_WIPE_SITES determines where attempts are made to exorcise
-   "ghost object refereces" from the stack.
+   "ghost object refereces" from the stack and how the stack is cleared:
    
    0x*001 -->  wipe stack just after every thread_switch
    0x*002 -->  wipe stack just after every EXEC_TAG()
@@ -34,26 +34,32 @@
    
    for most effective gc use 0x*707
    for fastest micro-benchmarking use 0x0000
-   0x*370 prevents most memory leaks caused by ghost references
-   other good trade offs are 0x*270, 0x*703, 0x*303 or even 0x*03
+   0x*770 prevents almost all memory leaks caused by ghost references
+   without adding much overhead for stack clearing.
+   Other good trade offs are 0x*270, 0x*703, 0x*303 or even 0x*03
    
    In general, you may lessen the default -mpreferred-stack-boundary
    only if using less safe stack clearing (0x3***).  Lessening the
    stack alignment with portable stack clearing (0x2***) may fail to clear 
    all ghost references off the stack.
    
-   When using 0x3*** or 0x4*** on x86 machines, compiling with 
-   -fomit-frame-pointer may be necessary to prevent gcc from 
-   inserting push %ebp between reading the stack
-   pointer and clearing the ghost references.  This base pointer will be
-   cleared by the rb_gc_stack_wipe(), resulting in a segfault. 
+   When using 0x3*** or 0x4***, the compiler could insert 
+   stack push(s) between reading the stack pointer and clearing 
+   the ghost references.  The register(s) pushed will be
+   cleared by the rb_gc_stack_wipe(), typically resulting in a segfault
+   or an interpreter hang.
+   
+   STACK_WIPE_SITES of 0x4770 works well compiled with gcc on most machines
+   using the recommended CFLAGS="-O2 -fno-stack-protector".  However...
+   If it hangs or crashes for you, try changing STACK_WIPE_SITES to 0x2770
+   and please report your details.  i.e. CFLAGS, compiler, version, CPU
    
    Note that it is redundant to wipe_stack in looping constructs if 
    also doing so in CHECK_INTS.  It is also redundant to wipe_stack on
    each thread_switch if wiping after every thread save context.
 */
 #ifndef STACK_WIPE_SITES
-#  define STACK_WIPE_SITES  0x4770
+#define STACK_WIPE_SITES  0x4770  /* use 0x2770 if problems arise per above */
 #endif
 
 #if (STACK_WIPE_SITES & 0x14) == 0x14
