@@ -579,7 +579,7 @@ ruby_stack_check()
   Zero memory that was (recently) part of the stack, but is no longer.
   Invoke when stack is deep to mark its extent and when it's shallow to wipe it.
 */
-#if STACK_WIPE_METHOD != 4
+#if STACK_WIPE_METHOD != 4 && STACK_WIPE_METHOD != 5
 #if STACK_WIPE_METHOD
 void rb_gc_wipe_stack(void)
 {
