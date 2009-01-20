@@ -4550,8 +4550,6 @@ value_expr0(node)
 	  case NODE_UNTIL:
 	  case NODE_CLASS:
 	  case NODE_MODULE:
-	  case NODE_DEFN:
-	  case NODE_DEFS:
 	    if (!cond) yyerror("void value expression");
 	    return Qfalse;
 
