@@ -510,15 +510,12 @@ static unsigned int STACK_LEVEL_MAX = 655300;
 # define STACK_LEVEL_MAX 655300
 #endif
 
-#if !defined(__GNUC__) && !HAVE_ALLOCA
+#ifndef nativeAllocA
   /* portable way to return an approximate stack pointer */
 VALUE *__sp(void) {
   VALUE tos;
   return &tos;
 }
-#endif
-
-#ifdef C_ALLOCA
 # define SET_STACK_END VALUE stack_end
 # define STACK_END (&stack_end)
 #else
@@ -579,7 +576,7 @@ ruby_stack_check()
   Zero memory that was (recently) part of the stack, but is no longer.
   Invoke when stack is deep to mark its extent and when it's shallow to wipe it.
 */
-#if STACK_WIPE_METHOD != 4 && STACK_WIPE_METHOD != 5
+#if STACK_WIPE_METHOD != 4
 #if STACK_WIPE_METHOD
 void rb_gc_wipe_stack(void)
 {
@@ -591,7 +588,7 @@ void rb_gc_wipe_stack(void)
 #elif STACK_WIPE_METHOD == 2  /* alloca ghost stack before clearing it */
   if (__stack_past(sp, stack_end)) {
     size_t bytes = __stack_depth((char *)stack_end, (char *)sp);
-    STACK_UPPER(sp = alloca(bytes), stack_end = alloca(bytes));
+    STACK_UPPER(sp = nativeAllocA(bytes), stack_end = nativeAllocA(bytes));
     __stack_zero(stack_end, sp);
   }
 #elif STACK_WIPE_METHOD == 3    /* clear unallocated area past stack pointer */
@@ -699,8 +696,8 @@ static void
 gc_mark_rest()
 {
     size_t stackLen = mark_stack_ptr - mark_stack;
-#if HAVE_ALLOCA
-    VALUE *tmp_arry = alloca(stackLen*sizeof(VALUE));
+#ifdef nativeAllocA
+    VALUE *tmp_arry = nativeAllocA(stackLen*sizeof(VALUE));
 #else
     VALUE tmp_arry[MARK_STACK_MAX];
 #endif
@@ -1382,7 +1379,7 @@ int rb_setjmp (rb_jmp_buf);
 
 
 
-#if HAVE_ALLOCA
+#ifdef nativeAllocA
 
 static void
 garbage_collect_0(VALUE *top_frame)
@@ -1489,7 +1486,7 @@ garbage_collect()
 	rb_gc_abort_threads();
     } while (!MARK_STACK_EMPTY);
 
-#if HAVE_ALLOCA
+#ifdef nativeAllocA
     gc_sweep();
 }
 
@@ -1498,12 +1495,13 @@ garbage_collect()
 {  /* allocate a large frame to ensure app stack cannot grow into GC stack */
   VALUE *sp = __sp();
   if (__stack_past (sp, stack_limit)) {
-    volatile char *spacer = alloca(__stack_depth((void*)stack_limit,(void*)sp));
+    volatile char *spacer = 
+                nativeAllocA(__stack_depth((void*)stack_limit,(void*)sp));
   }
   garbage_collect_0(TOP_FRAME);
 }
 
-#else /* when no alloca() available */
+#else /* when no native alloca() available */
 
 # if STACK_WIPE_SITES & 0x400
     {
