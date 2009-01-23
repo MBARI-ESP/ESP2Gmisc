@@ -1,3 +1,13 @@
+Thu Jan 23 00:01:19 2009  Brent Roman  <brent@mbari.org>
+
+        * rubysig.h:  remapped wipe methods to avoid values > 9
+                      added cases for __ppc64__ and __x86_64__
+        
+        * missing/alloca.c:  made 64-bit clean
+        
+        * version.h:  bumped date
+        
+        
 Sun Jan 18 20:15:36 2009  Brent Roman  <brent@mbari.org>
 
         * rubysig.h:  added support for STACK_WIPE_METHOD==5 (x86 asm)
