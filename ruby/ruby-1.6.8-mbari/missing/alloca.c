@@ -28,6 +28,7 @@
 static char	SCCSid[] = "@(#)alloca.c	1.1";	/* for the "what" utility */
 #endif
 
+#include <sys/types.h>
 #include "config.h"
 #ifdef emacs
 #ifdef static
@@ -43,11 +44,7 @@ lose
 #endif /* static */
 #endif /* emacs */
 
-#ifdef X3J11
 typedef void	*pointer;		/* generic pointer type */
-#else
-typedef char	*pointer;		/* generic pointer type */
-#endif /* X3J11 */
 
 #define	NULL	0			/* null pointer constant */
 
@@ -134,8 +131,7 @@ typedef union hdr
 static header *last_alloca_header = NULL; /* -> last alloca header */
 
 pointer
-alloca (size)			/* returns pointer to storage */
-     unsigned	size;		/* # bytes to allocate */
+alloca (size_t size)		/* returns pointer to storage */
 {
   auto char	probe;		/* probes stack depth: */
   register char	*depth = &probe;

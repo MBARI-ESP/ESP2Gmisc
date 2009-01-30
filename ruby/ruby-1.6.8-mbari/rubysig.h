@@ -26,11 +26,13 @@
    0x*200 -->  update stack extent on each object reallocation
    0x*400 -->  update stack extent during GC marking passes
    0x*800 -->  update stack extent on each throw (use with 0x040)
+   0x1000 -->  use inline assembly code for x86, PowerPC, or ARM CPUs
+
    0x0*** -->  do not even call rb_wipe_stack()
-   0x1*** -->  call dummy rb_wipe_stack() (for debugging and profiling)
-   0x2*** -->  safe, portable stack clearing in memory allocated with alloca
-   0x3*** -->  use faster, but less safe stack clearing in unallocated stack
-   0x4*** -->  use fastest, but least safe stack clearing (with inline code)
+   0x2*** -->  call dummy rb_wipe_stack() (for debugging and profiling)
+   0x4*** -->  safe, portable stack clearing in memory allocated with alloca
+   0x6*** -->  use faster, but less safe stack clearing in unallocated stack
+   0x8*** -->  use faster, but less safe stack clearing (with inline code)
    
    for most effective gc use 0x*707
    for fastest micro-benchmarking use 0x0000
@@ -39,19 +41,19 @@
    Other good trade offs are 0x*270, 0x*703, 0x*303 or even 0x*03
    
    In general, you may lessen the default -mpreferred-stack-boundary
-   only if using less safe stack clearing (0x3***).  Lessening the
-   stack alignment with portable stack clearing (0x2***) may fail to clear 
+   only if using less safe stack clearing (0x6***).  Lessening the
+   stack alignment with portable stack clearing (0x4***) may fail to clear 
    all ghost references off the stack.
    
-   When using 0x3*** or 0x4***, the compiler could insert 
+   When using 0x6*** or 0x8***, the compiler could insert 
    stack push(s) between reading the stack pointer and clearing 
    the ghost references.  The register(s) pushed will be
    cleared by the rb_gc_stack_wipe(), typically resulting in a segfault
    or an interpreter hang.
    
-   STACK_WIPE_SITES of 0x4770 works well compiled with gcc on most machines
+   STACK_WIPE_SITES of 0x8770 works well compiled with gcc on most machines
    using the recommended CFLAGS="-O2 -fno-stack-protector".  However...
-   If it hangs or crashes for you, try changing STACK_WIPE_SITES to 0x2770
+   If it hangs or crashes for you, try changing STACK_WIPE_SITES to 0x4770
    and please report your details.  i.e. CFLAGS, compiler, version, CPU
    
    Note that it is redundant to wipe_stack in looping constructs if 
@@ -59,7 +61,11 @@
    each thread_switch if wiping after every thread save context.
 */
 #ifndef STACK_WIPE_SITES
-#define STACK_WIPE_SITES  0x4770  /* use 0x2770 if problems arise per above */
+# if defined __ppc__ || defined __ppc64__  /* for PowerPC,... */
+#  define STACK_WIPE_SITES  0x5770 /* never write outside alloca'd memory */
+# else
+#  define STACK_WIPE_SITES  0x8770 /* per above, use 0x4770 if problems arise */
+# endif
 #endif
 
 #if (STACK_WIPE_SITES & 0x14) == 0x14
@@ -69,7 +75,7 @@
 #warning  wiping stack after thread save makes wiping on thread_switch redundant
 #endif
 
-#define STACK_WIPE_METHOD (STACK_WIPE_SITES>>12)
+#define STACK_WIPE_METHOD (STACK_WIPE_SITES>>13)
 
 #ifdef NT
 typedef LONG rb_atomic_t;
@@ -177,7 +183,34 @@ EXTERN VALUE *rb_gc_stack_end;
 #   define alloca __builtin_alloca
 #  endif
 # endif /* atarist */
-#else
+
+# define nativeAllocA __builtin_alloca
+
+/* use assembly to get stack pointer quickly */
+# if STACK_WIPE_SITES & 0x1000
+#  define __defspfn(asmb)  \
+static inline VALUE *__sp(void) __attribute__((always_inline)); \
+static inline VALUE *__sp(void) \
+{ \
+  VALUE *sp; asm(asmb); \
+  return sp; \
+}
+#  if defined __ppc__ || defined __ppc64__
+__defspfn("addi %0, r1, 0": "=r"(sp))
+#  elif defined(__i386__) || defined(__x86_64__)
+__defspfn("movl %%esp, %0": "=r"(sp))
+#  elif __arm__
+__defspfn("mov %0, sp": "=r"(sp))
+#  else
+#   define __sp()  (__builtin_alloca(0))
+#   warning No assembly version of __sp() defined for this CPU.
+#  endif
+# else
+#  define __sp()  (__builtin_alloca(0))
+# endif
+
+#else  // not GNUC
+
 # ifdef HAVE_ALLOCA_H
 #  include <alloca.h>
 # else
@@ -187,28 +220,25 @@ void *alloca ();
 #   endif
 #  endif /* AIX */
 # endif /* HAVE_ALLOCA_H */
+
+# if STACK_WIPE_SITES & 0x1000
+#  warning No assembly versions of __sp() defined for this compiler.
+# endif
+# if HAVE_ALLOCA
+#  define __sp()  (alloca(0))
+#  define nativeAllocA alloca
+# else
+RUBY_EXTERN VALUE *__sp(void);
+#  if STACK_WIPE_SITES
+#   define STACK_WIPE_SITES 0
+#   warning Disabled Stack Wiping because there is no native alloca()
+#  endif
+# endif
 #endif /* __GNUC__ */
 
-#ifdef __GNUC__   /* get the stack pointer most accurately */
-#define __defspfn(asmb)  \
-static inline VALUE *__sp(void) \
-{ \
-  VALUE *sp; asm(asmb); \
-  return sp; \
-}
-# ifdef __ppc__  /* alloc(0) does not return the stack pointer. MUST USE asm */
-   __defspfn("addi %0, r1, 0": "=r"(sp))
-# else  /* should work everywhere gcc does */
-#  define __sp()  (alloca(0))
-# endif
-#elif HAVE_ALLOCA
-# define __sp()  (alloca(0))
-#else
-EXTERN VALUE *__sp(void);
-#endif
 
 /*
-  Zero the memory that was (recently) part of the stack, but is no longer.
+  Zero memory that was (recently) part of the stack, but is no longer.
   Invoke when stack is deep to mark its extent and when it's shallow to wipe it.
 */
 #if STACK_WIPE_METHOD == 0
@@ -221,7 +251,7 @@ EXTERN VALUE *__sp(void);
   __stack_zero(end, sp);   \
 }
 #else
-EXTERN void rb_gc_wipe_stack(void);
+RUBY_EXTERN void rb_gc_wipe_stack(void);
 #endif
 
 /*
