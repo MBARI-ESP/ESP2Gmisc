@@ -25,22 +25,62 @@ module Config
 print "  DESTDIR = '' if not defined? DESTDIR\n  CONFIG = {}\n"
 v_fast = []
 v_others = []
+vars = {}
 has_srcdir = false
 has_version = false
-File.foreach "config.status" do |$_|
-  next if /^#/
-  if /^s[%,]@program_transform_name@[%,]s,(.*)/
-    next if $install_name
-    ptn = $1.sub(/\$\$/, '$').split(/,/)	#'
-    v_fast << "  CONFIG[\"ruby_install_name\"] = \"" + "ruby".sub(ptn[0],ptn[1]) + "\"\n"
-  elsif /^s[%,]@(\w+)@[%,](.*)[%,]/
+continued_name = nil
+continued_line = nil
+File.foreach "config.status" do |line|
+  next if /^#/ =~ line
+  name = nil
+  case line
+  when /^s([%,])@(\w+)@\1(?:\|\#_!!_\#\|)?(.*)\1/
+    name = $2
+    val = $3.gsub(/\\(?=,)/, '')
+  when /^S\["(\w+)"\]\s*=\s*"(.*)"\s*(\\)?$/
     name = $1
-    val = $2 || ""
-    next if name =~ /^(INSTALL|DEFS|configure_input|srcdir|top_srcdir)$/
-    next if $install_name and name =~ /^RUBY_INSTALL_NAME$/
-    next if $so_name and name =~ /^RUBY_SO_NAME$/
-    v = "  CONFIG[\"" + name + "\"] = " +
-      val.strip.gsub(/\$\{?(\w+)\}?/) {"$(#{$1})"}.dump + "\n"
+    val = $2
+    if $3
+      continued_line = []
+      continued_line << val
+      continued_name = name
+      next
+    end
+  when /^"(.+)"\s*(\\)?$/
+    if continued_line
+      continued_line <<  $1
+      unless $2
+	val = continued_line.join("")
+	name = continued_name
+	continued_line = nil
+      end
+    end
+  when /^(?:ac_given_)?INSTALL=(.*)/
+    v_fast << "  CONFIG[\"INSTALL\"] = " + $1 + "\n"
+  end
+
+  if name
+    next if /^(?:ac_.*|configure_input|(?:top_)?srcdir|\w+OBJS)$/ =~ name
+    next if /^\$\(ac_\w+\)$/ =~ val
+    next if /^\$\{ac_\w+\}$/ =~ val
+    next if /^\$ac_\w+$/ =~ val
+    next if $install_name and /^RUBY_INSTALL_NAME$/ =~ name
+    next if $so_name and /^RUBY_SO_NAME$/ =~  name
+    next if /^(?:X|(?:MINI|RUN)RUBY$)/ =~ name
+    if /^program_transform_name$/ =~ name and /^s(\\?.)(.*)\1$/ =~ val
+      next if $install_name
+      sep = %r"#{Regexp.quote($1)}"
+      ptn = $2.sub(/\$\$/, '$').split(sep, 2)
+      name = "ruby_install_name"
+      val = "ruby".sub(/#{ptn[0]}/, ptn[1])
+    end
+    val.gsub!(/ +(?!-)/, "=") if name == "configure_args" && /mswin32/ =~ RUBY_PLATFORM
+    val = val.gsub(/\$(?:\$|\{?(\w+)\}?)/) {$1 ? "$(#{$1})" : $&}.dump
+    if /^prefix$/ =~ name
+      val = "(TOPDIR || DESTDIR + #{val})"
+    end
+    v = "  CONFIG[\"#{name}\"] #{vars[name] ? '<< "\n"' : '='} #{val}\n"
+    vars[name] = true
     if fast[name]
       v_fast << v
     else
