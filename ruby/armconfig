@@ -1,5 +1,5 @@
 #!/bin/bash
-# configure ruby 1.6.8 build for arm-linux -- 1/29/09 brent@mbari.org
+# configure ruby 1.6.8 build for arm-linux -- 2/1/09 brent@mbari.org
 # for gcc x86 add:
 # -mpreferred-stack-boundary=2 -fno-stack-protector
 # for gcc x86 4.x add:
@@ -27,8 +27,8 @@ result=$?  #cope with new and old gnu tar versions
 rm -rf disabled_ext &&
 mkdir -p disabled_ext &&
 mv ext/tk ext/tcltklib ext/curses disabled_ext &&
-rm -f config.cache &&  #TODO don't assume stack grows down.  Test it!
-rb_cv_stack_grow_dir=-1 ac_cv_func_memcmp_working=yes \
+rm -f config.cache configure && autoconf &&
+ac_cv_func_memcmp_working=yes \
 ac_cv_func_getpgrp_void=yes ac_cv_func_setpgrp_void=yes \
 configure --host=arm-unknown-linux --prefix=$ARMGCC $@ || exit 2
 echo 'Patching RUBY_*_LIB* in config.h for target'
