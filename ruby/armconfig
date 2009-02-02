@@ -28,7 +28,7 @@ rm -rf disabled_ext &&
 mkdir -p disabled_ext &&
 mv ext/tk ext/tcltklib ext/curses disabled_ext &&
 rm -f config.cache &&  #TODO don't assume stack grows down.  Test it!
-ac_cv_c_stack_direction=-1 ac_cv_func_memcmp_working=yes \
+rb_cv_stack_grow_dir=-1 ac_cv_func_memcmp_working=yes \
 ac_cv_func_getpgrp_void=yes ac_cv_func_setpgrp_void=yes \
 configure --host=arm-unknown-linux --prefix=$ARMGCC $@ || exit 2
 echo 'Patching RUBY_*_LIB* in config.h for target'
