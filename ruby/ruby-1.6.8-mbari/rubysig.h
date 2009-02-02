@@ -133,7 +133,6 @@ void rb_thread_schedule _((void));
 
 EXTERN VALUE *rb_gc_stack_end;
 
-#define STACK_GROW_DIRECTION  STACK_DIRECTION
 #if STACK_GROW_DIRECTION > 0
 
 /* clear stack space between end and sp (not including *sp) */
@@ -197,7 +196,7 @@ static inline VALUE *__sp(void) \
 }
 #  if defined __ppc__ || defined __ppc64__
 __defspfn("addi %0, r1, 0": "=r"(sp))
-#  elif defined(__i386__) || defined(__x86_64__)
+#  elif defined __i386__ || defined __x86_64__
 __defspfn("movl %%esp, %0": "=r"(sp))
 #  elif __arm__
 __defspfn("mov %0, sp": "=r"(sp))
