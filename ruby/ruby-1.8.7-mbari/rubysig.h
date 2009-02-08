@@ -63,8 +63,8 @@
    each thread_switch if wiping after every thread save context.
 */
 #ifndef STACK_WIPE_SITES
-# if defined __ppc__ || defined __ppc64__  /* for PowerPC,... */
-#  define STACK_WIPE_SITES  0x5770 /* never write outside alloca'd memory */
+# if defined __ppc__ || defined __ppc64__
+#  define STACK_WIPE_SITES  0x7764 /* best for PowerPC with GNUC */
 # else
 #  define STACK_WIPE_SITES  0x8770 /* per above, use 0x4770 if problems arise */
 # endif
@@ -211,8 +211,10 @@ static inline VALUE *__sp(void) \
 }
 #  if defined __ppc__ || defined __ppc64__
 __defspfn("addi %0, r1, 0": "=r"(sp))
-#  elif defined(__i386__) || defined(__x86_64__)
+#  elif defined  __i386__
 __defspfn("movl %%esp, %0": "=r"(sp))
+#  elif defined __x86_64__
+__defspfn("movq %%rsp, %0": "=r"(sp))
 #  elif __arm__
 __defspfn("mov %0, sp": "=r"(sp))
 #  else
