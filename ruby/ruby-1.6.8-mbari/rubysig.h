@@ -61,10 +61,12 @@
    each thread_switch if wiping after every thread save context.
 */
 #ifndef STACK_WIPE_SITES
-# if defined __ppc__ || defined __ppc64__  /* for PowerPC,... */
-#  define STACK_WIPE_SITES  0x5770 /* never write outside alloca'd memory */
+# ifdef __x86_64__     /* deal with "red zone" by not inlining stack clearing */
+#  define STACK_WIPE_SITES  0x6770
+# elif defined __ppc__ || defined __ppc64__   /* On any PowerPC, deal with... */
+#  define STACK_WIPE_SITES  0x7764   /* red zone & alloc(0) doesn't return sp */
 # else
-#  define STACK_WIPE_SITES  0x8770 /* per above, use 0x4770 if problems arise */
+#  define STACK_WIPE_SITES  0x8770 /*normal case, use 0x4770 if problems arise*/
 # endif
 #endif
 
