@@ -553,7 +553,7 @@ ruby_stack_length(start, base)
     VALUE *start, **base;
 {
     SET_STACK_END;
-    if (base) *base = STACK_UPPER(start, TOP_FRAME);
+    if (base) *base = STACK_UPPER(start, STACK_END);
     return STACK_LENGTH(start);
 }
 
