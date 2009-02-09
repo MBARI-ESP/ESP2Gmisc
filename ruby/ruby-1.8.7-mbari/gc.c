@@ -521,7 +521,7 @@ VALUE *__sp(void) {
 #else
 # define SET_STACK_END ((void)0)
 # define STACK_END (VALUE *)__sp()
-# if defined(__GNUC__) && defined(USE_BUILTIN_FRAME_ADDRESS)
+# ifdef __GNUC__
 #  if ( __GNUC__ == 3 && __GNUC_MINOR__ > 0 ) || __GNUC__ > 3
 #    define TOP_FRAME (VALUE *)__builtin_frame_address(0)
 #  endif
@@ -529,6 +529,7 @@ VALUE *__sp(void) {
 #endif
 
 #ifndef TOP_FRAME
+# define POOR_TOP_FRAME
 # define TOP_FRAME STACK_END
 #endif
 #if STACK_GROW_DIRECTION < 0
@@ -1379,7 +1380,7 @@ int rb_setjmp (rb_jmp_buf);
 
 
 
-#ifdef nativeAllocA
+#if defined nativeAllocA && !defined POOR_TOP_FRAME
 
 static void
 garbage_collect_0(VALUE *top_frame)
@@ -1486,7 +1487,7 @@ garbage_collect()
 	rb_gc_abort_threads();
     } while (!MARK_STACK_EMPTY);
 
-#ifdef nativeAllocA
+#if defined nativeAllocA && !defined POOR_TOP_FRAME
     gc_sweep();
 }
 
