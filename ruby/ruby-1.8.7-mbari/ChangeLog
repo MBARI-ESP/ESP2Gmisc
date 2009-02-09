@@ -1,3 +1,12 @@
+Sun Feb 08 00:01:19 2009  Brent Roman  <brent@mbari.org>
+
+        * rubysig.h:  changed default values for STACK_WIPE_SITES
+        
+        * gc.c:  don't trust config's USE_BUILTIN_FRAME_ADDRESS
+        
+        * version.h:  bumped date
+
+
 Thu Jan 23 00:01:19 2009  Brent Roman  <brent@mbari.org>
 
         * rubysig.h:  remapped wipe methods to avoid values > 9
