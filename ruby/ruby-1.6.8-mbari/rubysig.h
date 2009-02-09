@@ -196,8 +196,10 @@ static inline VALUE *__sp(void) \
 }
 #  if defined __ppc__ || defined __ppc64__
 __defspfn("addi %0, r1, 0": "=r"(sp))
-#  elif defined __i386__ || defined __x86_64__
+#  elif defined  __i386__
 __defspfn("movl %%esp, %0": "=r"(sp))
+#  elif defined __x86_64__
+__defspfn("movq %%rsp, %0": "=r"(sp))
 #  elif __arm__
 __defspfn("mov %0, sp": "=r"(sp))
 #  else
