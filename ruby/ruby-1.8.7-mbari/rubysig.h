@@ -63,10 +63,12 @@
    each thread_switch if wiping after every thread save context.
 */
 #ifndef STACK_WIPE_SITES
-# if defined __ppc__ || defined __ppc64__
-#  define STACK_WIPE_SITES  0x7764 /* best for PowerPC with GNUC */
+# ifdef __x86_64__     /* deal with "red zone" by not inlining stack clearing */
+#  define STACK_WIPE_SITES  0x6770
+# elif defined __ppc__ || defined __ppc64__   /* On any PowerPC, deal with... */
+#  define STACK_WIPE_SITES  0x7640   /* red zone & alloc(0) doesn't return sp */
 # else
-#  define STACK_WIPE_SITES  0x8770 /* per above, use 0x4770 if problems arise */
+#  define STACK_WIPE_SITES  0x8770 /*normal case, use 0x4770 if problems arise*/
 # endif
 #endif
 
@@ -218,11 +220,11 @@ __defspfn("movq %%rsp, %0": "=r"(sp))
 #  elif __arm__
 __defspfn("mov %0, sp": "=r"(sp))
 #  else
-#   define __sp()  (__builtin_alloca(0))
+#   define __sp()  ((VALUE *)__builtin_alloca(0))
 #   warning No assembly version of __sp() defined for this CPU.
 #  endif
 # else
-#  define __sp()  (__builtin_alloca(0))
+#  define __sp()  ((VALUE *)__builtin_alloca(0))
 # endif
 
 #else  // not GNUC
@@ -241,7 +243,7 @@ void *alloca ();
 #  warning No assembly versions of __sp() defined for this compiler.
 # endif
 # if HAVE_ALLOCA
-#  define __sp()  (alloca(0))
+#  define __sp()  ((VALUE *)alloca(0))
 #  define nativeAllocA alloca
 # else
 RUBY_EXTERN VALUE *__sp(void);
