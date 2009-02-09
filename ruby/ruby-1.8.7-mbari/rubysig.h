@@ -66,7 +66,7 @@
 # ifdef __x86_64__     /* deal with "red zone" by not inlining stack clearing */
 #  define STACK_WIPE_SITES  0x6770
 # elif defined __ppc__ || defined __ppc64__   /* On any PowerPC, deal with... */
-#  define STACK_WIPE_SITES  0x7640   /* red zone & alloc(0) doesn't return sp */
+#  define STACK_WIPE_SITES  0x7764   /* red zone & alloc(0) doesn't return sp */
 # else
 #  define STACK_WIPE_SITES  0x8770 /*normal case, use 0x4770 if problems arise*/
 # endif
