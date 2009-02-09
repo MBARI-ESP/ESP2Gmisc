@@ -203,11 +203,11 @@ __defspfn("movq %%rsp, %0": "=r"(sp))
 #  elif __arm__
 __defspfn("mov %0, sp": "=r"(sp))
 #  else
-#   define __sp()  (__builtin_alloca(0))
+#   define __sp()  ((VALUE *)__builtin_alloca(0))
 #   warning No assembly version of __sp() defined for this CPU.
 #  endif
 # else
-#  define __sp()  (__builtin_alloca(0))
+#  define __sp()  ((VALUE *)__builtin_alloca(0))
 # endif
 
 #else  // not GNUC
@@ -226,7 +226,7 @@ void *alloca ();
 #  warning No assembly versions of __sp() defined for this compiler.
 # endif
 # if HAVE_ALLOCA
-#  define __sp()  (alloca(0))
+#  define __sp()  ((VALUE *)alloca(0))
 #  define nativeAllocA alloca
 # else
 RUBY_EXTERN VALUE *__sp(void);
