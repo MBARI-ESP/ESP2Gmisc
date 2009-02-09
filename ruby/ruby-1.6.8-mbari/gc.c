@@ -1446,7 +1446,7 @@ static void
 garbage_collect()
 {
   VALUE *top = __sp();
-#if STACK_WIPE_SITES & 0x4000
+#if STACK_WIPE_SITES & 0x400
 # ifdef nativeAllocA
   if (__stack_past (top, stack_limit)) {
   /* allocate a large frame to ensure app stack cannot grow into GC stack */
