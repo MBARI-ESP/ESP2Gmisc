@@ -1,3 +1,12 @@
+Mon Feb 09 00:01:19 2009  Brent Roman  <brent@mbari.org>
+
+        * rubysig.h:  default values for STACK_WIPE_SITES if x86_64
+                      cast builtin_alloca result to (VALUE *)
+        
+        * gc.c:  don't use builtin-frame-address at all
+        
+        * version.h:  bumped date
+
 Sun Feb 08 00:01:19 2009  Brent Roman  <brent@mbari.org>
 
         * rubysig.h:  changed default values for STACK_WIPE_SITES
