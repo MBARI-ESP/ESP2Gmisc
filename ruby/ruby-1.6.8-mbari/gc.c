@@ -508,25 +508,16 @@ VALUE *__sp(void) {
 # define STACK_END (&stack_end)
 #else
 # define SET_STACK_END ((void)0)
-# define STACK_END (VALUE *)__sp()
-# ifdef __GNUC__
-#  if ( __GNUC__ == 3 && __GNUC_MINOR__ > 0 ) || __GNUC__ > 3
-#    define TOP_FRAME (VALUE *)__builtin_frame_address(0)
-#  endif
-# endif
+# define STACK_END __sp()
 #endif
 
-#ifndef TOP_FRAME
-# define POOR_TOP_FRAME
-# define TOP_FRAME STACK_END
-#endif
 #if STACK_GROW_DIRECTION < 0
-# define STACK_LENGTH(start)  ((start) - TOP_FRAME)
+# define STACK_LENGTH(start)  ((start) - STACK_END)
 #elif STACK_GROW_DIRECTION > 0
-# define STACK_LENGTH(start)  (TOP_FRAME - (start) + 1)
+# define STACK_LENGTH(start)  (STACK_END - (start) + 1)
 #else
-# define STACK_LENGTH(start)  ((TOP_FRAME < (start)) ? \
-                                 (start) - TOP_FRAME : TOP_FRAME - (start) + 1)
+# define STACK_LENGTH(start)  ((STACK_END < (start)) ? \
+                                 (start) - STACK_END : STACK_END - (start) + 1)
 #endif
 
 #if STACK_GROW_DIRECTION > 0
@@ -559,7 +550,7 @@ ruby_stack_check()
 void rb_gc_wipe_stack(void)
 {
   VALUE *stack_end = rb_gc_stack_end;
-  VALUE *sp = (VALUE *)__sp();
+  VALUE *sp = __sp();
   rb_gc_stack_end = sp;
 #if STACK_WIPE_METHOD == 1
 #warning clearing of "ghost references" from the call stack has been disabled
@@ -1353,18 +1344,8 @@ int rb_setjmp (rb_jmp_buf);
 
 
 
-#if defined nativeAllocA && !defined POOR_TOP_FRAME
-
 static void
 garbage_collect_0(VALUE *top_frame)
-
-#else
-
-static void
-garbage_collect()
-#define top_frame TOP_FRAME
-
-#endif
 {
     struct gc_list *list;
     struct FRAME * frame;
@@ -1411,14 +1392,14 @@ garbage_collect()
     setjmp(save_regs_gc_mark);
     mark_locations_array((VALUE*)save_regs_gc_mark, sizeof(save_regs_gc_mark) / sizeof(VALUE *));
 #if STACK_GROW_DIRECTION < 0
-    rb_gc_mark_locations((VALUE*)TOP_FRAME, rb_gc_stack_start);
+    rb_gc_mark_locations(top_frame, rb_gc_stack_start);
 #elif STACK_GROW_DIRECTION > 0
-    rb_gc_mark_locations(rb_gc_stack_start, (VALUE*)TOP_FRAME + 1);
+    rb_gc_mark_locations(rb_gc_stack_start, top_frame + 1);
 #else
     if (rb_gc_stack_grow_direction < 0)
-	rb_gc_mark_locations((VALUE*)TOP_FRAME, rb_gc_stack_start);
+	rb_gc_mark_locations(top_frame, rb_gc_stack_start);
     else
-	rb_gc_mark_locations(rb_gc_stack_start, (VALUE*)TOP_FRAME + 1);
+	rb_gc_mark_locations(rb_gc_stack_start, top_frame + 1);
 #endif
 #ifdef __ia64
     /* mark backing store (flushed register window on the stack) */
@@ -1458,38 +1439,34 @@ garbage_collect()
 	}
 	rb_gc_abort_threads();
     } while (!MARK_STACK_EMPTY);
-
-#if defined nativeAllocA && !defined POOR_TOP_FRAME
     gc_sweep();
 }
 
 static void
 garbage_collect()
-{  /* allocate a large frame to ensure app stack cannot grow into GC stack */
-  VALUE *sp = __sp();
-  if (__stack_past (sp, stack_limit)) {
+{
+  VALUE *top = __sp();
+#if STACK_WIPE_SITES & 0x4000
+# ifdef nativeAllocA
+  if (__stack_past (top, stack_limit)) {
+  /* allocate a large frame to ensure app stack cannot grow into GC stack */
     volatile char *spacer = 
-                nativeAllocA(__stack_depth((void*)stack_limit,(void*)sp));
+                    nativeAllocA(__stack_depth((void*)stack_limit,(void*)top));
+  }  
+  garbage_collect_0(top);
+# else /* no native alloca() available */
+  garbage_collect_0(top);
+  {
+    VALUE *paddedLimit = __stack_grow(gc_stack_limit, GC_STACK_PAD);
+    if (__stack_past(rb_gc_stack_end, paddedLimit))
+      rb_gc_stack_end = paddedLimit;
   }
-  garbage_collect_0(TOP_FRAME);
-}
-
-#else /* when no native alloca() available */
-
-# if STACK_WIPE_SITES & 0x400
-    {
-      VALUE *paddedLimit = __stack_grow(gc_stack_limit, GC_STACK_PAD);
-      if (__stack_past(rb_gc_stack_end, paddedLimit))
-        rb_gc_stack_end = paddedLimit;
-    }   
+  rb_gc_wipe_stack();  /* wipe the whole stack area reserved for this gc */  
 # endif
-    gc_sweep();
-# if STACK_WIPE_SITES & 0x400
-    rb_gc_wipe_stack();  /* wipe the whole stack area reserved for this gc */
-# endif
-}
-# undef top_frame
+#else
+  garbage_collect_0(top);
 #endif
+}
 
 
 void
