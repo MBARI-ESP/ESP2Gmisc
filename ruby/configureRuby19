@@ -1,1 +1,0 @@
-CFLAGS=-g configure --prefix=/usr/local --program-suffix=19 --with-baseruby=ruby18 --with-readline-dir=/usr/local
