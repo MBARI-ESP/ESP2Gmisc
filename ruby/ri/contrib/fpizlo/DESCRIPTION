@@ -1,9 +1,0 @@
-A GTK-based browser for ri by Filip Pizlo
-
-GtkRi adds the following features to ri: 
-
-       Tree view of classes and their methods 
-       All words are hyperlinks (just like in TkMan) 
-       Search line with functionality similar to the ri command-line 
-       Back and Forward buttons for easier browsing 
-       Elegant graphical display 
