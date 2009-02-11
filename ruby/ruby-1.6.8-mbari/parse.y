@@ -195,7 +195,7 @@ static void top_local_setup();
 	k__LINE__
 	k__FILE__
 
-%token <id>   tIDENTIFIER tFID tGVAR tIVAR tCONSTANT tCVAR
+%token <id>   tIDENTIFIER tFID tGVAR tIVAR tCONSTANT tCVAR tLABEL
 %token <val>  tINTEGER tFLOAT tSTRING tXSTRING tREGEXP
 %token <node> tDSTRING tDXSTRING tDREGEXP tNTH_REF tBACK_REF tQWORDS
 
@@ -1907,6 +1907,10 @@ assoc		: arg tASSOC arg
 		    {
 			$$ = list_append(NEW_LIST($1), $3);
 		    }
+                | tLABEL arg
+                    {
+                        $$ = list_append(NEW_LIST(NEW_LIT(ID2SYM($1))), $2);
+                    }
 		;
 
 operation	: tIDENTIFIER
@@ -3859,6 +3863,16 @@ yylex()
 		result = tIVAR;
 	    break;
 	  default:
+            if ((lex_state == EXPR_BEG) ||
+                lex_state == EXPR_ARG) {
+                if (peek(':') && !(lex_p + 1 < lex_pend && lex_p[1] == ':')) {
+                    lex_state = EXPR_BEG;
+                    nextc();
+                    yylval.id = rb_intern(tok());
+                    return tLABEL;
+                }
+            }
+
 	    if (lex_state != EXPR_DOT) {
 		/* See if it is a reserved word.  */
 		kw = rb_reserved_word(tok(), toklen());
