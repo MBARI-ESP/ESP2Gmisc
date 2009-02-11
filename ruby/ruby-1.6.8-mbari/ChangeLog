@@ -1,3 +1,11 @@
+Tue Feb 10 00:01:19 2009  Brent Roman  <brent@mbari.org>
+
+        * gc.c:  don't redundantly mark stack before base of current thread
+        
+        * parse.y:  Urabe Shyouhei backported support for 1.9 style hashes
+        
+        * version.h:  bumped date
+
 Mon Feb 09 00:01:19 2009  Brent Roman  <brent@mbari.org>
 
         * rubysig.h:  default values for STACK_WIPE_SITES if x86_64
