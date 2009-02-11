@@ -858,9 +858,9 @@ static NODE *top_cref;
     ruby_scope = _scope;		\
     scope_vmode = SCOPE_PUBLIC;
 
-typedef struct thread * rb_thread_t;
-static rb_thread_t curr_thread = 0;
-static rb_thread_t main_thread;
+rb_thread_t rb_main_thread, rb_curr_thread = 0;
+#define main_thread rb_main_thread
+#define curr_thread rb_curr_thread
 static void scope_dup _((struct SCOPE *));
 
 #define POP_SCOPE() 			\
@@ -7380,13 +7380,6 @@ VALUE rb_cThread;
 
 extern VALUE rb_last_status;
 
-enum thread_status {
-    THREAD_TO_KILL,
-    THREAD_RUNNABLE,
-    THREAD_STOPPED,
-    THREAD_KILLED
-};
-
 #define WAIT_FD		(1<<0)
 #define WAIT_SELECT	(1<<1)
 #define WAIT_TIME	(1<<2)
@@ -7395,62 +7388,6 @@ enum thread_status {
 
 /* +infty, for this purpose */
 #define DELAY_INFTY 1E30
-
-/* typedef struct thread * rb_thread_t; */
-
-struct thread {
-    struct thread *next, *prev;
-    jmp_buf context;
-#ifdef SAVE_WIN32_EXCEPTION_LIST
-    DWORD win32_exception_list;
-#endif
-
-    VALUE result;
-
-    size_t stk_len, stk_max;
-    VALUE *stk_ptr, *stk_start;
-
-    struct FRAME *frame;
-    struct SCOPE *scope;
-    struct RVarmap *dyna_vars;
-    struct BLOCK *block;
-    struct iter *iter;
-    struct tag *tag;
-    VALUE klass;
-    VALUE wrapper;
-    NODE *cref;
-
-    int flags;		/* misc. states (vmode/rb_trap_immediate/raised) */
-
-    char *file;
-    int   line;
-
-    int tracing;
-    VALUE errinfo;
-    VALUE last_status;
-    VALUE last_line;
-    VALUE last_match;
-
-    int safe;
-
-    enum thread_status status;
-    int wait_for;
-    int fd;
-    fd_set readfds;
-    fd_set writefds;
-    fd_set exceptfds;
-    int select_value;
-    double delay;
-    rb_thread_t join;
-
-    int abort;
-    int priority;
-    int gid;
-
-    st_table *locals;
-
-    VALUE thread;
-};
 
 #define THREAD_RAISED 0x200	 /* temporary flag */
 #define THREAD_TERMINATING 0x400 /* persistent flag */
@@ -7474,7 +7411,7 @@ struct thread_status_t {
 
     int safe;
 
-    enum thread_status status;
+    enum rb_thread_status status;
     int wait_for;
     int fd;
     fd_set readfds;
@@ -7544,7 +7481,7 @@ rb_trap_eval(cmd, sig)
 
 static const char *
 thread_status_name(status)
-    enum thread_status status;
+    enum rb_thread_status status;
 {
     switch (status) {
       case THREAD_RUNNABLE:
@@ -8455,7 +8392,7 @@ rb_thread_join(thread)
     VALUE thread;
 {
     rb_thread_t th = THREAD_DATA(thread);
-    enum thread_status last_status = THREAD_RUNNABLE;
+    enum rb_thread_status last_status = THREAD_RUNNABLE;
 
     if (rb_thread_critical) rb_thread_deadlock();
     if (!rb_thread_dead(th)) {
@@ -8584,7 +8521,7 @@ rb_thread_pass()
 VALUE
 rb_thread_stop()
 {
-    enum thread_status last_status = THREAD_RUNNABLE;
+    enum rb_thread_status last_status = THREAD_RUNNABLE;
 
     if (curr_thread == curr_thread->next) {
 	rb_raise(rb_eThreadError, "stopping only thread\n\tnote: use sleep to stop forever");
@@ -8719,7 +8656,7 @@ rb_thread_abort_exc_set(thread, val)
 extern VALUE *rb_gc_stack_start;
 
 #define THREAD_ALLOC(th) do {\
-    th = ALLOC(struct thread);\
+    th = ALLOC(struct rb_thread);\
 \
     th->next = 0;\
     th->prev = 0;\
@@ -8834,7 +8771,7 @@ rb_thread_start_0(fn, arg, th_arg)
     volatile rb_thread_t th = th_arg;
     volatile VALUE thread = th->thread;
     struct BLOCK* saved_block = 0;
-    enum thread_status status;
+    enum rb_thread_status status;
     int state;
 
     th_arg->stk_start = (VALUE *)(ruby_frame+(STACK_GROW_DIRECTION<0));
