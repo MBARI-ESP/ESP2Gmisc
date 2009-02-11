@@ -17,6 +17,9 @@
 extern "C" {
 #endif
 
+#include <setjmp.h>
+#include "st.h"
+
 enum node_type {
     NODE_METHOD,
     NODE_FBODY,
@@ -346,6 +349,71 @@ struct global_entry *rb_global_entry _((ID));
 VALUE rb_gvar_get _((struct global_entry *));
 VALUE rb_gvar_set _((struct global_entry *, VALUE));
 VALUE rb_gvar_defined _((struct global_entry *));
+
+enum rb_thread_status {
+    THREAD_TO_KILL,
+    THREAD_RUNNABLE,
+    THREAD_STOPPED,
+    THREAD_KILLED
+};
+
+typedef struct rb_thread * rb_thread_t;
+
+struct rb_thread {
+    rb_thread_t next, prev;
+    jmp_buf context;
+#ifdef SAVE_WIN32_EXCEPTION_LIST
+    DWORD win32_exception_list;
+#endif
+
+    VALUE result;
+
+    size_t stk_len, stk_max;
+    VALUE *stk_ptr, *stk_start;
+
+    struct FRAME *frame;
+    struct SCOPE *scope;
+    struct RVarmap *dyna_vars;
+    struct BLOCK *block;
+    struct iter *iter;
+    struct tag *tag;
+    VALUE klass;
+    VALUE wrapper;
+    NODE *cref;
+
+    int flags;		/* misc. states (vmode/rb_trap_immediate/raised) */
+
+    char *file;
+    int   line;
+
+    int tracing;
+    VALUE errinfo;
+    VALUE last_status;
+    VALUE last_line;
+    VALUE last_match;
+
+    int safe;
+
+    enum rb_thread_status status;
+    int wait_for;
+    int fd;
+    fd_set readfds;
+    fd_set writefds;
+    fd_set exceptfds;
+    int select_value;
+    double delay;
+    rb_thread_t join;
+
+    int abort;
+    int priority;
+    int gid;
+
+    st_table *locals;
+
+    VALUE thread;
+};
+
+extern rb_thread_t rb_curr_thread, rb_main_thread;
 
 #if defined(__cplusplus)
 }  /* extern "C" { */
