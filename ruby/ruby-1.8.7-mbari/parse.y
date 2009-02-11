@@ -4098,8 +4098,7 @@ yylex()
       case ':':
 	c = nextc();
 	if (c == ':') {
-	    if (IS_BEG() ||
-		lex_state == EXPR_CLASS || (IS_ARG() && space_seen)) {
+	    if (IS_BEG() || (IS_ARG() && space_seen)) {
 		lex_state = EXPR_BEG;
 		return tCOLON3;
 	    }
