@@ -1,3 +1,9 @@
+Fri Feb 13 00:01:19 2009  Brent Roman  <brent@mbari.org>
+
+        * signal.c:  CHECK_INTS after kill in case of suicide
+        
+        * version.h:  bumped date
+
 Tue Feb 10 00:01:19 2009  Brent Roman  <brent@mbari.org>
 
         * gc.c:  don't redundantly mark stack before base of current thread
