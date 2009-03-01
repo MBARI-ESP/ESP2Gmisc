@@ -2110,10 +2110,9 @@ eval_node_volatile(opt_n, void)
 }
 
 
-eval_node_volatile(while, VALUE)
+eval_node_volatile(while, void)
 {
   int state;
-  VALUE result;
   PUSH_TAG(PROT_NONE);
   switch (state = EXEC_TAG()) {
     case 0:
@@ -2121,16 +2120,14 @@ eval_node_volatile(while, VALUE)
       if (!(node->nd_state) || RTEST(rb_eval(self, node->nd_cond))) {
         do {
 	  while_redo:
-  #if STACK_WIPE_SITES & 0x10
+#if STACK_WIPE_SITES & 0x10
             rb_gc_wipe_stack();
-  #endif
+#endif
 	    rb_eval(self, node->nd_body);
 	  while_next:
 	    ;
         } while (RTEST(rb_eval(self, node->nd_cond)));
-      }  /* fall thru */
-    default:
-      result=Qnil;
+      }
       break;
 
     case TAG_REDO:
@@ -2141,19 +2138,16 @@ eval_node_volatile(while, VALUE)
       goto while_next;
     case TAG_BREAK:
       state = 0;
-      result = Qnil;
       break;
   }
   POP_TAG();
   if (state) JUMP_TAG(state);
-  return result;
 }
 
 
-eval_node_volatile(until, VALUE)
+eval_node_volatile(until, void)
 {
   int state;
-  VALUE result;
   PUSH_TAG(PROT_NONE);
   switch (state = EXEC_TAG()) {
     case 0:
@@ -2161,16 +2155,14 @@ eval_node_volatile(until, VALUE)
       if (!(node->nd_state) || !RTEST(rb_eval(self, node->nd_cond))) {
         do {
 	  until_redo:
-  #if STACK_WIPE_SITES & 0x10
+#if STACK_WIPE_SITES & 0x10
             rb_gc_wipe_stack();
-  #endif
+#endif
 	    rb_eval(self, node->nd_body);
 	  until_next:
 	    ;
         } while (!RTEST(rb_eval(self, node->nd_cond)));
-      }  /* fall thru */
-    default:
-      result=Qnil;
+      }
       break;
 
     case TAG_REDO:
@@ -2181,12 +2173,10 @@ eval_node_volatile(until, VALUE)
       goto until_next;
     case TAG_BREAK:
       state = 0;
-      result = Qnil;
       break;
   }
   POP_TAG();
   if (state) JUMP_TAG(state);
-  return result;
 }
 
 
@@ -3799,16 +3789,18 @@ rb_yield_0(val, self, klass, acheck)
 	else {
 	    result = rb_eval(self, node);
 	}
+        break;
+
       case TAG_NEXT:
 	state = 0;
 	result = Qnil;
 	break;
+
       case TAG_BREAK:
       case TAG_RETURN:
 	state |= (serial++ << 8);
 	state |= 0x10;
 	block->tag->dst = state;
-      default:
 	break;
     }
     POP_TAG();
