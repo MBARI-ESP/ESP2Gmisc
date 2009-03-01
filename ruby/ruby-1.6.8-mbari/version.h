@@ -1,7 +1,7 @@
 #include "rubysig.h"  /* for STACK_WIPE_SITES */
 
 #define string_arg(s) #s
-#define MBARI_RELEASE(wipe_sites) "-MBARI8B/" string_arg(wipe_sites)
+#define MBARI_RELEASE(wipe_sites) "-mbari8B/" string_arg(wipe_sites)
 
 #define RUBY_VERSION "1.6.8" MBARI_RELEASE(STACK_WIPE_SITES)
 #define RUBY_RELEASE_DATE "2009-3-1"
