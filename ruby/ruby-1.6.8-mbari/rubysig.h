@@ -13,6 +13,12 @@
 #ifndef SIG_H
 #define SIG_H
 
+
+#if defined __ppc__ || defined __powerpc__ || \
+    defined __ppc64__ || defined __powerpc64__
+#define __anyPowerPC__ 1  /* for compatibility with older gcc versions */
+#endif
+
 /* STACK_WIPE_SITES determines where attempts are made to exorcise
    "ghost object refereces" from the stack and how the stack is cleared:
    
@@ -63,7 +69,7 @@
 #ifndef STACK_WIPE_SITES
 # ifdef __x86_64__     /* deal with "red zone" by not inlining stack clearing */
 #  define STACK_WIPE_SITES  0x6770
-# elif defined __ppc__ || defined __ppc64__   /* On any PowerPC, deal with... */
+# elif defined __anyPowerPC__   /* On any PowerPC, deal with... */
 #  define STACK_WIPE_SITES  0x7764   /* red zone & alloc(0) doesn't return sp */
 # else
 #  define STACK_WIPE_SITES  0x8770 /*normal case, use 0x4770 if problems arise*/
@@ -196,11 +202,12 @@ static inline VALUE *__sp(void) \
   VALUE *sp; asm(asmb); \
   return sp; \
 }
-#  if defined __ppc__ || defined __ppc64__
+#  ifdef __anyPowerPC__
 __defspfn("addi %0, r1, 0": "=r"(sp))
 #  elif defined  __i386__
 __defspfn("movl %%esp, %0": "=r"(sp))
 #  elif defined __x86_64__
+#warn ===> x86_64 inline assembler is known to crash -- change STACK_WIPE_SITES
 __defspfn("movq %%rsp, %0": "=r"(sp))
 #  elif __arm__
 __defspfn("mov %0, sp": "=r"(sp))

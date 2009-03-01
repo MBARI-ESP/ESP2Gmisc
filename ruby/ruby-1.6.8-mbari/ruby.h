@@ -196,6 +196,8 @@ VALUE rb_uint2inum _((unsigned long));
 
 #define TYPE(x) rb_type((VALUE)(x))
 
+#define RB_GC_GUARD(v) (*(volatile VALUE *)&(v))
+
 void rb_check_type _((VALUE,int));
 #define Check_Type(v,t) rb_check_type((VALUE)(v),t)
 void rb_check_safe_str _((VALUE));
