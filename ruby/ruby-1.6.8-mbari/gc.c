@@ -36,7 +36,7 @@ void rb_io_fptr_finalize _((struct OpenFile*));
 #if defined(MSDOS) || defined(__human68k__)
 #define GC_MALLOC_LIMIT 200000
 #else
-#define GC_MALLOC_LIMIT 8000000
+#define GC_MALLOC_LIMIT (2000000*sizeof(VALUE))
 #endif
 #endif
 
@@ -83,6 +83,7 @@ static VALUE gc_getlimit(VALUE mod)
 static VALUE gc_setlimit(VALUE mod, VALUE newLimit)
 {
   long limit = NUM2LONG(newLimit);
+  rb_secure(2);
   if (limit < 0) return gc_getlimit(mod);
   malloc_limit = limit;
   return newLimit;
@@ -91,12 +92,12 @@ static VALUE gc_setlimit(VALUE mod, VALUE newLimit)
 
 /*
  *  call-seq:
- *     GC.increase
+ *     GC.growth
  *
  *  Get # of bytes that have been allocated since the last mark & sweep
  *
  */
-static VALUE gc_increase(VALUE mod)
+static VALUE gc_growth(VALUE mod)
 {
   return ULONG2NUM(malloc_increase);
 }
@@ -526,7 +527,7 @@ VALUE *__sp(void) {
 # define STACK_UPPER(a, b) b
 #endif
 
-int
+size_t
 stack_length(start)
     VALUE *start;
 {
@@ -709,7 +710,7 @@ mark_locations_array(x, n)
     }
 }
 
-void inline
+inline void
 rb_gc_mark_locations(start, end)
     VALUE *start, *end;
 {
@@ -926,7 +927,6 @@ gc_mark_children(ptr)
 	    ptr = (VALUE)obj->as.node.u2.node;
 	    goto again;
 #endif
-
 	  default:
 	    if (is_pointer_to_heap(obj->as.node.u1.node)) {
 		gc_mark((VALUE)obj->as.node.u1.node);
@@ -1072,7 +1072,7 @@ gc_sweep()
     RVALUE *p, *pend, *final_list;
     int freed = 0;
     int i;
-    unsigned long free_min = 0;
+    long free_min = 0;
 
     for (i = 0; i < heaps_used; i++) {
         free_min += heaps[i].limit;
@@ -1349,7 +1349,6 @@ garbage_collect_0(VALUE *top_frame)
 {
     struct gc_list *list;
     struct FRAME * frame;
-    jmp_buf save_regs_gc_mark;
     SET_STACK_END;
 
 #ifdef HAVE_NATIVETHREAD
@@ -1387,10 +1386,6 @@ garbage_collect_0(VALUE *top_frame)
 	mark_tbl(finalizer_table);
     }
 
-    FLUSH_REGISTER_WINDOWS;
-    /* This assumes that all registers are saved into the jmp_buf (and stack) */
-    setjmp(save_regs_gc_mark);
-    mark_locations_array((VALUE*)save_regs_gc_mark, sizeof(save_regs_gc_mark) / sizeof(VALUE *));
 #if STACK_GROW_DIRECTION < 0
     rb_gc_mark_locations(top_frame, rb_curr_thread->stk_start);
 #elif STACK_GROW_DIRECTION > 0
@@ -1445,13 +1440,17 @@ garbage_collect_0(VALUE *top_frame)
 static void
 garbage_collect()
 {
+  jmp_buf save_regs_gc_mark;
   VALUE *top = __sp();
+  FLUSH_REGISTER_WINDOWS;
+  /* This assumes that all registers are saved into the jmp_buf (and stack) */
+  setjmp(save_regs_gc_mark);
+
 #if STACK_WIPE_SITES & 0x400
 # ifdef nativeAllocA
   if (__stack_past (top, stack_limit)) {
   /* allocate a large frame to ensure app stack cannot grow into GC stack */
-    volatile char *spacer = 
-                    nativeAllocA(__stack_depth((void*)stack_limit,(void*)top));
+    (volatile void*) nativeAllocA(__stack_depth((void*)stack_limit,(void*)top));
   }  
   garbage_collect_0(top);
 # else /* no native alloca() available */
@@ -2015,7 +2014,7 @@ Init_GC()
     rb_define_singleton_method(rb_mGC, "disable", rb_gc_disable, 0);
     rb_define_singleton_method(rb_mGC, "limit", gc_getlimit, 0);
     rb_define_singleton_method(rb_mGC, "limit=", gc_setlimit, 1);
-    rb_define_singleton_method(rb_mGC, "increase", gc_increase, 0);
+    rb_define_singleton_method(rb_mGC, "growth", gc_growth, 0);
     rb_define_singleton_method(rb_mGC, "exorcise", gc_exorcise, 0);
     rb_define_method(rb_mGC, "garbage_collect", rb_gc_start, 0);
 

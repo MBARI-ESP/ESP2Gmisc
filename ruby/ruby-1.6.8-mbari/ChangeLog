@@ -1,3 +1,29 @@
+Wed Feb 28 12:01:19 2009  Brent Roman  <brent@mbari.org>
+        
+        * rubysig.c:  added support for __anyPowerPC__
+        
+        * version.h:  bumped date, , MBARI version 7 --> 8B
+
+Wed Feb 25 12:01:19 2009  Brent Roman  <brent@mbari.org>
+
+        * gc.c:  default GC.limit=2e6*sizeof(VALUE)
+        
+        * eval.c:  added RB_GC_GUARDs to eval_slit() & more volatile tweaks
+        
+        * re.c:  removed unneeded volatile qualifier & copy in rb_regcomp()
+        
+Tue Feb 24 00:01:19 2009  Brent Roman  <brent@mbari.org>
+
+        * signal.c:  removed CHECK_INTS after kill
+        
+        * test/ruby/suicide.rb:  add tiny delay to let signal propogate
+        
+        * gc.c:  save regs properly on main stack before marking it!
+        
+        * eval.c:  numerous corrections in use of volatile variables w/setjmp()
+        
+        * version.h:  bumped date
+
 Fri Feb 13 00:01:19 2009  Brent Roman  <brent@mbari.org>
 
         * signal.c:  CHECK_INTS after kill in case of suicide

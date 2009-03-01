@@ -895,16 +895,18 @@ VALUE
 rb_reg_regcomp(str)
     VALUE str;
 {
-    if (reg_cache && RREGEXP(reg_cache)->len == RSTRING(str)->len
-	&& case_cache == ruby_ignorecase
-	&& kcode_cache == reg_kcode
-	&& memcmp(RREGEXP(reg_cache)->str, RSTRING(str)->ptr, RSTRING(str)->len) == 0)
-	return reg_cache;
+  if (reg_cache && RREGEXP(reg_cache)->len == RSTRING(str)->len
+      && case_cache == ruby_ignorecase
+      && kcode_cache == reg_kcode
+      && memcmp(
+           RREGEXP(reg_cache)->str, RSTRING(str)->ptr, RSTRING(str)->len) == 0)
+      return reg_cache;
 
-    case_cache = ruby_ignorecase;
-    kcode_cache = reg_kcode;
-    return reg_cache = rb_reg_new(RSTRING(str)->ptr, RSTRING(str)->len,
-				  ruby_ignorecase);
+  case_cache = ruby_ignorecase;
+  kcode_cache = reg_kcode;
+  reg_cache = rb_reg_new(RSTRING(str)->ptr, RSTRING(str)->len, ruby_ignorecase);
+  RB_GC_GUARD(str);
+  return reg_cache;
 }
 
 static int
