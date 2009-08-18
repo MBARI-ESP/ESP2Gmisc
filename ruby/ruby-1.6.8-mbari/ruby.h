@@ -478,7 +478,7 @@ EXTERN VALUE ruby_verbose, ruby_debug;
 
 void rb_raise __((VALUE, const char*, ...)) NORETURN;
 void rb_fatal __((const char*, ...)) NORETURN;
-void rb_bug __((const char*, ...)) NORETURN;
+void rb_bug __((const char*, ...)); //removed NORETURN to preserve gdb backtrace
 void rb_sys_fail _((const char*)) NORETURN;
 void rb_iter_break _((void)) NORETURN;
 void rb_exit _((int)) NORETURN;
