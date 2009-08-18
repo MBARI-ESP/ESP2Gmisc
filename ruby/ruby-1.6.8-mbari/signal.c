@@ -21,9 +21,6 @@
 #undef SIGBUS
 #endif
 
-#undef SIGBUS  //so gdb can recover backtrace from core files
-#undef SIGSEGV
-
 #ifndef NSIG
 # ifdef DJGPP
 #  define NSIG SIGMAX
