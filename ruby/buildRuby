@@ -17,7 +17,7 @@ result=$?  #cope with new and old gnu tar versions
 echo "Making $target in $RUBYVERS:"
 make $target
 if [ ! -r Makefile ]; then
-  CFLAGS="-Os -g" CXXFLAGS=$CFLAGS configure
+  CFLAGS="-O2 -g" CXXFLAGS=$CFLAGS configure
 fi
 echo "Making $RUBYVERS:"
 make
