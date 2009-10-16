@@ -1,4 +1,5 @@
-Revised:  10/28/07 by brent@mbari.org
+Revised:  10/15/09 by brent@mbari.org
+to add missing rbgkcursors dependency
 to support Ruby v1.8 and v1.9
 
 gtkri (aka myri) is an obsolete, but very nice
@@ -14,6 +15,7 @@ To build the patched bindings to GTK 1.2 for Ruby v1.9:
 
 $ tar xzf ruby-gtk-0.34.tar.gz
 $ cd ruby-gtk-0.34
+# add rbgkcursors.h as a dependency to build rule for rbgdkcursor.o
 
 # apply this patch only if targeting ruby v1.9 or later
 $ patch -p1 < ../ruby19-gtk-0.34.patch  #skip this for ruby 1.6.8 or 1.8.*
