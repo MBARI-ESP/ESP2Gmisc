@@ -6,6 +6,8 @@ gtkri (aka myri) is an obsolete, but very nice
 GUI for Pragmatic Programmers "Interactive Ruby" [ri] command.
 It also requires ruby binding to GTK v1.2 (not v2.x!)
 
+First, install the text mode ri command at ../ri
+
 This version has been hack to operate until Ruby v1.9
 
 So, you need:
@@ -15,12 +17,16 @@ To build the patched bindings to GTK 1.2 for Ruby v1.9:
 
 $ tar xzf ruby-gtk-0.34.tar.gz
 $ cd ruby-gtk-0.34
-# add rbgkcursors.h as a dependency to build rule for rbgdkcursor.o
 
 # apply this patch only if targeting ruby v1.9 or later
 $ patch -p1 < ../ruby19-gtk-0.34.patch  #skip this for ruby 1.6.8 or 1.8.*
 
 $ ruby extconf.rb
+
+# edit src/Makefile to 
+#   add rbgdkcursors.h as a dependency to build rule for rbgdkcursor.o
+# rbgdkcursor.o: rbgdkcursor.c rbgtk.h global.h rbgdkcursors.h
+
 $ make
 $ su
 # make install
