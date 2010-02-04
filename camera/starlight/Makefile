@@ -8,7 +8,8 @@ snap:	Makefile snap.c devctl.c devctl.h ccd_msg.h types.h
 
 arm/snap:  Makefile snap.c devctl.c devctl.h ccd_msg.h types.h
 	mkdir -p arm && \
-        /arm/bin/gcc $(CFLAGS) snap.c devctl.c -ltiff -lz -lm -o arm/snap
+        /arm/bin/gcc $(CFLAGS) snap.c devctl.c \
+                -L/arm/usr/lib -ltiff -lz -lm -o arm/snap
 	
 clean:
 	rm -f *.o snap arm/snap
