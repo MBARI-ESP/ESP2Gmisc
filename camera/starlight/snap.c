@@ -9,6 +9,7 @@
 ******************************************************************/
 
 #include <stdio.h>
+#include <string.h>
 #include <errno.h>
 #include <stddef.h>
 #include <malloc.h>
@@ -557,7 +558,7 @@ static int saveTIFF(TIFF *tif, struct CCDexp *exposure)
     stripRows = height / strips;
     if (!stripRows) stripRows = 1;
     if (debug>1)
-      printf ("(%dx%d) TIFF image in %ld strips with %ld rows/strip\n",
+      printf ("(%dx%d) TIFF image in %u strips with %u rows/strip\n",
 			        width, height, strips, stripRows);
     setTiff(tif, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);
     setTiff(tif, TIFFTAG_SAMPLESPERPIXEL, 1);
