@@ -1,6 +1,6 @@
 /***************  snap.c -- brent@mbari.org  **********************
 * $Source$
-*    Copyright (C) 2005 MBARI
+*    Copyright (C) 2010 MBARI
 *    MBARI Proprietary Information. All rights reserved.
 * $Id$
 *
@@ -65,7 +65,7 @@ typedef int writeLineFn (void *file, struct CCDexp *exposure, uint16 *lineBuffer
 //note that options commented out in usage don't seem to work for SXV-H9 camera
 static void usage (void)
 {
-  printf ("%s revised 5/30/08 brent@mbari.org\n", progName);
+  printf ("%s revised 2/19/10 brent@mbari.org\n", progName);
   printf (
 "Snap a photo from a monochrome Starlight Xpress CCD camera. Usage:\n"
 "  %s {options} <exposure seconds> <output file>\n"
@@ -317,21 +317,27 @@ by the brightest pixel in this coarse image.  Scale exposure time so that this
 
     if (lightStats.filteredMax <= (testArea>1 ? 65000 : 60000)) {
         //subtract A/D analog bias estimate from brightest spot
-      unsigned brightPt = lightStats.filteredMax - adcBias;
-      double exposureScaleFactor = testArea / binAreaf * 
-        (double)maxSignalTarget/(double)brightPt;
-      unsigned testms = testExposure.msec * exposureScaleFactor;
+      double exposureScaleFactor = testArea / binAreaf;
+      unsigned testms;
+      unsigned brightPt = lightStats.filteredMax;
+      if (brightPt < minSignal) { //not enough signal
+        exposureScaleFactor *= 20;
+      }else{
+        exposureScaleFactor *= 
+              (double)maxSignalTarget / (double)(brightPt-adcBias);
+      }
+      testms = testExposure.msec * exposureScaleFactor;
       if (testms > exposure->msec) {
 	fprintf (stderr, 
           "WARNING:  Too Dark -- required %gs exposure > %gs time limit\n", 
 				testms/1000.0, exposure->msec/1000.0);
 	 return 0;
       }
-      if (!testms) testms=1;
-      if (lightStats.filteredMax < minSignal) {  //not enough signal
-        testExposure.msec *= 4;
+      if (brightPt < minSignal) { //not enough signal
+        testExposure.msec *= 10;
         goto retry;
       }
+      if (!testms) testms=1;
       exposure->msec = testms;
       
     }else{  //overexposed!
