@@ -1,0 +1,43 @@
+diff -ur tiff-v3.4.original/configure tiff-v3.4/configure
+--- tiff-v3.4.original/configure	1996-04-29 15:16:17.000000000 -0700
++++ tiff-v3.4/configure	2010-03-15 01:41:35.000000000 -0700
+@@ -1126,8 +1126,8 @@
+ 	LIBCOPTS="-K PIC"
+ 	DSO=SOLARIS
+ 	;;
+-    *-linux)
+-	if [ -x /lib/libc.so.5 ]; then
++    *-linux-*)
++	if [ -x /lib/libc.so.* ]; then
+ 	    DSOSUF=so.${DIST_MAJOR}
+ 	    DSOSUF_VERSION=${DSOSUF}.${DIST_MINOR}.${DIST_ALPHA}
+ 	    LIBCOPTS='-fPIC'
+diff -ur tiff-v3.4.original/libtiff/Makefile.in tiff-v3.4/libtiff/Makefile.in
+--- tiff-v3.4.original/libtiff/Makefile.in	1996-04-29 15:16:21.000000000 -0700
++++ tiff-v3.4/libtiff/Makefile.in	2010-03-15 01:40:15.000000000 -0700
+@@ -40,6 +40,7 @@
+ AROPTS	= @AROPTS@
+ RANLIB	= @RANLIB@
+ INSTALL	= @INSTALL@
++HOSTCC	= gcc
+ 
+ #
+ # If JPEG support is to be included and the Independent JPEG
+@@ -208,7 +209,7 @@
+ VERSION	= @VERSIONFILE@
+ 
+ version.h: ${VERSION} ${ALPHA} ${SRCDIR}/mkversion.c
+-	${CC} -o mkversion ${CFLAGS} ${SRCDIR}/mkversion.c
++	${HOSTCC} -o mkversion ${CFLAGS} ${SRCDIR}/mkversion.c
+ 	rm -f version.h; ./mkversion -v ${VERSION} -a ${ALPHA} version.h
+ tif_version.o: version.h
+ 
+@@ -218,7 +219,7 @@
+ # make these rules have to be manually carried out.
+ #
+ tif_fax3sm.c: ${SRCDIR}/mkg3states.c ${SRCDIR}/tif_fax3.h
+-	${CC} -o mkg3states ${CFLAGS} ${SRCDIR}/mkg3states.c
++	${HOSTCC} -o mkg3states ${CFLAGS} ${SRCDIR}/mkg3states.c
+ 	rm -f tif_fax3sm.c; ./mkg3states -c const tif_fax3sm.c
+ 
+ tif_aux.o: ${SRCDIR}/tif_aux.c
