@@ -1,5 +1,5 @@
 #!/bin/sh
-# build & install libreadline-4.3 for arm-linux -- 10/5/05 brent@mbari.org
+# build & install libreadline-4.3 for arm-linux -- 3/14/10 brent@mbari.org
 
 : ${ARMGCC:=/arm}
 : ${ARMSTRIP:=$ARMGCC/bin/strip}
@@ -23,8 +23,9 @@ cplib() {
 echo "Installing in $HOSTTOP"
 echo "  for execution at $TARGETTOP on the ARM target"
 cd ${TIFFVERS-tiff-v3.4} || exit 2
-make install || exit 1
+make || exit 1
 mkdir -pm 755 $HOSTTOP && cd $LIBTOP/lib || exit 3
+set -x
 for lib in libtiff.so.?; do 
   cplib $lib
 done
