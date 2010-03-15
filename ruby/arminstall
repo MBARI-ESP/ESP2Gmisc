@@ -58,7 +58,8 @@ export prefix=$ARMPREFIX
 
 rm -rf $HOSTTOP/bin/ruby $HOSTTOP/lib/ruby &&
 mkdir -p $HOSTTOP &&
-make -o miniruby all install || exit 1
+make -o miniruby prefix=$prefix all &&
+make -o miniruby install || exit 1
 [ -n "$coreOnly" ] || {
   echo "   Installing extensions required by MBARI ESP:"
   cd $startDir
