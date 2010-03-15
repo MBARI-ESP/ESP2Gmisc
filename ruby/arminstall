@@ -29,6 +29,7 @@ remove ()
 startDir=$PWD
 export DESTDIR=${3:-$HOME/armHost}
 : ${ARMGCC:=/arm}
+: ${ARMPREFIX:=$ARMGCC/usr}
 : ${ARMSTRIP:=$ARMGCC/bin/strip}
 : ${TARGETTOP:=${1-/usr/local}}
 : ${HOSTTOP:=${2-$DESTDIR$TARGETTOP}}
@@ -37,6 +38,7 @@ echo "Installing in $HOSTTOP"
 echo "  for execution at $TARGETTOP on the ARM target"
 PATH=`remove . : $PATH`  #remove current directory from PATH
 cd ${RUBYVERS:=ruby-1.6.8-mbari} || exit 98
+top=$PWD
 if [ ! -x miniruby ]; then
   echo Building miniruby for this machine
   rm -f *.o && make CC=gcc miniruby || {
@@ -49,13 +51,13 @@ fi
 export RUBYLIB=$PWD
 rbcfg=rbconfig.rb
 make -o miniruby fake.rb $rbcfg
-echo "Changing prefix from $ARMGCC to $TARGETTOP in $rbcfg"
-sed -e "s:+ \"$ARMGCC\":+ \"$TARGETTOP\":" $rbcfg >$rbcfg.patched || {
-  echo "Failed to patch $rbcfg"
-  exit 2
-}
+
+#This is required so that ruby's extmk.rb script will look in the target
+#libs when checking dependencies.
+export prefix=$ARMPREFIX
+
 rm -rf $HOSTTOP/bin/ruby $HOSTTOP/lib/ruby &&
-mv -f $rbcfg.patched $rbcfg && mkdir -p $HOSTTOP &&
+mkdir -p $HOSTTOP &&
 make -o miniruby all install || exit 1
 [ -n "$coreOnly" ] || {
   echo "   Installing extensions required by MBARI ESP:"
@@ -63,7 +65,27 @@ make -o miniruby all install || exit 1
   PATH=.:$PATH
   buildUtils clean install || exit 9
 }
+
+if false; then
+  echo Patching prefix in ext/extmk.rb for target
+  cd $top/ext &&
+  sed -e "s:prefix = $ARMPREFIX:prefix = $TARGETTOP:" extmk.rb \
+    >extmk.rb.patched && mv -f extmk.rb.patched extmk.rb || {
+    echo "Failed to patch extmk.rb"
+    exit 3
+  }
+fi
+
+echo "Changing prefix from $ARMGCC to $TARGETTOP in $rbcfg"
+cd $top &&
+sed -e "s:+ \"$prefix\":+ \"$TARGETTOP\":" $rbcfg >$rbcfg.patched &&
+mv -f $rbcfg.patched $rbcfg || {
+  echo "Failed to patch $rbcfg"
+  exit 2
+}
+
 cd $HOSTTOP || exit 2
+
 echo "Stripping, Deleting docs, intermediate files and empty directories"
 rm -rf `find -name man`
 rm -f `find lib/ruby -name "*.[aoh]"` #remove all development intermediate files

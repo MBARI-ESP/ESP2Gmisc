@@ -8,6 +8,7 @@
 : ${CFLAGS:="-O2 -g"}
 : ${CXXFLAGS:=$CFLAGS}
 : ${ARMGCC:=/arm}
+: ${ARMPREFIX:=$ARMGCC/usr}
 : ${CC:=$ARMGCC/bin/gcc}
 : ${TARGETTOP:=${1-/usr/local}}
 export CC CFLAGS CXXFLAGS
@@ -30,20 +31,14 @@ mv ext/tk ext/tcltklib ext/curses disabled_ext &&
 rm -f config.cache configure && autoconf &&
 ac_cv_func_memcmp_working=yes \
 ac_cv_func_getpgrp_void=yes ac_cv_func_setpgrp_void=yes \
-configure --host=arm-unknown-linux --prefix=$ARMGCC $@ || exit 2
+configure --host=arm-unknown-linux $@ || exit 2
 echo 'Patching RUBY_*_LIB* in config.h for target'
-sed -e "s:\"$ARMGCC:\"$TARGETTOP:g" config.h >config.h.patched || {
+sed -e "s:\"$ARMPREFIX:\"$TARGETTOP:g" config.h >config.h.patched || {
   echo "Failed to patch config.h"
   exit 3
 }
 #collect the trash more often
 echo "#define GC_MALLOC_LIMIT 2000000" >> config.h.patched 
 mv -f config.h.patched config.h || exit 6
-echo Patching prefix in ext/extmk.rb for target
-cd ext &&
-sed -e "s:prefix = $ARMGCC:prefix = $TARGETTOP:" extmk.rb >extmk.rb.patched || {
-  echo "Failed to patch extmk.rb"
-  exit 3
-}
-mv -f extmk.rb.patched extmk.rb &&
+
   echo "  $ arminstall       #to install ruby and core libaries"
