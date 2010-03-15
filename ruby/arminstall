@@ -1,5 +1,5 @@
 #!/bin/sh
-# install ruby 1.6.8 build for arm-linux -- 11/25/05 brent@mbari.org
+# install ruby 1.6.8 build for arm-linux -- 3/14/10 brent@mbari.org
 # also install modules needed for ESP unless 
 #   coreOnly environment variable is set
 #

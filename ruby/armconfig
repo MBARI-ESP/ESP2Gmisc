@@ -1,5 +1,5 @@
 #!/bin/bash
-# configure ruby 1.6.8 build for arm-linux -- 8/17/09 brent@mbari.org
+# configure ruby 1.6.8 build for arm-linux -- 3/14/10 brent@mbari.org
 # for gcc x86 add:
 # -mpreferred-stack-boundary=2 -fno-stack-protector
 # for gcc x86 4.x add:
