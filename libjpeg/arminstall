@@ -1,0 +1,38 @@
+#!/bin/sh
+# build & install libjpeg for arm-linux -- 10/27/10 brent@mbari.org
+
+: ${JPEGLIBV:=62.0.0}
+: ${JPEGVERS:=jpeg-6b}
+: ${ARMGCC:=/arm}
+: ${ARMSTRIP:=$ARMGCC/bin/strip}
+: ${TARGETTOP:=${2-/usr/lib}}
+: ${LIBTOP:=$ARMGCC$TARGETTOP}
+: ${INCTOP:=$ARMGCC/include}
+: ${HOSTTOP:=${1-$HOME/armHost$TARGETTOP}}
+
+cplinks() {
+#recursively copy symlinks having the specified target $1
+  for target in `find -lname "$1"`; do
+    cp -a $target $2 || return $?
+    cplinks $target $2
+  done
+}
+
+cplib() {
+#copy and strip ARM library $1 and all symlinks to it
+   $ARMSTRIP $1 -o $2/$1 && cplinks $*
+}
+
+echo "Installing in $HOSTTOP"
+echo "  for execution at $TARGETTOP on the ARM target"
+cd $JPEGVERS || exit 2
+make || exit 1
+
+#set -x
+cp -f jpeglib.h $INCTOP &&
+mkdir -pm 755 $HOSTTOP && cd .libs || exit $?
+  
+lib=libjpeg.so.$JPEGLIBV
+mkdir -pm 755 $LIBTOP && cplib $lib $LIBTOP
+cplib $lib $HOSTTOP &&
+echo "Done."
