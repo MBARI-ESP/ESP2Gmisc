@@ -1,36 +1,43 @@
 #!/bin/sh
-# build & install libreadline-4.3 for arm-linux -- 3/14/10 brent@mbari.org
+# build & install libtiff for arm-linux -- 10/26/10 brent@mbari.org
 
+: ${TIFFLIBV:=3.9.4}
+: ${TIFFVERS:=tiff-$TIFFLIBV}
 : ${ARMGCC:=/arm}
 : ${ARMSTRIP:=$ARMGCC/bin/strip}
-: ${LIBTOP:=$ARMGCC/usr}
 : ${TARGETTOP:=${2-/usr/lib}}
+: ${LIBTOP:=$ARMGCC$TARGETTOP}
+: ${INCTOP:=$ARMGCC/include}
 : ${HOSTTOP:=${1-$HOME/armHost$TARGETTOP}}
 
 cplinks() {
 #recursively copy symlinks having the specified target $1
   for target in `find -lname "$1"`; do
-    cp -a $target $HOSTTOP || return $?
-    cplinks $target
+    cp -a $target $2 || return $?
+    cplinks $target $2
   done
 }
 
 cplib() {
 #copy and strip ARM library $1 and all symlinks to it
-   $ARMSTRIP $1 -o $HOSTTOP/$1 && cplinks $1
+   $ARMSTRIP $1 -o $2/$1 && cplinks $*
 }
 
 echo "Installing in $HOSTTOP"
 echo "  for execution at $TARGETTOP on the ARM target"
-cd ${TIFFVERS-tiff-v3.4} || exit 2
+cd $TIFFVERS || exit 2
 make || exit 1
-mkdir -pm 755 $HOSTTOP && cd $LIBTOP/lib || exit 3
-set -x
-for lib in libtiff.so.?; do 
-  cplib $lib
-done
-cd ../bin || exit 3
-for tool in tiffcp tiffinfo tiff2ps tiffdump; do
-  $ARMSTRIP $tool -o $HOSTTOP/../bin/$tool
+
+#set -x
+cd libtiff && 
+  cp -f tiffconf.h tiff.h tiffio.h tiffvers.h $INCTOP &&
+mkdir -pm 755 $HOSTTOP && cd .libs || exit $?
+
+lib=libtiff.so.$TIFFLIBV
+mkdir -pm 755 $LIBTOP && 
+cp -f libtiff.a $LIBTOP && cplib $lib $LIBTOP
+cplib $lib $HOSTTOP && cd ../../tools/.libs || exit $?
+for tool in tiffcp tiffinfo tiffdump; do
+  echo $ARMSTRIP $tool -o $HOSTTOP/../bin/$tool
 done
 echo "Done."
