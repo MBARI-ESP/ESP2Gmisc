@@ -1,0 +1,16 @@
+#!/bin/bash
+# unpack & configure libjpeg-62 build for arm-linux -- 10/26/10 brent@mbari.org
+: ${CFLAGS:="-Os -fomit-frame-pointer"}
+: ${ARMGCC:=/arm}
+: ${ARMBIN:=$ARMGCC/bin}
+: ${CC:=$ARMBIN/gcc}
+: ${RANLIB:=$ARMBIN/ranlib}
+: ${NM:=$ARMBIN/nm}
+: ${JVERS:=6b}
+: ${JPEGVERS:=jpeg-$JVERS}
+export CFLAGS CC RANLIB NM
+rm -rf $JPEGVERS &&
+tar zxf jpegsrc.v${JVERS}.tar.gz 2>/dev/null &&
+cp config.guess $JPEGVERS && cd $JPEGVERS &&
+configure --host=arm-softfloat-linux --enable-shared && 
+echo "Now, run arminstall"

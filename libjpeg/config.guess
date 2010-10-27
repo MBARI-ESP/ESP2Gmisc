@@ -1,0 +1,2 @@
+#!/bin/sh
+echo arm-softfloat-linux-gnu
