@@ -12,4 +12,4 @@ arm/snap:  Makefile snap.c devctl.c devctl.h ccd_msg.h types.h
                 -L/arm/usr/lib -ltiff -lz -lm -o arm/snap
 	
 clean:
-	rm -f *.o snap arm/snap
+	rm -f *.o snap arm/*.o arm/snap
