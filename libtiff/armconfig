@@ -1,17 +1,21 @@
 #!/bin/bash
-# unpack & configure readline-4.3 build for arm-linux -- 3/14/10 brent@mbari.org
+# unpack & configure libtiff build for arm-linux -- 10/26/10 brent@mbari.org
 : ${CFLAGS:=-Os -fomit-frame-pointer}
 : ${CXXFLAGS:=$CFLAGS}
 : ${ARMGCC:=/arm}
 : ${CC:=$ARMGCC/bin/gcc}
 : ${LIBTOP:=${1-$ARMGCC/usr}}
-: ${TIFFVERS:=tiff-v3.4}
-export CC CFLAGS CXXFLAGS
+: ${TIFFVERS:=tiff-3.9.4}
+export CFLAGS CXXFLAGS GCOPTS=$CFLAGS
 top=$PWD
-rm -rf $TIFFVERS &&
-tar zxf ${TIFFVERS}-tar.gz 2>/dev/null &&
-cp -f armport.h $TIFFVERS/libtiff/port.h &&
-cd $TIFFVERS &&
-patch -p1 <$top/tiff-v3.4.patch &&
-ARMTOP=$ARMGCC GCOPTS=$CFLAGS configure --target=arm-unknown-linux --noninteractive && 
-echo "Now, run arminstall"
+rm -rf $TIFFVERS && tar zxf ${TIFFVERS}[-.]tar.gz 2>/dev/null || exit $?
+if [ $TIFFVERS == v3.4 ]; then
+  cp -f armport.h $TIFFVERS/libtiff/port.h &&
+  cd $TIFFVERS &&
+  patch -p1 <$top/tiff-v3.4.patch
+  export CC
+  ARMTOP=$ARMGCC configure --host=arm-softfloat-linux --noninteractive
+else
+  cd $TIFFVERS
+  configure --host=arm-softfloat-linux --disable-cxx
+fi && echo "Now, run arminstall"
