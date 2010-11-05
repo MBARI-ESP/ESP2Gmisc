@@ -234,8 +234,29 @@ gotAllOpts:
     if(!TIFFReadRGBAImage(tiffin, width, height, raster, 0)) 
       return 3;
 
-    outWidth = width / binX;
-    outHeight = height / binY;
+    //abort if origin is outside image
+    if (originX >= width || originY >= height) {
+      fprintf(stderr, "Specified origin is outside raster!\n");
+      exit(2);
+    }
+    rasterLine += width*originY + originX;
+    
+    //crop if extent extends outside image
+    if (!extentX)
+      extentX = width - originX;
+    else if (originX+extentX > width) {
+      fprintf(stderr, "Warning:  JPEG image will be narrower than specified\n");
+      extentX = width - originX;
+    }
+    if (!extentY)
+      extentY = height - originY;
+    else if (originY+extentY > height) {
+      fprintf(stderr, "Warning:  JPEG image will be shorter than specified\n");
+      extentY = height - originY;
+    }
+
+    outWidth = extentX / binX;
+    outHeight = extentY / binY;
     lineStride = binY*width;
     outLnBytes = outWidth * 3;
     pic = cpicalloc(outHeight, outLnBytes);
