@@ -691,7 +691,7 @@ arg		: lhs '=' arg
 		    {
 			$$ = node_assign($1, $3);
 		    }
-		| variable tOP_ASGN {$$ = assignable($1, 0);} arg
+		| variable tOP_ASGN {$<node>$ = assignable($1, 0);} arg
 		    {
 			value_expr($4);
 			if ($<node>3) {
