@@ -13,7 +13,7 @@ sitelibdir = destdir+CONFIG["sitelibdir"]
 
 puts sitebindir,sitelibdir
 
-$:.unshift CONFIG["srcdir"]+File::Separator+"lib"
+$:.unshift CONFIG["srcdir"]+File::Separator+"lib" if CONFIG["srcdir"]
 
 require "ftools"
 
