@@ -50,10 +50,12 @@ static struct termios rs232setup = {
 };
 #define BAUD B115200
 
+#define EndMark  "\200\r\n"  //gateway end of signon marker
+#define EndMarkLen (sizeof(EndMark)-1)
+
 static int debug = 0;
 static unsigned offSecs = 5;
 #define MAXSECS  (120)
-static unsigned long msAfterBreak = 200;
 
 #define gateOK  'O'
 static char gatewayCfg[] = {  //gateway configuration string
@@ -66,11 +68,13 @@ static char resetCmd[] = {  //gateway command to cycle modem power
 };
 
 static char *progName;
+static unsigned rspTimeout = 20;
+static int skipGatewayInit = 0;
 
 //note that options commented out in usage don't seem to work for SXV-H9 camera
 static void usage (void)
 {
-  fprintf(stderr, "%s revised 7/20/12 brent@mbari.org\n", progName);
+  fprintf(stderr, "%s revised 7/23/12 brent@mbari.org\n", progName);
   fprintf(stderr,
 "Briefly cycle the power on ESP's modem to reset it.\n\
 Usage:  %s  {options}  {offSeconds}\n\
@@ -78,11 +82,26 @@ offSeconds is the number of seconds modem shall be off\n\
   range:  0 to 120  #defaults to 5 seconds if unspecified\n\
 options:  (may be abbriviated)\n\
   -device=[path]   #defaults to /dev/I2Cgate\n\
-  -nosetup         #skip port baud rate setup otherwise 115200 baud\n\
-  -wait=[ms delay] #milliseconds to delay after end of RS-232 break [%lu]\n\
+  -wait=[delay]    #tenths of secs to delay for responses [%u]\n\
+  -skipGatewayInit #skip the (re-)configuration of the I2C gateway\n\
   -verbose={level} #print debugging info\n\
   -help            #display this message\n\
-",  progName, msAfterBreak);
+",  progName, rspTimeout);
+}
+
+
+char *extractSignon(char *s, char *end)
+/*
+  Extract signon string from debugging info gateway outputs in response to
+  RS232 break.
+  Return pointer to the first printing character
+  and write a NUL in place of the first trailing non-printing character
+*/
+{
+  while (s <= end && *(signed char *)s<=' ') s++;
+  while (s <= end && *(signed char *)end<=' ') --end;
+  end[1]='\0';
+  return s;
 }
 
 
@@ -90,34 +109,38 @@ int main (int argc, char **argv)
 {
   const static struct option options[] = {
     {"device", 1, NULL, 'd'},
-    {"nosetup", 0, NULL, 'n'},
     {"wait", 1, NULL, 'w'},
+    {"skipGatewayInit", 0, NULL, 's'},
     {"verbose", 2, NULL, 'v'},
     {"help", 0, NULL, 'h'},
     {NULL}
   };
     
   int rs232;  //RS-232 port's file descriptor
-  char *digits;
+  char *cursor, *end;
   progName = basename (argv[0]);
+  ssize_t xfrd;
+  char rsp;
+  char signon[4095];  //buffer for gateway signon string
+  unsigned rstSecs;
+  
   for (;;) {
     int optc = getopt_long_only (argc, argv, "", options, 0);
     switch (optc) {
       case -1:
         goto gotAllOpts;
-      case 'n':  //nosetup
-        setupPort=0;
-        break;
-      case 'w':  //ms delay after break signal
+      case 'w':  //response timeout in tenths of secs
         {
-          char *end;
-          unsigned long ms = strtoul(optarg, &end, 10);
+          unsigned long tenths = strtoul(optarg, &end, 10);
           if (*end) {
             fprintf(stderr,"\'%s\' is not a valid positive integer!\n", optarg);
             return 2;
           }
-          msAfterBreak = ms;
+          rspTimeout = tenths;
         }
+        break;
+      case 's':  //skip gateway initialization
+        skipGatewayInit = 1;
         break;
       case 'v':  //verbose debug
         debug = optarg ? atoi(optarg) : 1;
@@ -134,12 +157,11 @@ int main (int argc, char **argv)
     }
   }
 gotAllOpts:
-  digits = argv[optind];
-  if (digits) {
-    char *end;
-    unsigned long secs = strtoul(digits, &end, 10);
+  cursor = argv[optind];
+  if (cursor) {
+    unsigned long secs = strtoul(cursor, &end, 10);
     if (*end) {
-      fprintf(stderr, "\'%s\' is not a valid positive integer!\n", digits);
+      fprintf(stderr, "\'%s\' is not a valid positive integer!\n", cursor);
       return 2;
     }
     if (secs > MAXSECS) {
@@ -158,34 +180,55 @@ gotAllOpts:
   }
   ioctl(rs232, TIOCEXCL, 0);  //lock port for exclusive access
   
-  if (setupPort) {
-    cfsetospeed(&rs232setup, BAUD);
-    rs232setup.c_cc[VTIME] = 10;
-    rs232setup.c_cc[VMIN] = 0;
-    tcsetattr(rs232, TCSANOW, &rs232setup);
-    if (debug) fprintf(stderr, "setup port\n");
-  }
-  
-  tcflush(rs232, TCIOFLUSH);
-  tcsendbreak(rs232, 0);
-  if (debug) fprintf(stderr, "sent break\n");
-  usleep(msAfterBreak*1000);  //TODO:  check the version string returned!
-  tcflush(rs232, TCIFLUSH);
-  if (debug) fprintf(stderr, "flushed input\n");
-  
-  {
-    ssize_t xfrd = write(rs232, gatewayCfg, sizeof gatewayCfg);
-    char rsp;
-    unsigned rstSecs;
-    if (debug) fprintf(stderr, "wrote config\n");
+  cfsetospeed(&rs232setup, BAUD);
+  rs232setup.c_cc[VTIME] = rspTimeout;
+  rs232setup.c_cc[VMIN] = 0;
+  tcsetattr(rs232, TCSAFLUSH, &rs232setup);
+  if (debug>1) fprintf(stderr, "setup port\n"); 
+  tcflush(rs232, TCOFLUSH);
+  fcntl(rs232, F_SETFL, DEVMODE);  //cancel O_NONBLOCK
+ 
+  if (!skipGatewayInit) {
+    tcsendbreak(rs232, 0);
+    if (debug>1) fprintf(stderr, "sent break\n");  
+
+    end = signon+sizeof(signon)-1;
+    for(cursor=signon; cursor < end; cursor+=xfrd) {
+      if (cursor-signon >= EndMarkLen && !memcmp(cursor-3, EndMark, EndMarkLen))
+        break;  //received endmark
+      xfrd = read(rs232, cursor, end - cursor);
+      if (debug > 2) fprintf(stderr, "xfrd=%d\n", xfrd);
+      if (xfrd < 0) {
+        fprintf(stderr, "Cannot read I2C gateway %s: %s\n" ,
+                devName, strerror(errno));
+        return 17;
+      }
+      if (!xfrd)
+        break;  //timeout
+    }
+    if (cursor >= end) {
+        fprintf(stderr, "Signon rcv'd from I2C gateway %s was too long\n",
+                devName);
+        return 18;
+    }  
+    if (debug) {
+      char *s = extractSignon(signon, cursor);
+      if (debug < 2) {
+        char *v = strstr(s, "\r\n\r\n");
+        if (v) s = v+4;
+      }
+      fprintf(stderr, "%s\n",  s );
+    }
+
+    xfrd = write(rs232, gatewayCfg, sizeof gatewayCfg);
+    if (debug>1) fprintf(stderr, "wrote config\n");
     if (xfrd != sizeof gatewayCfg) {
       fprintf(stderr, "Cannot write to I2C gateway %s: %s\n",
               devName, strerror(errno));
       return 11;
     }
-    fcntl(rs232, F_SETFL, DEVMODE);
     xfrd = read(rs232, &rsp, 1);
-    if (debug) fprintf(stderr, "read ack\n");
+    if (debug>1) fprintf(stderr, "read ack\n");
     if (xfrd != 1) {
       fprintf(stderr, xfrd<0 ? "Cannot read I2C gateway %s: %s\n" :
                                "No response from I2C gateway %s\n",
@@ -197,30 +240,29 @@ gotAllOpts:
               devName);
       return 13;
     }
-    fcntl(rs232, F_SETFL, DEVMODE | O_NONBLOCK);
-    resetCmd[resetOffset] = offSecs;
-    xfrd = write(rs232, resetCmd, sizeof resetCmd);
-    if (debug) fprintf(stderr, "wrote reset cmd\n");
-    if (xfrd != sizeof resetCmd) {
-      fprintf(stderr, "Cannot write reset command I2C gateway %s: %s\n",
-              devName, strerror(errno));
-      return 14;
-    }
-    fcntl(rs232, F_SETFL, DEVMODE);
-    xfrd = read(rs232, &rsp, 1);
-    if (debug) fprintf(stderr, "read response %u, 0x%0x\n", xfrd, rsp);
-    if (xfrd != 1) {
-      fprintf(stderr, xfrd<0 ? "Cannot read I2C gateway %s: %s\n" :
-                             "I2C Gateway %s did not respond to modem reset!\n",
-              devName, strerror(errno));
-      return 15;
-    }
-    rstSecs = offSecs ? rsp - 5 : 0;
-    if (offSecs - rstSecs > 1) {
-      fprintf(stderr, "Response of Gateway %s to modem reset was invalid!\n",
-              devName, strerror(errno));
-      return 14;
-    }
-    printf ("Modem will restart in %u seconds\n", rstSecs);
+  }  // gateway is initialized
+
+  resetCmd[resetOffset] = offSecs;
+  xfrd = write(rs232, resetCmd, sizeof resetCmd);
+  if (debug>1) fprintf(stderr, "wrote reset cmd\n");
+  if (xfrd != sizeof resetCmd) {
+    fprintf(stderr, "Cannot write reset command I2C gateway %s: %s\n",
+            devName, strerror(errno));
+    return 14;
   }
+  xfrd = read(rs232, &rsp, 1);
+  if (debug>1) fprintf(stderr, "read response %u, 0x%0x\n", xfrd, rsp);
+  if (xfrd != 1) {
+    fprintf(stderr, xfrd<0 ? "Cannot read I2C gateway %s: %s\n" :
+                           "I2C Gateway %s did not respond to modem reset!\n",
+            devName, strerror(errno));
+    return 15;
+  }
+  rstSecs = offSecs ? rsp - 5 : 0;
+  if (offSecs - rstSecs > 1) {
+    fprintf(stderr, "Response of Gateway %s to modem reset was invalid!\n",
+            devName, strerror(errno));
+    return 16;
+  }
+  printf ("Modem will restart in %u seconds\n", rstSecs);
 }
