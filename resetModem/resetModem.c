@@ -51,7 +51,9 @@ static struct termios rs232setup = {
 #define BAUD B115200
 
 #define EndMark  "\200\r\n"  //gateway end of signon marker
-#define EndMarkLen (sizeof(EndMark)-1)
+#define EndMarkLen (sizeof EndMark - 1)
+#define BeginMark "\r\n\r\n" //marks beginning of signon
+#define BeginMarkLen (sizeof BeginMark - 1)
 
 static int debug = 0;
 static unsigned offSecs = 5;
@@ -117,15 +119,14 @@ int main (int argc, char **argv)
   };
     
   int rs232;  //RS-232 port's file descriptor
-  char *cursor, *end;
-  progName = basename (argv[0]);
-  ssize_t xfrd;
-  char rsp;
-  char signon[4095];  //buffer for gateway signon string
-  unsigned rstSecs;
+  char *digits;
+  ssize_t xfrd;  //retCode from read or write
+  char rsp;      //response byte received from gateway
   
+  progName = basename (argv[0]);
   for (;;) {
     int optc = getopt_long_only (argc, argv, "", options, 0);
+    char *end;
     switch (optc) {
       case -1:
         goto gotAllOpts;
@@ -157,11 +158,12 @@ int main (int argc, char **argv)
     }
   }
 gotAllOpts:
-  cursor = argv[optind];
-  if (cursor) {
-    unsigned long secs = strtoul(cursor, &end, 10);
+  digits = argv[optind];
+  if (digits) {
+    char *end;
+    unsigned long secs = strtoul(digits, &end, 10);
     if (*end) {
-      fprintf(stderr, "\'%s\' is not a valid positive integer!\n", cursor);
+      fprintf(stderr, "\'%s\' is not a valid positive integer!\n", digits);
       return 2;
     }
     if (secs > MAXSECS) {
@@ -189,12 +191,16 @@ gotAllOpts:
   fcntl(rs232, F_SETFL, DEVMODE);  //cancel O_NONBLOCK
  
   if (!skipGatewayInit) {
+    char *cursor, *end;
+    char signon[4095];  //buffer for gateway signon string
+    
     tcsendbreak(rs232, 0);
     if (debug>1) fprintf(stderr, "sent break\n");  
 
     end = signon+sizeof(signon)-1;
     for(cursor=signon; cursor < end; cursor+=xfrd) {
-      if (cursor-signon >= EndMarkLen && !memcmp(cursor-3, EndMark, EndMarkLen))
+      if (cursor-signon >= EndMarkLen &&
+         !memcmp(cursor-EndMarkLen, EndMark, EndMarkLen) )
         break;  //received endmark
       xfrd = read(rs232, cursor, end - cursor);
       if (debug > 2) fprintf(stderr, "xfrd=%d\n", xfrd);
@@ -214,8 +220,8 @@ gotAllOpts:
     if (debug) {
       char *s = extractSignon(signon, cursor);
       if (debug < 2) {
-        char *v = strstr(s, "\r\n\r\n");
-        if (v) s = v+4;
+        char *v = strstr(s, BeginMark);
+        if (v) s = v+BeginMarkLen;
       }
       fprintf(stderr, "%s\n",  s );
     }
@@ -256,13 +262,15 @@ gotAllOpts:
     fprintf(stderr, xfrd<0 ? "Cannot read I2C gateway %s: %s\n" :
                            "I2C Gateway %s did not respond to modem reset!\n",
             devName, strerror(errno));
-    return 15;
+    return 20;
   }
-  rstSecs = offSecs ? rsp - 5 : 0;
-  if (offSecs - rstSecs > 1) {
-    fprintf(stderr, "Response of Gateway %s to modem reset was invalid!\n",
-            devName, strerror(errno));
-    return 16;
+  {
+    unsigned rstSecs = offSecs ? rsp - 5 : 0;
+    if (offSecs - rstSecs > 1) {
+      fprintf(stderr, "Response of Gateway %s to modem reset was invalid!\n",
+              devName, strerror(errno));
+      return 16;
+    }
+    printf ("Modem will restart in %u seconds\n", rstSecs);
   }
-  printf ("Modem will restart in %u seconds\n", rstSecs);
 }
