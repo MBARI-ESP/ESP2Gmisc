@@ -76,7 +76,7 @@ static int skipGatewayInit = 0;
 //note that options commented out in usage don't seem to work for SXV-H9 camera
 static void usage (void)
 {
-  fprintf(stderr, "%s revised 7/23/12 brent@mbari.org\n", progName);
+  fprintf(stderr, "%s revised 7/24/12 brent@mbari.org\n", progName);
   fprintf(stderr,
 "Briefly cycle the power on ESP's modem to reset it.\n\
 Usage:  %s  {options}  {offSeconds}\n\
@@ -273,4 +273,5 @@ gotAllOpts:
     }
     printf ("Modem will restart in %u seconds\n", rstSecs);
   }
+  return 0;
 }
