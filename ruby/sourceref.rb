@@ -12,7 +12,7 @@
 #    edit source code
 #    reload source code
 #
-#  This file also adds methods to Object and Module to list, view, 
+#  This file also adds methods to Object and Module to list, view,
 #  edit, and reload methods and modules as a convenience.
 #
 #  Examples:
@@ -42,7 +42,7 @@
 #
 ############################################################################
 
-      
+
 class String
   def to_srcRef
   # parse a source reference from string of form fn:line#
@@ -83,24 +83,23 @@ end
 
 class SourceRef   #combines source file name and line number
 
-  def initialize(file_name, line=nil, symbol=nil) 
+  def initialize(file_name, line=nil, symbol=nil)
     raise ArgumentError, "missing source file reference" unless @file=file_name
     @line = line
     @symbol = symbol
   end
   attr_reader :file, :line, :symbol
-  
+
   def to_s
     return file unless line and line>0
     return file+':'+line.to_s unless symbol
     file+':'+line.to_s+':in `'+symbol.to_s+"'"
   end
-  alias_method :inspect, :to_s
-  
+
   def to_srcRef
     self
   end
-  
+
   def list(lineCount=20, lineOffset=0)
   # return the next lineCount lines of source text
   # or "" if no source is available
@@ -109,16 +108,16 @@ class SourceRef   #combines source file name and line number
     begin
       File.open(file) {|f|
         2.upto(firstLine+lineOffset) { f.readline; lineno+=1 }
-        1.upto(lineCount) { text += f.readline; lineno+=1 }
+        1.upto(lineCount) { text << f.readline; lineno+=1 }
       }
     rescue EOFError  # don't sweat EOF unless its before target line #
       if lineno < firstLine
-        raise $!,"--> Truncated ruby source file: #{self}"
+        raise $!,"Truncated ruby source file: #{self}"
       end
-    rescue
-      raise $!,"--> Missing ruby source: #{self}"
+    rescue Errno::ENOENT
+      raise $!,"Missing ruby source: #{self}"
     end
-    text
+    text.chomp!
   end
 
   class <<@@remoteStub = Object.new
@@ -130,23 +129,23 @@ class SourceRef   #combines source file name and line number
     end
   end
   @@remote = @@remoteStub unless defined? @@remote
-    
+
   def self.remote= remoteObject
 # configure SourceRef for remote editting
 # remoteObject must implement remap to convert pathnames and
 # must implement the method :system(string) similar to Kernel::system
     @@remote = remoteObject || @@remoteStub
   end
-    
-  def self.remote 
+
+  def self.remote
     @@remote
   end
 
   def sys os_cmd
     @@remote.system os_cmd
-  end  
+  end
   private :sys
-    
+
   def edit(options=nil, readonly=false)
   # start an editor session on file at line
   # If X-windows display available, try nedit client, then nedit directly
@@ -154,12 +153,16 @@ class SourceRef   #combines source file name and line number
     if disp=ENV["DISPLAY"]
       path = @@remote.remap(File.expand_path(file))
       if disp.length>1
-        neditArgs = ""
+        neditArgs = "-lm Ruby "
         neditArgs<< "-read " if readonly
         neditArgs<< "-line #{line} " if hasLine
-        neditArgs<< "-lm Ruby #{options} \"#{path}\""
-        return self if sys(
-   "PATH=~/bin:$PATH nohup redit #{neditArgs} >/dev/null || nedit #{neditArgs}")
+	neditArgs<<"#{options} " if options
+        return self if sys( <<-END
+	  PATH=~/bin:$PATH nohup redit #{neditArgs} "#{path}">/dev/null 2>&1 ||
+      	  NeditArgs="#{neditArgs}" Nedit \"#{path}\">/dev/null 2>&1 ||
+	  nedit #{neditArgs} \"#{path}\" &
+      	END
+        )
       end
       return self if
         sys("TERM=#{ENV["TERM"]} nano -m #{"-v " if readonly}#{
@@ -169,21 +172,21 @@ class SourceRef   #combines source file name and line number
     system("vi #{"-R " if readonly}#{"-c"+line.to_s+" " if hasLine}\"#{file}\"")
     self
   end
-  
+
   def view (options=nil)
   # start a read-only editor session on file at line
     edit(options, true)
   end
-  
+
   def reload
   # load file referenced by receiver
     begin
       load file
-    rescue LoadError 
-      raise $!, "--> Missing ruby source fle: #{file}" 
+    rescue LoadError
+      raise $!, "Missing ruby source fle: #{file}"
     end
   end
-  
+
 
   def self.find_in_back_trace (trace, symbol)
   # return first element in trace containing symbol
@@ -194,11 +197,11 @@ class SourceRef   #combines source file name and line number
     end
     return nil
   end
-   
+
   def self.from_back_trace (trace, level=0)
   # return sourceref at level in backtace
   #  or return level if no such level found
-    return find_in_back_trace(trace, level) if level.kind_of? Symbol    
+    return find_in_back_trace(trace, level) if level.kind_of? Symbol
     return unless lvl = trace[level]
     lvl.to_srcRef
   end
@@ -210,12 +213,12 @@ class SourceRef   #combines source file name and line number
       SourceRef.new(__file__, __line__)
     end
     alias_method :to_srcRef, :source
-    
+
     # can't use define_method because in ruby 1.6 self would be SourceRef::Code
     (OPS = [ :list, :edit, :view, :reload ]).each {|m|
       eval "def #{m}(*args); source.#{m}(*args); end"
     }
-    
+
   end #module SourceRef::Code
 
   def self.doMethod(m, *args)
@@ -245,26 +248,25 @@ class SourceRef   #combines source file name and line number
 
   module CommandBundle   #add convenient commands for viewing source code
     private
-    
+
     Code::OPS.each{|m|define_method(m){|*args|SourceRef.doMethod(m,*args)}}
 
     def backtrace err=Thread.current  #default to this thread's most recent err
-      case err  #try to make whatever we're handed into an Exception
+      case err  #make whatever we're handed into something that backtraces
         when nil
           err = $lastErr
-        when Exception
         when Thread
           err = err.lastErr
         else
-          err = Thread[err].lastErr
+          err = Thread[err].lastErr unless err.respond_to? :backtrace
       end
       if err
         puts err.backtrace
         $lastErr=err
       end
     end
-    
-  end  
+
+  end
 
 end #class SourceRef
 
@@ -277,7 +279,7 @@ if defined? UnboundMethod
 end
 class Object; include SourceRef::CommandBundle; end
 
-  
+
 class Module
 
   def sourceHash(methodType, methodNameArray)
@@ -291,75 +293,75 @@ class Module
         src = methodGetter[m].source
         ln = src.line   #this logic is compatible with 1.6 and 1.9 Ruby
         h[m] = src if (!ln or ln > 0) and src.file != "(eval)"
-      rescue TypeError  #Ruby 1.9 will raise this on missing source
+      rescue TypeError, ArgumentError  #on missing source
       end
     }
     h
   end
-  private :sourceHash    
+  private :sourceHash
 
-  def singleton_source
+  def singleton_source(includeAll=false)
   # return hash on receiver's singleton methods to corresponding SourceRefs
-    sourceHash(:method, singleton_methods)
+    sourceHash(:method, singleton_methods(includeAll))
   end
-  
+
   def instance_source(includeAncestors=false)
   # return hash on receiver's instance methods to corresponding SourceRefs
   #        optionally include accessible methods in ancestor classes
     sourceHash(:instance_method,
-                private_instance_methods+
+                private_instance_methods(includeAncestors)+
                 protected_instance_methods(includeAncestors)+
                 public_instance_methods(includeAncestors))
   end
-  
+
   def source(*args)
   # return hash on receiver's methods to corresponding SourceRefs
   # note that instance_methods will overwrite singletons of the same name
-    singleton_source.update(instance_source(*args))
+    singleton_source(*args).update(instance_source(*args))
   end
-  
-  def % (method_name)
+
+  def % method_name
   # return singleton method named method_name in module
   # Use / below unless method_name is also an instance method
     method method_name
   end
-    
-  def / (method_name)
-  # return method named method_name in module
+
+  def / method_name
+  # return instance method named method_name in module
     begin
       return instance_method(method_name)
     rescue NameError
     end
     method method_name
   end
-    
+
   def sources(*args)
   # return array of unique source file names for all receiver's methods
     (singleton_source.values+instance_source(*args).values).collect{|s|
        s.file
-    }.uniq.collect{|fn| SourceRef.new(fn)}    
+    }.uniq.collect{|fn| SourceRef.new(fn)}
   end
-    
+
   def reload(*args)
   # load all source files that define receiver's methods
-    sources(*args).each {|s| s.reload}
+    sources.each {|s| s.reload}
   end
-  
+
   def edit(*args)
   # start editor sessions on all files that define receiver's methods
-    sources(*args).each{|srcFile| srcFile.edit(*args)}
+    sources.each{|srcFile| srcFile.edit(*args)}
   end
 
   def view(*args)
   # start read-only editor sessions on files containing receiver's methods
-    sources(*args).each{|srcFile| srcFile.view(*args)}
+    sources.each{|srcFile| srcFile.view(*args)}
   end
-  
+
   def list(*args)
   # return first few lines of all files containing self.methods
-    result=""
-    sources.each{|srcFile| result+=srcFile.list(*args)}
-    result
+    result=[]
+    sources.each{|srcFile| result<<srcFile<<"\n"<<srcFile.list(*args)}
+    result.join "\n"
   end
 
 end
