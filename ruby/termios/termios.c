@@ -5,6 +5,10 @@
  
   $Id$
   
+  Revised:  2012/11/11 brent@mbari.org
+    added support for reading and updating modem control lines
+    and added exclusive
+
   Revised:  2007/11/7 brent@mbari.org
     initialize [iocl]flags instance vars to zero -- not nil
     improve type checking
@@ -18,6 +22,7 @@
 #include "ruby.h"
 #include "rubyio.h"
 #include <termios.h>
+#include <sys/ioctl.h>
 #include <unistd.h>
 #include <string.h>
 
@@ -223,7 +228,7 @@ termios_tcsetattr(io, opt, param)
     Check_Type(io,  T_FILE);
     Check_Type(opt, T_FIXNUM);
     if (CLASS_OF(param) != cTermios) {
-	char *type = rb_class2name(CLASS_OF(param));
+	const char *type = rb_class2name(CLASS_OF(param));
 	rb_raise(rb_eArgError, 
 		 "wrong argument type %s (expected Termios::Termios)", 
 		 type);
@@ -411,6 +416,78 @@ termios_s_tcsetpgrp(obj, io, pgrpid)
     return termios_tcsetpgrp(io, pgrpid);
 }
 
+
+static VALUE
+termios_tcgetmodem(io)
+    VALUE io;
+{
+    OpenFile *fptr;   
+    int mask; 
+    
+    Check_Type(io,  T_FILE);  
+    GetOpenFile(io, fptr);
+    if (ioctl(fileno(fptr->f), TIOCMGET, &mask) < 0) {
+	rb_raise(rb_eRuntimeError,
+		 "can't read modem bits (%s)", strerror(errno));
+    }
+    return INT2NUM(mask);
+}
+
+static VALUE
+termios_s_tcgetmodem(obj, io)
+    VALUE obj, io;
+{
+    return termios_tcgetmodem(io);
+}
+
+
+static VALUE
+termios_tcsetmodem(io, modemMask)
+    VALUE io, modemMask;
+{
+    OpenFile *fptr;
+    int mask = NUM2INT(modemMask);
+    
+    Check_Type(io,  T_FILE);
+    GetOpenFile(io, fptr);
+    if (ioctl(fileno(fptr->f), TIOCMSET, &mask) < 0) {
+	rb_raise(rb_eRuntimeError,
+		 "can't set modem bits (%s)", strerror(errno));
+    }
+    return io;
+}
+
+static VALUE
+termios_s_tcsetmodem(obj, io, modemMask)
+    VALUE obj, io, modemMask;
+{
+    return termios_tcsetmodem(io, modemMask);
+}
+
+
+static VALUE
+termios_tcexcl(io, flag)
+    VALUE io, flag;
+{
+    OpenFile *fptr;
+    
+    Check_Type(io,  T_FILE);
+    GetOpenFile(io, fptr);
+    if (ioctl(fileno(fptr->f), RTEST(flag) ? TIOCEXCL:TIOCNXCL) < 0) {
+	rb_raise(rb_eRuntimeError,
+		 "can't change exclusivity (%s)", strerror(errno));
+    }
+    return io;
+}
+
+static VALUE
+termios_s_tcexcl(obj, io, flag)
+    VALUE obj, io, flag;
+{
+    return termios_tcexcl(io, flag);
+}
+
+
 static VALUE
 termios_s_newtermios(argc, argv, klass)
     int argc;
@@ -428,6 +505,18 @@ Init_termios()
     /* module Termios */
 
     mTermios = rb_define_module("Termios");
+
+    rb_define_module_function(mTermios,"tcexclusive", termios_s_tcexcl,    2);
+    rb_define_module_function(mTermios,  "exclusive", termios_s_tcexcl,    2);
+    rb_define_method(mTermios,         "tcexclusive", termios_tcexcl,      1);
+
+    rb_define_module_function(mTermios,"tcgetmodem", termios_s_tcgetmodem, 1);
+    rb_define_module_function(mTermios,  "getmodem", termios_s_tcgetmodem, 1);
+    rb_define_method(mTermios,         "tcgetmodem", termios_tcgetmodem,   0);
+
+    rb_define_module_function(mTermios,"tcsetmodem", termios_s_tcsetmodem, 2);
+    rb_define_module_function(mTermios,  "setmodem", termios_s_tcsetmodem, 2);
+    rb_define_method(mTermios,         "tcsetmodem", termios_tcsetmodem,   1);
 
     rb_define_module_function(mTermios,"tcgetattr",  termios_s_tcgetattr,  1);
     rb_define_module_function(mTermios,  "getattr",  termios_s_tcgetattr,  1);
@@ -509,6 +598,17 @@ Init_termios()
     rb_define_alias(cTermios, "c_ospeed=", "ospeed=");
 
     /* constants under Termios module */
+
+    rb_define_const(mTermios, "LE",    INT2FIX(TIOCM_LE));
+    rb_define_const(mTermios, "DTR",   INT2FIX(TIOCM_DTR));
+    rb_define_const(mTermios, "RTS",   INT2FIX(TIOCM_RTS));
+    rb_define_const(mTermios, "ST",    INT2FIX(TIOCM_ST));
+    rb_define_const(mTermios, "CTS",   INT2FIX(TIOCM_CTS));
+    rb_define_const(mTermios, "CAR",   INT2FIX(TIOCM_CAR));
+    rb_define_const(mTermios, "RNG",   INT2FIX(TIOCM_RNG));
+    rb_define_const(mTermios, "DSR",   INT2FIX(TIOCM_DSR));
+    rb_define_const(mTermios, "CD",    INT2FIX(TIOCM_CD));
+    rb_define_const(mTermios, "RI",    INT2FIX(TIOCM_RNG));
 
     rb_define_const(mTermios, "NCCS",    INT2FIX(NCCS));
 
