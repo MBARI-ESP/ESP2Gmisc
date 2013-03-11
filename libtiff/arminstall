@@ -38,6 +38,6 @@ mkdir -pm 755 $LIBTOP &&
 cp -f libtiff.a $LIBTOP && cplib $lib $LIBTOP
 cplib $lib $HOSTTOP && cd ../../tools/.libs || exit $?
 for tool in tiffcp tiffinfo tiffdump; do
-  echo $ARMSTRIP $tool -o $HOSTTOP/../bin/$tool
+  $ARMSTRIP $tool -o $HOSTTOP/../bin/$tool
 done
 echo "Done."
