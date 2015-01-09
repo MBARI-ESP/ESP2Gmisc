@@ -2,7 +2,7 @@
   CCD Camera Device Controller
 
   Factored out of gccd.h by Brent Roman @ mbari.org
-  
+
   from David Schmenk's GCCD application
 */
 
@@ -13,6 +13,7 @@
 #define NAME_STRING_LENGTH      64
 #define CAMERA_STRING_LENGTH    DEFAULT_STRING_LENGTH
 
+#include "time.h"
 #include "ccd_msg.h"
 
 struct CCDdev

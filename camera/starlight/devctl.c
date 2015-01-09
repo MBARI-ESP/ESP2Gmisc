@@ -2,7 +2,7 @@
  * GCCD - Gnome CCD Camera Controller
  * Copyright (C) 2001 David Schmenk
  *
- *  derived from dev_ctl.h by brent@mbari.org 
+ *  derived from dev_ctl.h by brent@mbari.org
  *  -- removed dependencies on gccd and wheel and scope fns
  *
  * This program is free software; you can redistribute it and/or
@@ -86,7 +86,7 @@ trace ("CCDconnect %s\n", ccd->filename);
         ccd->camera[i] = '\0'; // Strip off trailing spaces
 
 trace ("%s: width=%d, height=%d, fields=%d, depth=%d, DACbits=%d, color=0x%04x\n"
-          "pixWidth=%f, pixHeight=%f\n", 
+          "pixWidth=%f, pixHeight=%f\n",
           ccd->camera, ccd->width, ccd->height, ccd->fields, ccd->depth, ccd->dacBits, ccd->color,
           ccd->pixel_height, ccd->pixel_width);
     return TRUE;
@@ -152,13 +152,13 @@ void CCDexposeFrame(struct CCDexp *exposure)
     msg[CCD_EXP_FLAGS_INDEX]     = exposure->flags;
     msg[CCD_EXP_MSEC_LO_INDEX]   = exposure->msec & 0xFFFF;
     msg[CCD_EXP_MSEC_HI_INDEX]   = exposure->msec >> 16;
-    
+
 trace ("CCDexposeFrame width=%d, height=%d, xyoffset=(%d,%d),\n"
         "   xybin=(%d,%d),  bits=%d, flags=0x%04x, msec=%d\n",
         exposure->width, exposure->height, exposure->xoffset, exposure->yoffset,
         exposure->xbin, exposure->ybin, exposure->dacBits,
         exposure->flags, exposure->msec);
-        
+
     write(exposure->ccd->fd, (char *)msg, CCD_MSG_EXP_LEN);
     exposure->readRow = 0;
     exposure->rowBytes = exposure->width / exposure->xbin * ((exposure->ccd->depth + 7) / 8);
@@ -173,13 +173,13 @@ int CCDloadFrame (struct CCDexp *exposure, void *rowBuffer)
     size_t        rowBytes    = exposure->rowBytes;
     int           row = exposure->readRow;
     int           rows = exposure->height / exposure->ybin;
-    
+
     if (row == 0)
     {
         /*
          * Get header
          */
-        CCD_ELEM_TYPE header[CCD_IMAGE_PIXELS_INDEX];       
+        CCD_ELEM_TYPE header[CCD_IMAGE_PIXELS_INDEX];
         int           bytesRead = read(exposure->ccd->fd, header, sizeof (header));
         if (bytesRead == sizeof(header))
         {
@@ -213,10 +213,10 @@ int CCDloadFrame (struct CCDexp *exposure, void *rowBuffer)
           return ++exposure->readRow;
         if (bytesRead < 0) {
           fprintf(stderr, "Failure while reading image!");
-          return CCDreadError;          
+          return CCDreadError;
         } else {
           fprintf(stderr, "Truncated image read!");
-          return CCDsizeError;          
+          return CCDsizeError;
         }
     }
     return CCDimageEnd;
