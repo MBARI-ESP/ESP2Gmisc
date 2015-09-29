@@ -345,10 +345,9 @@ gotAllOpts:
     {
       unsigned sleepSecs = posInt(argv[optind++]);
       putu32(sysPwrOff+sysOffOffset, sleepSecs);
-      if (argv[optind]) {
+      if (argv[optind])
         shutdownDelay = posInt(argv[optind]);
-        putu32(sysPwrOff+sysOnOffset, shutdownDelay);
-      }
+      putu32(sysPwrOff+sysOnOffset, shutdownDelay);
       setupPort();
       if (shutdownDelay)
         printf("In %u seconds, ", shutdownDelay);
