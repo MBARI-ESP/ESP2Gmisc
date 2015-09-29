@@ -5,15 +5,15 @@
  *
  * Command line tool to command ESP 2G sleepy microcontroller
  *  via serial commands to the I2C Gateway
- *   (on port /dev/I2Cgate by default) 
+ *   (on port /dev/I2Cgate by default)
  *
- * Note that this approach works only when the ESP application does not 
+ * Note that this approach works only when the ESP application does not
  * control the I2C Gateway.  If the ESP app is active, the modem must
  * be reset via the espclient tool, with something like this:
  *    echo "Sleepy.cycleModemPower! 5"  |  espclient resetModem
  *
  * See DrawfFunctions.rtf for documentation of the I2C gateway serial protocol
- * 
+ *
  ****************************************************************************/
 
 #include <stdio.h>
@@ -54,19 +54,27 @@ static struct termios rs232setup = {
 
 static int debug = 0;
 
+
 #define sysOnOffset (2)  //# of seconds to stay on before turning off
 #define sysOffOffset (6) //# of seconds to stay off before turning on
+#define sysSwOffset (1)
 static char sysPwrOff[] = { //turn off system (host) power
  0x89, -5,
  0, 0, 0, 0,
  0, 0, 0, 0
 };
 
+static char sysPwrQuery[] = {  //query system power status
+  0x81, -1
+};
+
+
 #define envRateOff (2)
 static char envStop[] = {  //stop environmental sensor sampling
  0x83, -22, 0, 0
 };
 static int envPeriod = -1; //change period only if it is >= 0
+
 
 static unsigned offSecs = 5;
 #define MAXSECS  (120)
@@ -76,17 +84,19 @@ static char resetCmd[] = {  //gateway command to cycle modem power
  0x81, 0xD3     //to confirm restart time
 };
 
+
 static char *progName;
 static unsigned rspTimeout = 20;
 static unsigned shutdownDelay = 3;
 static int skipGatewayInit = 0;
 
+
 static void usage (void)
 {
-  fprintf(stderr, "%s revised 9/28/15 brent@mbari.org\n", progName);
+  fprintf(stderr, "%s revised 9/29/15 brent@mbari.org\n", progName);
   fprintf(stderr, "\
 Send a command to the ESP Sleepy microcontroller.\n\
-Usage:  %s {options} {resetModem | powerOff | none} {args}\n\
+Usage:  %s {options} {resetModem | powerOff | powerQuery | none} {args}\n\
 resetModem {offSeconds} --> turn off power to the ESP's modem to reset it.\n\
   offSeconds is the number of seconds modem shall be off\n\
   range:  0 to 120  #defaults to 5 seconds if unspecified\n\
@@ -94,6 +104,8 @@ powerOff sleepSeconds {shutdownDelay} --> turn off ESP host after shutdownDelay\
   sleepSeconds is number of seconds system shall sleep\n\
   shutdownDelay is number of seconds before power is shut off [default=%u]\n\
     (note that zero seconds for sleep or shutdown reads as \"indefinately\")\n\
+powerQuery --> display power/sleep status\n\
+none       --> do nothing (useful with envPoll options described below)\n\
 options:  (may be abbreviated)\n\
   -device=[path]   #defaults to /dev/I2Cgate\n\
   -wait=[delay]    #tenths of secs to delay for responses [%u]\n\
@@ -133,7 +145,7 @@ void sendCmd(char *cmd, unsigned cmdSize, const char *comment)
 }
 
 
-unsigned long posInt(char *digits)
+unsigned posInt(char *digits)
 {
   char *end;
   unsigned long secs = strtoul(digits, &end, 10);
@@ -145,7 +157,7 @@ unsigned long posInt(char *digits)
 }
 
 
-void putu32(char *u32, unsigned long value)
+void putu32(char *u32, unsigned value)
 /*
   put 32-bit value in network byte order (MSB first)
 */
@@ -157,31 +169,43 @@ void putu32(char *u32, unsigned long value)
 }
 
 
+unsigned getu32(char *buf)
+/*
+  return 32-bit value in network byte order (MSB first)
+*/
+{
+  unsigned v=buf[0];
+  v |= v<<8 | buf[1];
+  v |= v<<8 | buf[2];
+  return v<<8 | buf[3];
+}
+
+
 void setupPort(void)
 {
   rs232 = open(devName, DEVMODE | O_NONBLOCK);
   if (rs232<0) {
-    fprintf(stderr, "Cannot open I2C gateway %s: %s\n", 
+    fprintf(stderr, "Cannot open I2C gateway %s: %s\n",
             devName, strerror(errno));
     exit(10);
   }
   ioctl(rs232, TIOCEXCL, 0);  //lock port for exclusive access
-  
+
   cfsetospeed(&rs232setup, BAUD);
   rs232setup.c_cc[VTIME] = rspTimeout;
   rs232setup.c_cc[VMIN] = 0;
   tcsetattr(rs232, TCSAFLUSH, &rs232setup);
-  if (debug>2) fprintf(stderr, "setup port\n"); 
+  if (debug>2) fprintf(stderr, "setup port\n");
   tcflush(rs232, TCOFLUSH);
   fcntl(rs232, F_SETFL, DEVMODE);  //cancel O_NONBLOCK
- 
+
   if (!skipGatewayInit) {
     char *cursor, *end;
     ssize_t xfrd = 0;
     char signon[4095];  //buffer for gateway signon string
-    
+
     tcsendbreak(rs232, 0);
-    if (debug>2) fprintf(stderr, "sent break\n");  
+    if (debug>2) fprintf(stderr, "sent break\n");
 
     end = signon+sizeof(signon)-1;
     for(cursor=signon; cursor < end; cursor+=xfrd) {
@@ -202,7 +226,7 @@ void setupPort(void)
         fprintf(stderr, "Signon rcv'd from I2C gateway %s was too long\n",
                 devName);
         exit(18);
-    }  
+    }
     if (debug) {
       char *s = extractSignon(signon, cursor);
       if (debug < 4) {
@@ -232,11 +256,11 @@ int main (int argc, char **argv)
     {"help", 0, NULL, 'h'},
     {NULL}
   };
-    
+
   char *cmd, *digits;
   ssize_t xfrd;  //retCode from read or write
   char rsp;      //response byte received from gateway
-  
+
   progName = basename (argv[0]);
   for (;;) {
     int optc = getopt_long_only (argc, argv, "", options, 0);
@@ -261,14 +285,14 @@ badarg:
       case 'v':  //verbose debug
         debug = optarg ? atoi(optarg) : 1;
         break;
-      case 'e':  //change environmental sampling rate 
+      case 'e':  //change environmental sampling rate
         envPeriod = atoi(optarg);
         if (!envPeriod) goto badarg;
         break;
       case 'q':  //quit environmental sampling
         envPeriod = 0;
         break;
-      case 'd':  //override default device        
+      case 'd':  //override default device
         devName = optarg;
         break;
       case 'h':  //help
@@ -288,7 +312,7 @@ gotAllOpts:
   }
   if (!strcasecmp(cmd, "resetModem")) {
     if (argv[optind]) {
-      unsigned long secs = posInt(argv[optind]);
+      unsigned secs = posInt(argv[optind]);
       if (secs > MAXSECS) {
         fprintf(stderr, "specified time %lu seconds > maximum of %u seconds!\n",
                          secs, MAXSECS);
@@ -315,10 +339,11 @@ gotAllOpts:
       }
       printf ("Modem will restart in %u seconds\n", rstSecs);
     }
+
   }else if (!strcasecmp(cmd, "powerOff")) {
     if (!argv[optind]) goto syntaxErr;
     {
-      unsigned long sleepSecs = posInt(argv[optind++]);
+      unsigned sleepSecs = posInt(argv[optind++]);
       putu32(sysPwrOff+sysOffOffset, sleepSecs);
       if (argv[optind]) {
         shutdownDelay = posInt(argv[optind]);
@@ -328,7 +353,7 @@ gotAllOpts:
       if (shutdownDelay)
         printf("In %u seconds, ", shutdownDelay);
       else
-        sysPwrOff[1]=-3;  //go directly to "off" state.
+        sysPwrOff[sysSwOffset]=-3;  //go directly to "off" state.
       printf("System will power off");
       if (sleepSecs)
         printf(" for %u seconds\n", sleepSecs);
@@ -336,6 +361,43 @@ gotAllOpts:
         printf(" indefinately\n");
       sendCmd(sysPwrOff, sizeof sysPwrOff, "power off");
     }
+
+  }else if (!strcasecmp(cmd, "powerQuery")) {
+    setupPort();
+    sendCmd(sysPwrQuery, sizeof sysPwrQuery, "power query");
+    rs232setup.c_cc[VMIN] = sizeof sysPwrOff;
+    tcsetattr(rs232, TCSAFLUSH, &rs232setup);
+    xfrd = read(rs232, &sysPwrOff, sizeof sysPwrOff);
+    if (xfrd != sizeof sysPwrOff) {
+      fprintf(stderr, xfrd<0 ? "Cannot read I2C gateway %s: %s\n" :
+                           "I2C Gateway %s did not respond to power query!\n",
+              devName, strerror(errno));
+      return 20;
+    }
+    {
+      unsigned onSecs = getu32(sysPwrOff+sysOnOffset);
+      offSecs = getu32(sysPwrOff+sysOffOffset);
+      unsigned char pwrStatus = 0x100 - sysPwrOff[sysSwOffset];
+      if (debug > 3)
+        printf("state=%u, onSecs=%u, offSecs=%u\n", pwrStatus, onSecs, offSecs);
+      if (pwrStatus > 3) {
+        printf("System will stay powered");
+        if (!onSecs)
+          goto forever;
+        printf(" for %u seconds, then switch off", onSecs);
+        if (offSecs)
+showoff:
+          printf(" for %u seconds before switching on again", offSecs);
+      }else{
+        printf("System will remain off");
+        if (offSecs)
+          goto showoff;
+forever:
+        printf(" indefinately");
+      }
+      puts("");
+    }
+
   }else if (!strcasecmp(cmd, "none"))
     setupPort();
   else
