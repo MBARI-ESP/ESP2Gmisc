@@ -1,9 +1,7 @@
 /***************************  resetModem.c  *********************************
- * $Source$
- *  Copyright (C) 2012 MBARI
+ *  Copyright (C) 2015 MBARI
  *
  *  MBARI Proprietary Information. All rights reserved.
- * $Id$
  *
  * Command line tool to:
  *  Cycle the power on the ESP's modem to reset it
@@ -73,16 +71,15 @@ static char *progName;
 static unsigned rspTimeout = 20;
 static int skipGatewayInit = 0;
 
-//note that options commented out in usage don't seem to work for SXV-H9 camera
 static void usage (void)
 {
-  fprintf(stderr, "%s revised 7/24/12 brent@mbari.org\n", progName);
+  fprintf(stderr, "%s revised 9/25/15 brent@mbari.org\n", progName);
   fprintf(stderr,
 "Briefly cycle the power on ESP's modem to reset it.\n\
 Usage:  %s  {options}  {offSeconds}\n\
 offSeconds is the number of seconds modem shall be off\n\
   range:  0 to 120  #defaults to 5 seconds if unspecified\n\
-options:  (may be abbriviated)\n\
+options:  (may be abbreviated)\n\
   -device=[path]   #defaults to /dev/I2Cgate\n\
   -wait=[delay]    #tenths of secs to delay for responses [%u]\n\
   -skipGatewayInit #skip the (re-)configuration of the I2C gateway\n\
