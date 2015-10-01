@@ -68,6 +68,10 @@ static char sysPwrQuery[] = {  //query system power status
   0x81, -1
 };
 
+static char getWake[] = { //get both wakeup and wake ack strings
+  0x81, -7,
+  0x81, -9
+};
 
 #define envRateOff (2)
 static char envStop[] = {  //stop environmental sensor sampling
@@ -89,14 +93,15 @@ static char *progName;
 static unsigned rspTimeout = 20;
 static unsigned shutdownDelay = 3;
 static int skipGatewayInit = 0;
+static unsigned wakeTimeout = 10;
 
 
 static void usage (void)
 {
-  fprintf(stderr, "%s revised 9/29/15 brent@mbari.org\n", progName);
+  fprintf(stderr, "%s revised 9/30/15 brent@mbari.org\n", progName);
   fprintf(stderr, "\
 Send a command to the ESP Sleepy microcontroller.\n\
-Usage:  %s {options} {resetModem | powerOff | powerQuery | none} {args}\n\
+Usage:  %s {options} [resetModem|powerOff|powerQuery|wakeString|none] {args}\n\
 resetModem {offSeconds} --> turn off power to the ESP's modem to reset it.\n\
   offSeconds is the number of seconds modem shall be off\n\
   range:  0 to 120  #defaults to 5 seconds if unspecified\n\
@@ -105,16 +110,20 @@ powerOff sleepSeconds {shutdownDelay} --> turn off ESP host after shutdownDelay\
   shutdownDelay is number of seconds before power is shut off [default=%u]\n\
     (note that zero seconds for sleep or shutdown reads as \"indefinately\")\n\
 powerQuery --> display power/sleep status\n\
+wakeString {wakeString} {wakeAckString} --> set or display wake up strings\n\
+    The host wakes up when the wakeup string received within timeout seconds\n\
+    The wakeAck string is output when the host is powered on\n\
 none       --> do nothing (useful with envPoll options described below)\n\
 options:  (may be abbreviated)\n\
   -device=[path]   #defaults to /dev/I2Cgate\n\
   -wait=[delay]    #tenths of secs to delay for responses [%u]\n\
+  -timeout=[%u]    #max seconds to wait for the wake up string\n\
   -skipGatewayInit #skip the (re-)configuration of the I2C gateway\n\
-  -verbose={level} #print debugging info\n\
+  -verbose{=level} #print debugging info\n\
   -envPoll=secs    #set environment sensor polling period before command\n\
   -quitEnvPoll     #quit environmental sensor polling before command\n\
   -help            #display this message\n\
-",  progName, shutdownDelay, rspTimeout);
+",  progName, shutdownDelay, rspTimeout, wakeTimeout);
 }
 
 
@@ -157,7 +166,7 @@ unsigned posInt(char *digits)
 }
 
 
-void putu32(char *u32, unsigned value)
+void putu32(unsigned char *u32, unsigned value)
 /*
   put 32-bit value in network byte order (MSB first)
 */
@@ -169,7 +178,7 @@ void putu32(char *u32, unsigned value)
 }
 
 
-unsigned getu32(char *buf)
+unsigned getu32(unsigned char *buf)
 /*
   return 32-bit value in network byte order (MSB first)
 */
@@ -249,6 +258,7 @@ int main (int argc, char **argv)
   const static struct option options[] = {
     {"device", 1, NULL, 'd'},
     {"wait", 1, NULL, 'w'},
+    {"timeout", 1, NULL, 't'},
     {"skipGatewayInit", 0, NULL, 's'},
     {"envPoll", 1, NULL, 'e'},
     {"quitEnvPoll", 0, NULL, 'q'},
@@ -277,6 +287,18 @@ badarg:
             return 2;
           }
           rspTimeout = tenths;
+        }
+        break;
+      case 't':  //timeout in seconds for wakeup string
+        {
+          unsigned long secs = strtoul(optarg, &end, 10);
+          if (*end)
+            goto badarg;
+          if (secs > 0xff) {
+            fprintf(stderr,"%u > max allowed timeout of %u!\n", secs, 0xff);
+            return 42;
+          }
+          wakeTimeout = secs;
         }
         break;
       case 's':  //skip gateway initialization
@@ -358,6 +380,7 @@ gotAllOpts:
         printf(" for %u seconds\n", sleepSecs);
       else
         printf(" indefinately\n");
+      sync();
       sendCmd(sysPwrOff, sizeof sysPwrOff, "power off");
     }
 
@@ -366,7 +389,7 @@ gotAllOpts:
     sendCmd(sysPwrQuery, sizeof sysPwrQuery, "power query");
     rs232setup.c_cc[VMIN] = sizeof sysPwrOff;
     tcsetattr(rs232, TCSAFLUSH, &rs232setup);
-    xfrd = read(rs232, &sysPwrOff, sizeof sysPwrOff);
+    xfrd = read(rs232, sysPwrOff, sizeof sysPwrOff);
     if (xfrd != sizeof sysPwrOff) {
       fprintf(stderr, xfrd<0 ? "Cannot read I2C gateway %s: %s\n" :
                            "I2C Gateway %s did not respond to power query!\n",
@@ -395,6 +418,93 @@ forever:
         printf(" indefinately");
       }
       puts("");
+    }
+
+  }else if (!strcasecmp(cmd, "wakeString")) {
+    unsigned char wakeBuf[550];
+    unsigned wakeLen, ackLen, wakeTime;
+    const char *wakeString = argv[optind++];
+    if (wakeString) {  //set wake string, timeout and (optionally) ack string
+      const char *ackString = argv[optind];
+      unsigned char *cursor = wakeBuf;
+      wakeLen=strlen(wakeString);
+      if (wakeLen > 40) {
+        printf("wakeup string too long (>40 chars)\n");
+        return 21;
+      }
+      if (ackString) {
+        ackLen=strlen(ackString);
+        if (ackLen > 40) {
+          printf("wakeup acknowlegment string too long (>40 chars)\n");
+          return 21;
+        }
+      }else{
+        ackString = "";
+        ackLen=0;
+      }
+      setupPort();
+      *cursor++ = 0x82+wakeLen;
+      *cursor++ = -7;
+      *cursor++ = wakeTimeout;
+      memcpy(cursor, wakeString, wakeLen); cursor+=wakeLen;
+      *cursor++ = 0x81+ackLen;
+      *cursor++ = -8;
+      memcpy(cursor, ackString, ackLen); cursor+=ackLen;
+      sendCmd(wakeBuf, cursor-wakeBuf, "wakeup string");
+      printf ("Wake up string is \"%s\" with timeout of %u seconds\n",
+              wakeString, wakeTimeout);
+      if (ackLen > 0)
+        printf ("Wake acknowledge string is \"%s\"\n", ackString);
+
+    }else{  //display wake and ack strings with timeout
+      setupPort();
+      sendCmd(getWake, sizeof getWake, "wakeup query");
+      xfrd = read(rs232, wakeBuf, 1);
+      if (xfrd != 1) {
+        fprintf(stderr, xfrd<0 ? "Cannot read I2C gateway %s: %s\n" :
+                          "I2C Gateway %s did not respond to wakeup query!\n",
+                devName, strerror(errno));
+        return 20;
+      }
+      wakeLen = wakeBuf[0] - 0x80;
+      if (wakeLen > 127) {
+        fprintf(stderr, "wake string length of %d is invalid!\n", wakeLen);
+        return 20;
+      }
+      rs232setup.c_cc[VMIN] = wakeLen+1;  //include length of wakeack response
+      tcsetattr(rs232, TCSANOW, &rs232setup);
+      xfrd = read(rs232, wakeBuf+1, wakeLen+1);
+      if (xfrd != wakeLen+1) {
+        fprintf(stderr, xfrd<0 ? "Cannot read I2C gateway %s: %s\n" :
+                          "I2C Gateway %s did not respond to wakeUp query!\n",
+                devName, strerror(errno));
+        return 20;
+      }
+      wakeTime = wakeBuf[2];
+      ackLen = wakeBuf[wakeLen+1] - 0x80;
+      if (ackLen > 127) {
+        fprintf(stderr, "wake ack string length of %d is invalid!\n", ackLen);
+        return 20;
+      }
+      wakeBuf[wakeLen+1] = '\0';  //terminate string
+
+      rs232setup.c_cc[VMIN] = ackLen;
+      tcsetattr(rs232, TCSANOW, &rs232setup);
+      xfrd = read(rs232, wakeBuf+wakeLen+2, ackLen);
+      if (xfrd != ackLen) {
+        fprintf(stderr, xfrd<0 ? "Cannot read I2C gateway %s: %s\n" :
+                          "I2C Gateway %s did not respond to wakeAck query!\n",
+                devName, strerror(errno));
+        return 20;
+      }
+      wakeBuf[wakeLen+ackLen+2] = '\0';
+      if (wakeTime && wakeBuf[3]) {
+        printf("To wake system, send \"%s\" within a %u second period\n",
+                wakeBuf+3, wakeTime);
+        if (wakeBuf[wakeLen+3])
+          printf("System responds with \"%s\" to confirm\n", wakeBuf+wakeLen+3);
+      }else
+        printf("No wake up string is configured\n");
     }
 
   }else if (!strcasecmp(cmd, "none"))
