@@ -1,0 +1,10 @@
+#!/bin/sh
+# build timelimt for arm-linux -- 3/18/16 brent@mbari.org
+
+: ${ARMGCC:=/arm}
+: ${TIMELIMITVERS:=timelimit-1.8}
+: ${TARGETTOP:=${2-/sbin}}
+: ${HOSTTOP:=${1-$HOME/armHost}}
+: ${ARMSTRIP:=$ARMGCC/bin/strip}
+cd $TIMELIMITVERS && make CC=$ARMGCC/bin/gcc && 
+$ARMSTRIP -o $HOSTTOP/$TARGETTOP/timelimit timelimit
