@@ -1,15 +1,15 @@
-/***************************  resetModem.c  *********************************
- *  Copyright (C) 2015 MBARI
+/***************************  sleepyCmd.c  *********************************
+ *  Copyright (C) 2016 MBARI
  *
  *  MBARI Proprietary Information. All rights reserved.
  *
- * Command line tool to command ESP 2G sleepy microcontroller
+ * Command line tool to send commands to ESP 2G sleepy microcontroller
  *  via serial commands to the I2C Gateway
  *   (on port /dev/I2Cgate by default)
  *
  * Note that this approach works only when the ESP application does not
- * control the I2C Gateway.  If the ESP app is active, the modem must
- * be reset via the espclient tool, with something like this:
+ * control the I2C Gateway.  If the ESP app is active, commands must be
+ * sent via the espclient tool, with something like this:
  *    echo "Sleepy.cycleModemPower! 5"  |  espclient resetModem
  *
  * See DrawfFunctions.rtf for documentation of the I2C gateway serial protocol
