@@ -98,7 +98,7 @@ static unsigned wakeTimeout = 10;
 
 static void usage (void)
 {
-  fprintf(stderr, "%s revised 9/30/15 brent@mbari.org\n", progName);
+  fprintf(stderr, "%s revised 4/6/16 brent@mbari.org\n", progName);
   fprintf(stderr, "\
 Send a command to the ESP Sleepy microcontroller.\n\
 Usage:  %s {options} [resetModem|powerOff|powerQuery|wakeString|none] {args}\n\
@@ -354,7 +354,7 @@ gotAllOpts:
     }
     {
       unsigned rstSecs = resetCmd[resetOffset] ? rsp - 5 : 0;
-      if (offSecs - rstSecs > 1) {
+      if (resetCmd[resetOffset] - rstSecs > 1) {
         fprintf(stderr, "Response of Gateway %s to modem reset was invalid!\n",
                 devName, strerror(errno));
         return 16;
