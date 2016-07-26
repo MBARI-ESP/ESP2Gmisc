@@ -1,8 +1,6 @@
 /***************  snap.c -- brent@mbari.org  **********************
-* $Source$
-*    Copyright (C) 2010 MBARI
+*    Copyright (C) 2016 MBARI
 *    MBARI Proprietary Information. All rights reserved.
-* $Id$
 *
 * Starlight SXV-H9 camera command line processor
 *
@@ -578,13 +576,12 @@ static int saveTIFF(TIFF *tif, struct CCDexp *exposure)
   if (readOutImage (exposure, writeTIFFline, tif, &stats)) return -1;
   {
     char description[2000], *cursor=description;
-    char binning[30];
-    binning[0] = '\0';
+    char binning[30] = "";
     if (exposure->xbin != 1 || exposure->xbin != 1)
       sprintf (binning, " with %dx%d binning", exposure->xbin, exposure->ybin);
 
     if (comment) {
-      strncat (description, comment, 1800);
+      strncpy (description, comment, 1800);
       cursor += strlen(description);
       *cursor++ = ' ';
     }
