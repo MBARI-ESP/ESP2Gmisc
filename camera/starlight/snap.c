@@ -1,15 +1,15 @@
 /***************  snap.c -- brent@mbari.org  **********************
-*    Copyright (C) 2016 MBARI
+*    Copyright (C) 2024 MBARI
 *    MBARI Proprietary Information. All rights reserved.
 *
 * Starlight SXV-H9 camera command line processor
-*
 ******************************************************************/
 
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
 #include <stddef.h>
+#include <unistd.h>
 #include <malloc.h>
 #include <stdlib.h>
 #include <getopt.h>   //for getopt_long()
@@ -23,6 +23,7 @@
 #include <tiffio.h>
 
 #include "devctl.h"   //low-level camera device control
+#include "types.h"
 
 #define validBin(b)  (b >= 1 && b <= 4)
 #define REMAINING " seconds remaining"
@@ -57,13 +58,13 @@ typedef struct {
 	unsigned minimum, maximum, average, filteredMax;  // pixel values
 		} imageStats;	// basic image statistics for autoexposure
 
-typedef int writeLineFn (void *file, struct CCDexp *exposure, uint16 *lineBuffer);
+typedef int writeLineFn (void *file, struct CCDexp *exposure, u16 *lineBuffer);
 
 
 //note that options commented out in usage don't seem to work for SXV-H9 camera
 static void usage (void)
 {
-  printf ("%s revised 7/26/16 brent@mbari.org\n", progName);
+  printf ("%s revised 12/6/24 brent@mbari.org\n", progName);
   printf (
 "Snap a photo from a monochrome Starlight Xpress CCD camera. Usage:\n"
 "  %s {options} <exposure seconds> <output file>\n"
@@ -113,11 +114,11 @@ static int progress (char *format, ...)
   char buffer[2000];
   va_list ap;
   size_t bytesWritten;
-  va_start (ap, format);
-  vsnprintf (buffer, sizeof(buffer), format, ap);
+  va_start(ap, format);
+  vsnprintf(buffer, sizeof(buffer), format, ap);
   va_end(ap);
-  bytesWritten = write (progressFD, buffer, strlen(buffer));
-  fsync (progressFD);
+  bytesWritten = write(progressFD, buffer, strlen(buffer));
+  fsync(progressFD);
   return bytesWritten;
 }
 
@@ -191,7 +192,7 @@ showStats (imageStats *pixel)
 
 
 static
-int dummyWrite (void *ignored, struct CCDexp *exposure, uint16 *lineBuffer)
+int dummyWrite (void *ignored, struct CCDexp *exposure, u16 *lineBuffer)
 {
   return 0;
 }
@@ -208,14 +209,14 @@ readOutImage (struct CCDexp *exposure, writeLineFn *writeLine,
   unsigned width = exposure->width / exposure->xbin;
   unsigned height = exposure->height / exposure->ybin;
 //  unsigned pixelBytes  = ((exposure->dacBits + 7) / 8);
-  uint32 avgPixel = 0;
-  uint16 maxPixel = 0;
-  uint16 maxFiltered = 0;
-  uint16 minPixel = -1;
+  u32 avgPixel = 0;
+  u16 maxPixel = 0;
+  u16 maxFiltered = 0;
+  u16 minPixel = -1;
   unsigned row;
   int result = 0;
-  uint16 *end, *cursor;
-  uint16 *line, *line0 = malloc (exposure->rowBytes+2);
+  u16 *end, *cursor;
+  u16 *line, *line0 = malloc (exposure->rowBytes+2);
   if (!line0) {
     fprintf (stderr, "No memory for row buffer!\n");
     return -2;
@@ -225,14 +226,14 @@ readOutImage (struct CCDexp *exposure, writeLineFn *writeLine,
   *line0 = *end = 0;  //clear pad pixels
 
   while ((result = CCDloadFrame (exposure, line)) > 0) {
-    uint32 sum = 0;
+    u32 sum = 0;
     if (result == 1) {
       progress ("\r  0%% Uploaded        ");
     }else if (!(result & 127)) {
       progress ("\r%3d%%", result*100 / height);
     }
     for (cursor=line; cursor<end; cursor++) {
-      uint16 pixel = *cursor;
+      u16 pixel = *cursor;
       sum+=pixel;
       if (pixel < minPixel) minPixel=pixel;
       if (pixel > maxFiltered) {  //look left and right to filter out hotspots
@@ -415,10 +416,10 @@ static void convert_pixels(unsigned char *src, int pixel_size, int count)
 }
 
 
-int writeFITSline (void *fd, struct CCDexp *exposure, uint16 *lineBuffer)
+int writeFITSline (void *fd, struct CCDexp *exposure, u16 *lineBuffer)
 {
   convert_pixels((unsigned char *)lineBuffer, 2, exposure->rowBytes/2);
-  return write((int)fd, lineBuffer, exposure->rowBytes) != exposure->rowBytes;
+  return write((ssize_t)fd,lineBuffer, exposure->rowBytes)!=exposure->rowBytes;
 }
 
 /*
@@ -465,7 +466,7 @@ static int saveFITS(int fd, struct CCDexp *exposure)
     /*
      * Convert and write image data.
      */
-    if (readOutImage (exposure, writeFITSline, (void *)fd, &stats))
+    if (readOutImage (exposure, writeFITSline, (void *)(ssize_t)fd, &stats))
       return -1;
     /*
      * Pad remaining record size with zeros and close.
@@ -519,7 +520,7 @@ setTiffDate (TIFF* tif)
 }
 
 
-int writeTIFFline (void *tif, struct CCDexp *exposure, uint16 *lineBuffer)
+int writeTIFFline (void *tif, struct CCDexp *exposure, u16 *lineBuffer)
 {
   return TIFFWriteScanline((TIFF *)tif, lineBuffer, exposure->readRow-1, 0) != 1;
 }
@@ -556,7 +557,7 @@ static int saveTIFF(TIFF *tif, struct CCDexp *exposure)
     unsigned width = exposure->width / exposure->xbin;
     unsigned height = exposure->height / exposure->ybin;
       //shoot for 64KByte TIFF image strips
-    unsigned strips = width*height*sizeof(uint16) / 65536;
+    unsigned strips = width*height*sizeof(u16) / 65536;
     unsigned stripRows;
     if (!strips) strips = 1;
     stripRows = height / strips;

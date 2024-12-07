@@ -18,7 +18,7 @@
 
 struct CCDdev
 {
-    char            filename[NAME_STRING_LENGTH];
+    char            filename[NAME_STRING_LENGTH+1];
     int             fd;
     unsigned int    width;
     unsigned int    height;

@@ -13,7 +13,7 @@
 #define TRUE (!FALSE)
 #endif
 
-typedef unsigned short uint16;
-typedef unsigned long uint32;
+typedef unsigned short u16;
+typedef unsigned u32;
 
 #endif
