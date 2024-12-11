@@ -33,7 +33,7 @@
 
 //tweaks for optimizeExposure
 //  one day, this should be made into a settable parameter...
-#define minSignal (adcBias+1000)   //minimum signal for scaling exposure times
+#define minSignal (adcBias+3000)   //minimum signal for scaling exposure times
 
 static char *progName;
 static int progressFD = 3;
@@ -66,7 +66,7 @@ typedef int writeLineFn(void *file, struct CCDexp *exposure, u16 *lineBuffer);
 //note that options commented out in usage don't seem to work for SXV-H9 camera
 static void usage(void)
 {
-  printf("%s revised 12/12/24 brent@mbari.org\n", progName);
+  printf("%s revised 12/10/24 brent@mbari.org\n", progName);
   printf(
 "Snap a photo from a monochrome Starlight Xpress CCD camera. Usage:\n"
 "  %s {options} <exposure seconds> <output file>\n"
@@ -82,7 +82,7 @@ static void usage(void)
 "  -tiff{=deflate}   #output TIFF file with optional deflate compression\n"
 "  -fits             #output FITS file(image rotated 180 degrees wrt TIFF)\n"
 //"  -jpeg             #output JPEG file\n"
-"  -png              #output Portable Bitmap file\n"
+"  -png              #output Portable Network Graphics file\n"
 "  -debug{=2}        #display debugging info with optional debugging level\n"
 "  -help             #displays this\n"
 //"  -dark           #do not open shutter\n"
@@ -528,6 +528,24 @@ int writeTIFFline(void *tif, struct CCDexp *exposure, u16 *lineBuffer)
   return TIFFWriteScanline((TIFF *)tif, lineBuffer, exposure->readRow-1, 0) != 1;
 }
 
+static void describeImage(struct CCDexp *exposure,
+  char *cursor, size_t bufSize, const char *comment)
+{
+  char binning[30] = "";
+  if(exposure->xbin * exposure->ybin != 1)
+    sprintf(binning, " with %dx%d binning", exposure->xbin, exposure->ybin);
+
+  if(comment) {
+    size_t len = strlen(comment);
+    if(len>1800)
+      len=1800;
+    memcpy(cursor, comment, len);
+    cursor += len;
+    *cursor++ = ' ';
+  }
+  sprintf(cursor, "exposed %g seconds%s",
+                     (double)exposure->msec/1000.0, binning);
+}
 
 /*
  * Save image to TIFF file.
@@ -578,24 +596,9 @@ static int saveTIFF(TIFF *tif, struct CCDexp *exposure)
     setTiff(tif, TIFFTAG_ROWSPERSTRIP, stripRows);
   }
   if(readOutImage(exposure, writeTIFFline, tif, &stats)) return -1;
-  {
-    char description[2000], *cursor=description;
-    char binning[30] = "";
-    if(exposure->xbin != 1 || exposure->xbin != 1)
-      sprintf(binning, " with %dx%d binning", exposure->xbin, exposure->ybin);
-
-    if(comment) {
-      size_t len = strlen(comment);
-      if(len>1800)
-        len=1800;
-      memcpy(cursor, comment, len);
-      cursor += len;
-      *cursor++ = ' ';
-    }
-    sprintf(cursor, "exposed %g seconds%s",
-                       (double)exposure->msec/1000.0, binning);
-    setTiff(tif, TIFFTAG_IMAGEDESCRIPTION, description);
-  }
+  char description[2000];
+  describeImage(exposure, description, sizeof(description), comment);
+  setTiff(tif, TIFFTAG_IMAGEDESCRIPTION, description);
   return 0;
 }
 
@@ -603,22 +606,13 @@ static int saveTIFF(TIFF *tif, struct CCDexp *exposure)
  * set PNG text chunks for each env var key that starts with given prefix string
  */
 static
-  void setPNGtext(png_structp png, png_infop info,
-                  png_const_timep creationTime, const char *prefix)
+  void setPNGtext(png_structp png, png_infop info, png_text *one,
+                  const char *prefix)
 {
-  png_text one = {.compression = PNG_TEXT_COMPRESSION_NONE,
-    .lang = NULL, .lang_key = NULL, .itxt_length = 0};
   extern const char **environ;
-  if (creationTime) {
-    char timeBuf[29];
-    png_convert_to_rfc1123_buffer(timeBuf, creationTime);
-    one.key = "Creation Time";
-    one.text = timeBuf;
-    png_set_text(png, info, &one, 1);
-  }
   size_t prefixLen = strlen(prefix);
   const char **nextEnv = environ;
-  while (nextEnv) {
+  while (*nextEnv) {
     if (!strncmp(prefix, *nextEnv, prefixLen)) {
       const char *key = *nextEnv + prefixLen;
       const char *envTxt = strchr(key, '=');
@@ -629,12 +623,12 @@ static
           keyLen = sizeof(keyBuf)-1;
         memcpy(keyBuf, key, keyLen);
         keyBuf[keyLen]='\0';
-        one.key = keyBuf;
-        one.text = (char *)envTxt+1;
-        png_set_text(png, info, &one, 1);
+        one->key = keyBuf;
+        one->text = (char *)envTxt+1;
+        png_set_text(png, info, one, 1);
       }
-      nextEnv++;
     }
+    nextEnv++;
   }
 }
 
@@ -649,11 +643,7 @@ int writePNGline(void *pngPtr, struct CCDexp *exposure, u16 *lineBuffer)
  */
 static int savePNG(FILE *outFile, struct CCDexp *exposure)
 {
-  jmp_buf exit_now;
   imageStats stats;
-  if (setjmp(exit_now)) {  //exit immediately after reporting any libpng error
-      exit(66);
-  }
   png_structp png = png_create_write_struct(PNG_LIBPNG_VER_STRING,
     NULL, NULL, NULL);
   png_infop info = png_create_info_struct(png);
@@ -661,37 +651,38 @@ static int savePNG(FILE *outFile, struct CCDexp *exposure)
     fprintf(stderr, "Failed to create libpng structures\n");
     exit(67);
   }
+  if (setjmp(png_jmpbuf(png))) { //exit after reporting any libpng error
+      exit(66);
+  }
   png_init_io(png, outFile);
   unsigned width = exposure->width / exposure->xbin;
   unsigned height = exposure->height / exposure->ybin;
   png_set_IHDR(png, info, exposure->width, exposure->height,
     16, PNG_COLOR_TYPE_GRAY, PNG_INTERLACE_NONE,
     PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
+  png_write_info(png, info);
+
+  png_set_swap(png);
+  if(readOutImage(exposure, writePNGline, png, &stats)) return -1;
 
   png_time creationTime;
   png_convert_from_time_t(&creationTime, time(NULL));
   png_set_tIME(png, info, &creationTime);
-  setPNGtext(png, info, &creationTime, "PNG_");
+  png_text one = {.compression = PNG_TEXT_COMPRESSION_NONE,
+    .lang = NULL, .lang_key = NULL, .itxt_length = 0};
+  char timeBuf[29];
+  png_convert_to_rfc1123_buffer(timeBuf, &creationTime);
+  one.key = "Creation Time";
+  one.text = timeBuf;
+  png_set_text(png, info, &one, 1);
 
-  if(readOutImage(exposure, writePNGline, png, &stats)) return -1;
-  {
-    char description[2000], *cursor=description;
-    char binning[30] = "";
-    if(exposure->xbin != 1 || exposure->xbin != 1)
-      sprintf(binning, " with %dx%d binning", exposure->xbin, exposure->ybin);
+  char description[2000];
+  describeImage(exposure, description, sizeof(description), NULL);
+  one.key = "Description";
+  one.text = description;
+  png_set_text(png, info, &one, 1);
 
-    if(comment) {
-      size_t len = strlen(comment);
-      if(len>1800)
-        len=1800;
-      memcpy(cursor, comment, len);
-      cursor += len;
-      *cursor++ = ' ';
-    }
-    sprintf(cursor, "exposed %g seconds%s",
-                       (double)exposure->msec/1000.0, binning);
-    setTiff(tif, TIFFTAG_IMAGEDESCRIPTION, description);
-  }
+  setPNGtext(png, info, &one, "PNG_");
   png_write_end(png, info);
   png_destroy_write_struct(&png, &info);
   return 0;
@@ -881,6 +872,8 @@ gotAllOpts: //on to arguments(exposure time and output file name)
         case 'T': outputFileType = TIFFfile;
           break;
         case 'F': outputFileType = FITSfile;
+          break;
+        case 'P': outputFileType = PNGfile;
           break;
       }
     }
