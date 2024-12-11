@@ -535,10 +535,10 @@ static void describeImage(struct CCDexp *exposure,
   if(exposure->xbin * exposure->ybin != 1)
     sprintf(binning, " with %dx%d binning", exposure->xbin, exposure->ybin);
 
-  if(comment) {
+  if(comment && bufSize > 200) {
     size_t len = strlen(comment);
-    if(len>1800)
-      len=1800;
+    if(len > bufSize-200)
+      len=bufSize-200;
     memcpy(cursor, comment, len);
     cursor += len;
     *cursor++ = ' ';
@@ -625,6 +625,7 @@ static
         keyBuf[keyLen]='\0';
         one->key = keyBuf;
         one->text = (char *)envTxt+1;
+//fprintf(stderr, "%s=%s\n", one->key, one->text);
         png_set_text(png, info, one, 1);
       }
     }
@@ -657,13 +658,9 @@ static int savePNG(FILE *outFile, struct CCDexp *exposure)
   png_init_io(png, outFile);
   unsigned width = exposure->width / exposure->xbin;
   unsigned height = exposure->height / exposure->ybin;
-  png_set_IHDR(png, info, exposure->width, exposure->height,
-    16, PNG_COLOR_TYPE_GRAY, PNG_INTERLACE_NONE,
+  png_set_IHDR(png, info, width, height, 16,
+    PNG_COLOR_TYPE_GRAY, PNG_INTERLACE_NONE,
     PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
-  png_write_info(png, info);
-
-  png_set_swap(png);
-  if(readOutImage(exposure, writePNGline, png, &stats)) return -1;
 
   png_time creationTime;
   png_convert_from_time_t(&creationTime, time(NULL));
@@ -676,13 +673,18 @@ static int savePNG(FILE *outFile, struct CCDexp *exposure)
   one.text = timeBuf;
   png_set_text(png, info, &one, 1);
 
-  char description[2000];
-  describeImage(exposure, description, sizeof(description), NULL);
-  one.key = "Description";
-  one.text = description;
+  char comment[190];
+  describeImage(exposure, comment, sizeof(comment), NULL);
+  one.key = "Comment";
+  one.text = comment;
   png_set_text(png, info, &one, 1);
 
   setPNGtext(png, info, &one, "PNG_");
+
+  png_write_info(png, info);
+  png_set_swap(png);
+  if(readOutImage(exposure, writePNGline, png, &stats)) return -1;
+
   png_write_end(png, info);
   png_destroy_write_struct(&png, &info);
   return 0;
