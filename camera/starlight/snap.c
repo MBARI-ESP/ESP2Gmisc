@@ -46,6 +46,7 @@ static double exposureSecs = 0.0;  //negative --> autoexposure time limit
 static unsigned maxAutoSignal = 50000;
 static unsigned adcBias = 2000;    //minimum possible ADC counts/pixel
 static char debug = 0;
+static int PNGcompressLevel = -1;
 
 static enum {  //supported output file types
   unspecifiedFile, TIFFfile, FITSfile, JPEGfile, PNGfile,
@@ -82,7 +83,7 @@ static void usage(void)
 "  -tiff{=deflate}   #output TIFF file with optional deflate compression\n"
 "  -fits             #output FITS file(image rotated 180 degrees wrt TIFF)\n"
 //"  -jpeg             #output JPEG file\n"
-"  -png              #output Portable Network Graphics file\n"
+"  -png{=6}          #output Portable Network Graphics file w/compression level\n"
 "  -debug{=2}        #display debugging info with optional debugging level\n"
 "  -help             #displays this\n"
 //"  -dark           #do not open shutter\n"
@@ -661,6 +662,8 @@ static int savePNG(FILE *outFile, struct CCDexp *exposure)
   png_set_IHDR(png, info, width, height, 16,
     PNG_COLOR_TYPE_GRAY, PNG_INTERLACE_NONE,
     PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
+  if (PNGcompressLevel >= 0)
+    png_set_compression_level(png, PNGcompressLevel);
 
   png_time creationTime;
   png_convert_from_time_t(&creationTime, time(NULL));
@@ -736,8 +739,8 @@ int main(int argc, char **argv)
     {"fits", 0, NULL, 'F'},
     {"JPEG", 0, NULL, 'J'},
     {"jpeg", 0, NULL, 'J'},
-    {"PNG", 0, NULL, 'P'},
-    {"png", 0, NULL, 'P'},
+    {"PNG", 2, NULL, 'P'},
+    {"png", 2, NULL, 'P'},
     {"camera", 1, NULL, 'n'},
     {"debug", 2, NULL, 'S'},
     {"help", 0, NULL, 'h'},
@@ -833,6 +836,8 @@ int main(int argc, char **argv)
         break;
       case 'P': //generate Portable Bitmap file
         assignType(PNGfile);
+        if(*parseInt(optarg, &PNGcompressLevel))
+          syntaxErr("invalid text after PNG option");
         break;
       case 'h':
         usage();
