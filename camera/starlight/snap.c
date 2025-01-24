@@ -67,7 +67,7 @@ typedef int writeLineFn(void *file, struct CCDexp *exposure, u16 *lineBuffer);
 //note that options commented out in usage don't seem to work for SXV-H9 camera
 static void usage(void)
 {
-  printf("%s revised 12/10/24 brent@mbari.org\n", progName);
+  printf("%s revised 1/23/25 brent@mbari.org\n", progName);
   printf(
 "Snap a photo from a monochrome Starlight Xpress CCD camera. Usage:\n"
 "  %s {options} <exposure seconds> <output file>\n"
@@ -135,8 +135,8 @@ static char *parseInt(char *cursor, int *integer)
   char *end;
   long result;
   errno = 0;
-  result = strtol(cursor, &end, 0);
-  if(errno || end==cursor || result < INT_MIN || result > INT_MAX)
+  result = strtol(cursor, &end, 10);
+  if(errno || !end || end==cursor || result < INT_MIN || result > INT_MAX)
     syntaxErr("\"%s\" is not a valid integer", cursor);
   *integer = result;
   return end;
@@ -836,7 +836,7 @@ int main(int argc, char **argv)
         break;
       case 'P': //generate Portable Bitmap file
         assignType(PNGfile);
-        if(*parseInt(optarg, &PNGcompressLevel))
+        if(optarg && *parseInt(optarg, &PNGcompressLevel))
           syntaxErr("invalid text after PNG option");
         break;
       case 'h':
