@@ -231,7 +231,7 @@ readOutImage(struct CCDexp *exposure, writeLineFn *writeLine,
 
   while((row = CCDloadFrame(exposure, line)) > 0) {
     if(row == 1)
-      progress("\r  0%% Uploaded        ");
+      progress("\r  0%% Uploaded            ");
     else{  //exclude (typically bogus) first row pixels from stats
       u32 sum = 0;
       for(cursor=line; cursor<end; cursor++) {
@@ -297,17 +297,18 @@ by the brightest pixel in this coarse image.  Scale exposure time so that this
 {
   const unsigned binArea = exposure->xbin * exposure->ybin;
   const double binAreaf = binArea;
-  unsigned maxSignalTarget =  maxAutoSignal; // - adcBias;
+  unsigned maxSignalTarget = maxAutoSignal;
+  const double maxOverMin = (double)maxSignalTarget/(double)(minSignal-adcBias);
   struct CCDexp testExposure = *exposure;
 //comment out next line if overexposing hires scenes containing points of light
   testExposure.xbin = testExposure.ybin = 4;
-  testExposure.msec /= 128;  //((4*4)*16)/binArea;  //better, but takes too long
+  testExposure.msec /= (128*(4*4))/binArea;
   int tries = 20;
 
  retry:
   if(--tries < 0) {
-    fprintf(stderr,
-        "Error:  Cannot determine autoexposure duration!  Is scene brightness changing?\n");
+    fprintf(stderr, "Error:  Cannot determine autoexposure duration!\n"
+      "Is scene brightness varying?\n");
     return 1;
   }
   {
@@ -322,11 +323,11 @@ by the brightest pixel in this coarse image.  Scale exposure time so that this
         //subtract A/D analog bias estimate from brightest spot
       double exposureScaleFactor = testArea / binAreaf;
       unsigned testms;
-      unsigned brightPt = lightStats.filteredMax;
-      unsigned scalePt = brightPt;
-      if (scalePt < minSignal)
-        scalePt = minSignal;
-      exposureScaleFactor *= (double)maxSignalTarget / (double)(scalePt-adcBias);
+      unsigned brightestPt = lightStats.filteredMax;
+      unsigned whitePt = brightestPt;
+      if (whitePt < minSignal)
+        whitePt = minSignal;
+      exposureScaleFactor*=(double)maxSignalTarget / (double)(whitePt-adcBias);
       testms = testExposure.msec * exposureScaleFactor;
       if(testms > exposure->msec) {
 	fprintf(stderr,
@@ -334,8 +335,8 @@ by the brightest pixel in this coarse image.  Scale exposure time so that this
 				testms/1000.0, exposure->msec/1000.0);
 	 return 0;
       }
-      if(brightPt < minSignal) { //there was not enough signal
-        testExposure.msec *= (double)maxSignalTarget / (double)(minSignal-adcBias);
+      if(brightestPt < minSignal) { //there was not enough signal
+        testExposure.msec = testExposure.msec * maxOverMin;
         goto retry;
       }
       if(!testms) testms=1;
@@ -343,8 +344,8 @@ by the brightest pixel in this coarse image.  Scale exposure time so that this
 
     }else{  //overexposed!
 
-      if(testExposure.msec > 1) { // 1st try short test exposure
-	testExposure.msec /= 16;
+      if(testExposure.msec > 1) { // 1st try shorter test exposure
+	testExposure.msec = testExposure.msec / maxOverMin;
 	goto retry;
       }
       if(testExposure.xbin != exposure->xbin ||
@@ -900,13 +901,13 @@ gotAllOpts: //on to arguments(exposure time and output file name)
   exposure.dacBits = CCDdepth ? CCDdepth : device.dacBits;
 
   if(exposure.dacBits < 8 || exposure.dacBits > 16)
-    syntaxErr("Pixel depth of %d bits is not currently supported!\n", exposure.dacBits);
+    syntaxErr("Pixel depth of %d bits is not currently supported!\n",
+      exposure.dacBits);
 
   if(exposureSecs < 0.0) {
     exposureSecs = -exposureSecs;
-    if(debug) printf(
-      "Determining up to %g second exposure yielding brightest pixel ~ %d with black=%d A/D counts...\n",
-                exposureSecs, maxAutoSignal, adcBias);
+    if(debug) printf("Determining up to %g second exposure for white "
+      "@%d A/D counts (assuming black@%d)...\n", exposureSecs, maxAutoSignal, adcBias);
     exposure.msec = exposureSecs * 1000.0 + 0.5;
     if(optimizeExposure(&exposure)) {
       fprintf(stderr, "Autoexposure failed!\n");
