@@ -31,10 +31,6 @@
 #define REMAINING " seconds remaining"
 #define NO_PREDICTOR 1
 
-//tweaks for optimizeExposure
-//  one day, this should be made into a settable parameter...
-#define minSignal (adcBias+5000)   //minimum signal for scaling exposure times
-
 static char *progName;
 static int progressFD = 3;
 
@@ -44,8 +40,9 @@ static int offsetX = 0, offsetY = 0;
 static int sizeX = 0, sizeY = 0;
 static double exposureSecs = 0.0;  //negative --> autoexposure time limit
 static double maxAutoExposureSecs = 300.0;
-static unsigned maxAutoSignal = 55000;
-static unsigned adcBias = 4000;    //minimum possible ADC counts/pixel
+static unsigned adcBias = 4950;    //maximum black value ADC counts/pixel
+static unsigned minAutoSignal = 5000;
+static unsigned maxAutoValue = 55000;
 static char debug = 0;
 static int PNGcompressLevel = -1;
 
@@ -59,7 +56,7 @@ static const char *fileTypeName[] = {
 
 
 typedef struct {
-	unsigned minimum, maximum, average, filteredMax;  // pixel values
+	unsigned minimum, maximum, average, filteredMin, filteredMax;  // pixel values
 		} imageStats;	// basic image statistics for autoexposure
 
 typedef int writeLineFn(void *file, struct CCDexp *exposure, u16 *lineBuffer);
@@ -68,24 +65,26 @@ typedef int writeLineFn(void *file, struct CCDexp *exposure, u16 *lineBuffer);
 //note that options commented out in usage don't seem to work for SXV-H9 camera
 static void usage(void)
 {
-  printf("%s revised 1/25/25 brent@mbari.org\n", progName);
+  printf("%s revised 1/26/25 brent@mbari.org\n", progName);
   printf(
 "Snap a photo from a monochrome Starlight Xpress CCD camera. Usage:\n"
 "  %s {options} <exposure seconds> <output file>\n"
 "seconds may be specified in floating point for millisecond resolution\n"
-"options: (may be abbriviated)\n"
-"  -autoexpose{=%g,%d,%d}  #auto exposure with optional max duration\n"
-"          #in seconds with optional brightest,dimmest pixels in counts\n"
+"Options: (may be abbriviated)\n"
+"  -autoexpose{=%g,%d,%d,%d}  #auto exposure with optional max duration\n"
+"      #in seconds and brightest,dimmest,minAutoSignal values in counts\n"
+"  -AUTOINFO{=...}   #configure any following -autoexpose option\n"
 "  -binning=x{,y}    #x,y binning factors\n"
 "  -offset=x{,y}     #origin offset\n"
 "  -origin=x{,y}     #same as -offset=\n"
-"  -size=x{,y}       #size of the image(width x height)\n"
+"  -size=x{,y}       #size of the (unbinned) image(width x height)\n"
 "  -camera=deviceFn  #use specified device rather than /dev/ccda\n"
-"  -tiff{=deflate}   #output TIFF file with optional deflate compression\n"
+"  -tiff{=deflate}   #output TIFF file {with optional deflate compression}\n"
 "  -fits             #output FITS file(image rotated 180 degrees wrt TIFF)\n"
 //"  -jpeg             #output JPEG file\n"
-"  -png{=6}          #output Portable Network Graphics file w/compression level\n"
-"  -debug{=2}        #display debugging info with optional debugging level\n"
+"  -png{=6}          #output PNG file {w/compression level 6}\n"
+"  -png=0            #output uncompressed Portable Network Graphics file\n"
+"  -debug{=2}        #display debugging info {with optional debugging level}\n"
 "  -help             #displays this\n"
 //"  -dark           #do not open shutter\n"
 //"  -depth=n        #number of bits per pixel\n"
@@ -93,13 +92,17 @@ static void usage(void)
 //"  -noclear        #do not clear frame\n"
 //"  -noaccumulation #do not accumulate charge when binning\n"
 //"  -tdi            #time delay and integrate\n"
-"examples:\n"
+"Examples:\n"
 "  %s 1.5 myimage.png  #1.5 second exposure to myimage.png w/o binning\n"
-"  %s -bin 2x3 .005 myimage.png  #5 msec exposure with 2x3 binning\n"
-"notes:\n"
-"  If possible, progress messages are output to file descriptor 3\n"
-"  Otherwise, they are sent to stdout.\n",
-  progName, maxAutoExposureSecs, maxAutoSignal, adcBias, progName, progName);
+"  %s -bin 2x3 .005 myimage.tif  #5 msec exposure with 2x3 binning\n"
+"  %s -png=0 -auto myimage.png   #auto exposure image to uncompressed PNG file\n"
+"  %s -AUTO=3600 -bin 2 -a i.tif #2x2 binned TIFF image exposed up to 1 hour\n"
+"Notes:\n"
+"  Progress messages output to file descriptor 3, if it is opened.\n"
+"  Otherwise, progress messages are sent to stderr.\n",
+  progName,
+  maxAutoExposureSecs, maxAutoValue, adcBias, minAutoSignal,
+  progName, progName, progName, progName);
 }
 
 
@@ -190,9 +193,11 @@ static char *parseDuration(char *cursor, double *secs)
 static void
 showStats(imageStats *pixel)
 {
-  if(debug)
-    printf("( %u Min / %u Avg / %u Max / %u FilteredMax ) A/D counts\n",
-        pixel->minimum,pixel->average,pixel->maximum,pixel->filteredMax);
+  if(debug) fprintf(stderr,
+        "( %u Min < %u FilteredMin | %u Avg | %u FilteredMax < %u Max ) A/D counts\n",
+        pixel->minimum, pixel->filteredMin,
+        pixel->average,
+        pixel->filteredMax, pixel->maximum);
 }
 
 
@@ -209,6 +214,7 @@ readOutImage(struct CCDexp *exposure, writeLineFn *writeLine,
 /*
   Read out an image from the CCD and produce image stats
   assumes 16-bit pixels for now
+  Top row pixels in image and those at its side edges are excluded from stats
 */
 {
   unsigned width = exposure->width / exposure->xbin;
@@ -218,27 +224,29 @@ readOutImage(struct CCDexp *exposure, writeLineFn *writeLine,
   u16 maxPixel = 0;
   u16 maxFiltered = 0;
   u16 minPixel = -1;
+  u16 minFiltered = -1;
   int row;
-  u16 *end, *cursor;
-  u16 *line, *line0 = malloc(exposure->rowBytes+2);
-  if(!line0) {
+  u16 *end, *endLess1, *cursor;
+  u16 *line = malloc(exposure->rowBytes);
+  if(!line) {
     fprintf(stderr, "No memory for row buffer!\n");
     return -2;
   }
-  line = line0+1;  //precharge line array with state info for filter
-  end = line+width;
-  *line0 = *end = 0;  //clear pad pixels
+  endLess1 = (end=line+width) - 1;
 
   while((row = CCDloadFrame(exposure, line)) > 0) {
     if(row == 1)
       progress("\r  0%% Uploaded            ");
     else{  //exclude (typically bogus) first row pixels from stats
       u32 sum = 0;
-      for(cursor=line; cursor<end; cursor++) {
+      for(cursor=line+1; cursor<endLess1; cursor++) {
         u16 pixel = *cursor;
         sum+=pixel;
-        if(pixel < minPixel) minPixel=pixel;
-        if(pixel > maxFiltered) {  //look left and right to filter out hotspots
+        if(pixel < minFiltered) {  //look left and right to filter out dark specks
+          if(pixel >= cursor[-1] && pixel >= cursor[1]) minFiltered=pixel;
+          if(pixel < minPixel) minPixel=pixel;
+        }
+        if(pixel > maxFiltered) {  //look left and right to filter out bright specks
 	  if(pixel <= cursor[-1] && pixel <= cursor[1]) maxFiltered=pixel;
 	  if(pixel > maxPixel) maxPixel=pixel;
         }
@@ -250,12 +258,13 @@ readOutImage(struct CCDexp *exposure, writeLineFn *writeLine,
     if(writeLine(fileDescriptor, exposure, line)) {row=-1; break;}
   }
   progress("\r");
-  free(line0);
+  free(line);
   if(stats) {
     stats->minimum = minPixel;
     stats->maximum = maxPixel;
     stats->average = avgPixel / (height-1);
     stats->filteredMax = maxFiltered;
+    stats->filteredMin = minFiltered;
     showStats(stats);
   }
   return row;
@@ -263,9 +272,13 @@ readOutImage(struct CCDexp *exposure, writeLineFn *writeLine,
 
 
 static void
-expose(struct CCDexp *exposure)
+expose(struct CCDexp *exposure, const char *action)
 {
   time_t snapEndTime, secsLeft = exposure->msec / 1000;
+  printf("%s %dx%d pixel %d-bit image for %g seconds\n", action,
+    exposure->width/binX, exposure->height/binY, exposure->dacBits, 
+    (double)exposure->msec / 1000.0);
+
   CCDexposeFrame(exposure);
   snapEndTime =(exposure->start = time(NULL)) + secsLeft;
   if(secsLeft > 1) {  //output exposure progress messages
@@ -283,9 +296,9 @@ expose(struct CCDexp *exposure)
 static int
 optimizeExposure(struct CCDexp *exposure)
 /*
-calculate optimized exposure time in milliseconds
-limit exposure time to exposure->msec
-stores optimal exposure time in exposure->msec
+determine optimized exposure time in milliseconds while
+limiting exposure to exposure->msec duration
+stores optimal exposure time back into exposure->msec
 returns 0 if successful
 
 Theory:
@@ -295,63 +308,67 @@ by the brightest pixel in this coarse image.  Scale exposure time so that this
 "bright" pixel reads approximately max A/D counts.
 */
 {
+  imageStats lightStats;
   const unsigned binArea = exposure->xbin * exposure->ybin;
-  const double binAreaf = binArea;
-  unsigned maxSignalTarget = maxAutoSignal;
-  const double maxOverMin = (double)maxSignalTarget/(double)(minSignal-adcBias);
   struct CCDexp testExposure = *exposure;
 //comment out next line if overexposing hires scenes containing points of light
   testExposure.xbin = testExposure.ybin = 4;
-  testExposure.msec /= (128*(4*4))/binArea;
-  int tries = 20;
+  testExposure.msec /= (64*(4*4))/binArea;
+  int tries = 12;
 
+  unsigned blackPt = adcBias;
  retry:
   if(--tries < 0) {
     fprintf(stderr, "Error:  Cannot determine autoexposure duration!\n"
       "Is scene brightness varying?\n");
     return 1;
   }
+  if(!testExposure.msec) testExposure.msec=1;
+  expose(&testExposure, "Optimizing exposure with");
+  if(readOutImage(&testExposure, dummyWrite, NULL, &lightStats)) return -1;
+  if(lightStats.filteredMin < blackPt) {
+    blackPt = lightStats.filteredMin;
+    if(debug) fprintf(stderr,"Reduced black point to %d\n", blackPt);
+  }
   {
-    imageStats lightStats;
     unsigned testArea = testExposure.xbin * testExposure.ybin;
+    unsigned minAutoValue = minAutoSignal + blackPt;
+    unsigned maxSignalTarget = maxAutoValue - blackPt;
+    #define maxOverMin ((double)maxSignalTarget/(double)minAutoSignal)
 
-    if(!testExposure.msec) testExposure.msec=1;
-    expose(&testExposure);
-    if(readOutImage(&testExposure, dummyWrite, NULL, &lightStats)) return -1;
-
-    if(lightStats.filteredMax <= maxAutoSignal) {
-        //subtract A/D analog bias estimate from brightest spot
-      double exposureScaleFactor = testArea / binAreaf;
-      unsigned testms;
+    if(lightStats.filteredMax < 0xffff) {
+      double testMs;
       unsigned brightestPt = lightStats.filteredMax;
       unsigned whitePt = brightestPt;
-      if (whitePt < minSignal)
-        whitePt = minSignal;
-      exposureScaleFactor*=(double)maxSignalTarget / (double)(whitePt-adcBias);
-      testms = testExposure.msec * exposureScaleFactor;
-      if(testms > exposure->msec) {
+      if (whitePt < minAutoValue)
+        whitePt = minAutoValue;
+      testMs = testExposure.msec * (double)maxSignalTarget / (whitePt-blackPt);
+      if(testArea * testMs / binArea > exposure->msec) {
 	fprintf(stderr,
           "WARNING:  Too Dark -- required %gs exposure > %gs time limit\n",
-				testms/1000.0, exposure->msec/1000.0);
+				testMs/1000.0, exposure->msec/1000.0);
 	 return 0;
       }
-      if(brightestPt < minSignal) { //there was not enough signal
-        testExposure.msec = testExposure.msec * maxOverMin;
+      if(brightestPt < minAutoValue) { //there was not enough signal
+        testExposure.msec *= maxOverMin;
         goto retry;
       }
-      if(!testms) testms=1;
-      exposure->msec = testms;
+      exposure->msec = testArea * testMs / binArea;
+      if (!exposure->msec)
+        exposure->msec = 1;
 
     }else{  //overexposed!
 
       if(testExposure.msec > 1) { // 1st try shorter test exposure
-	testExposure.msec = testExposure.msec / maxOverMin;
+	testExposure.msec /= maxOverMin;
 	goto retry;
       }
       if(testExposure.xbin != exposure->xbin ||
           testExposure.ybin != exposure->ybin) {
         testExposure.xbin = exposure->xbin;
         testExposure.ybin = exposure->ybin;
+//  in practice 4x4 binning has higher blackPt than all others, otherwise        
+//        blackPt = adcBias;  //in case we reduced the blackPt while using 4x4 binning
 	 //then try using the desired binning mode...
 	goto retry;	// as a last resort
       }
@@ -584,7 +601,7 @@ static int saveTIFF(TIFF *tif, struct CCDexp *exposure)
     stripRows = height / strips;
     if(!stripRows) stripRows = 1;
     if(debug>1)
-      printf("(%dx%d) TIFF image in %u strips with %u rows/strip\n",
+      fprintf(stderr,"(%dx%d) TIFF image in %u strips with %u rows/strip\n",
 			        width, height, strips, stripRows);
     setTiff(tif, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);
     setTiff(tif, TIFFTAG_SAMPLESPERPIXEL, 1);
@@ -720,64 +737,70 @@ int main(int argc, char **argv)
 
   const static struct option options[] = {
     {"autoexpose", 2, NULL, 'a'},
+    {"AUTOINFO", 2, NULL, 'A'},
     {"binning", 1, NULL, 'b'},
     {"bin", 1, NULL, 'b'},
     {"offset", 1, NULL, 'o'},
     {"origin", 1, NULL, 'o'},
     {"size", 1, NULL, 's'},
-    {"dark", 0, NULL, 'D'},
+//    {"dark", 0, NULL, 'D'},
 //    {"depth", 1, NULL, 'd'},
-    {"nowipe", 0, NULL, 'w'},
-    {"noclear", 0, NULL, 'c'},
-    {"noaccumulation", 0, NULL, 'A'},
-    {"tdi", 0, NULL, 't'},
-    {"TDI", 0, NULL, 't'},
+//    {"nowipe", 0, NULL, 'w'},
+//    {"noclear", 0, NULL, 'r'},
+//    {"noaccumulation", 0, NULL, 'n'},
+//    {"tdi", 0, NULL, 't'},
+//    {"TDI", 0, NULL, 't'},
     {"tiff", 2, NULL, 'T'},
     {"TIFF", 2, NULL, 'T'},
     {"FITS", 0, NULL, 'F'},
     {"fits", 0, NULL, 'F'},
-    {"JPEG", 0, NULL, 'J'},
-    {"jpeg", 0, NULL, 'J'},
+//    {"JPEG", 0, NULL, 'J'},
+//    {"jpeg", 0, NULL, 'J'},
     {"PNG", 2, NULL, 'P'},
     {"png", 2, NULL, 'P'},
-    {"camera", 1, NULL, 'n'},
+    {"camera", 1, NULL, 'c'},
     {"debug", 2, NULL, 'S'},
     {"help", 0, NULL, 'h'},
     {NULL}
   };
 
   progName = basename(argv[0]);
-  if(write(progressFD, "", 0)) progressFD=fileno(stdout);
+  if(write(progressFD, "", 0)) progressFD=fileno(stderr);
   for(;;) {
     int optc = getopt_long_only(argc, argv, "", options, 0);
     switch(optc) {
       case -1:
         goto gotAllOpts;
-      case 'a':  //auto exposure
-        exposureSecs = maxAutoExposureSecs;
+      case 'a':  //autoexposure
+      case 'A':  //AUTOINFO
         if(optarg) {
           char *terminator = optarg;
-          if(*optarg != ',') terminator=parseDuration(optarg, &exposureSecs);
+          if(*optarg != ',') terminator=parseDuration(optarg, &maxAutoExposureSecs);
           switch(*terminator) {
             case ',':
-              switch(*(terminator=parseInt(terminator+1, &maxAutoSignal))) {
+              switch(*(terminator=parseInt(terminator+1, &maxAutoValue))) {
                 case ',':
-                  if(*parseInt(terminator+1, &adcBias))
-                    syntaxErr("Junk text after min A/D counts!");
-                case '\0':
-                  break;
-                default:
-                  syntaxErr("Junk text after autoexposure max A/D count target!");
+                  switch(*(terminator=parseInt(terminator+1, &adcBias))) {
+                    case '\0':
+                      break;
+                    case ',':                  
+                      if(*parseInt(terminator+1, &minAutoSignal))
+                        syntaxErr("Junk text after minAutoSignal A/D counts!");
+                      break;
+                    default:
+                      syntaxErr("Junk text after max black A/D counts!");
+                  }
               }
             case '\0':
               break;
             default:
               syntaxErr("Junk text after autoexposure max duration!");
           }
-          if(exposureSecs < 0.002)
-            syntaxErr("autoexposure limit must be > 2ms");
+          if(maxAutoExposureSecs < 0.002)
+            syntaxErr("autoexposure limit must be > 1ms");
         }
-        exposureSecs = -exposureSecs;
+        if (optc == 'a')
+          exposureSecs = -maxAutoExposureSecs;
         break;
       case 'b':  //XY binning
         parseXYoptArg(&binX, &binY);
@@ -806,19 +829,19 @@ int main(int argc, char **argv)
       case 'w':  //suppress CCD wipe
         exposure.flags |= CCD_EXP_FLAGS_NOWIPE_FRAME;
         break;
-      case 'c':  //suppress image clear
+      case 'r':  //suppress image clear
         exposure.flags |= CCD_EXP_FLAGS_NOCLEAR_FRAME;
         break;
       case 't':  //time delay integration
         exposure.flags |= CCD_EXP_FLAGS_TDI;
         break;
-      case 'A':  //no binning accumulation
+      case 'n':  //no binning accumulation
         exposure.flags |= CCD_EXP_FLAGS_NOBIN_ACCUM;
         break;
       case 'D':  //dard frame
         exposure.flags |= CCD_EXP_FLAGS_NOOPEN_SHUTTER;
         break;
-      case 'n':  //camera device file
+      case 'c':  //camera device file
         device.filename[NAME_STRING_LENGTH]='\0';
         strncpy(device.filename, optarg, NAME_STRING_LENGTH-1);
         break;
@@ -906,8 +929,8 @@ gotAllOpts: //on to arguments(exposure time and output file name)
 
   if(exposureSecs < 0.0) {
     exposureSecs = -exposureSecs;
-    if(debug) printf("Determining up to %g second exposure for white "
-      "@%d A/D counts (assuming black@%d)...\n", exposureSecs, maxAutoSignal, adcBias);
+    if(debug) fprintf(stderr,"Determining up to %g second exposure for white "
+      "@%d A/D counts (assuming black@%d)...\n", exposureSecs, maxAutoValue, adcBias);
     exposure.msec = exposureSecs * 1000.0 + 0.5;
     if(optimizeExposure(&exposure)) {
       fprintf(stderr, "Autoexposure failed!\n");
@@ -916,11 +939,7 @@ gotAllOpts: //on to arguments(exposure time and output file name)
   }else
     exposure.msec = exposureSecs * 1000.0 + 0.5;
 
-  exposureSecs =(double)exposure.msec / 1000.0;
-  printf("Exposing %dx%d pixel %d-bit image for %g seconds\n",
-    exposure.width/binX, exposure.height/binY, exposure.dacBits, exposureSecs);
-
-  expose(&exposure);
+  expose(&exposure, "Exposing");
 
   /*  Write out the image in the specified format */
   switch(outputFileType) {
