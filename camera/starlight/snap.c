@@ -40,9 +40,12 @@ static int offsetX = 0, offsetY = 0;
 static int sizeX = 0, sizeY = 0;
 static double exposureSecs = 0.0;  //negative --> autoexposure time limit
 static double maxAutoExposureSecs = 300.0;
-static unsigned adcBias = 4950;    //maximum black value ADC counts/pixel
-static unsigned minAutoSignal = 5000;
+
+static unsigned adcBias = 4800;    //maximum black value ADC counts/pixel
+static unsigned minAutoSignal = 3000;
 static unsigned maxAutoValue = 55000;
+#define maxLinearValue 62000      //CCD response rolls off beyond this value
+
 static char debug = 0;
 static int PNGcompressLevel = -1;
 
@@ -140,9 +143,23 @@ static char *parseInt(char *cursor, int *integer)
   long result;
   errno = 0;
   result = strtol(cursor, &end, 10);
-  if(errno || !end || end==cursor || result < INT_MIN || result > INT_MAX)
-    syntaxErr("\"%s\" is not a valid integer", cursor);
+  if(errno || !end || end==cursor || result < INT_MIN || result > INT_MAX) {
+    size_t numLen = end ? 40 : end-cursor;
+    syntaxErr("\"%.*s\" is not a valid integer", numLen, cursor);
+  }
   *integer = result;
+  return end;
+}
+
+
+static char *parseADCcounts(char *cursor, int *adcCounts)
+// parse an ADC count value at cursor
+// returns pointer to next char
+//  abort with a syntaxErr if no valid text found
+{
+  char *end = parseInt(cursor, adcCounts);
+  if (*adcCounts < 0 || *adcCounts > 0xffff)
+    syntaxErr("\"%.*s\" is not a valid pixel value", end-cursor, cursor);
   return end;
 }
 
@@ -313,7 +330,7 @@ by the brightest pixel in this coarse image.  Scale exposure time so that this
   struct CCDexp testExposure = *exposure;
 //comment out next line if overexposing hires scenes containing points of light
   testExposure.xbin = testExposure.ybin = 4;
-  testExposure.msec /= (64*(4*4))/binArea;
+  testExposure.msec /= (1024*(4*4))/binArea;  //initial wild guess
   int tries = 12;
 
   unsigned blackPt = adcBias;
@@ -336,24 +353,28 @@ by the brightest pixel in this coarse image.  Scale exposure time so that this
     unsigned maxSignalTarget = maxAutoValue - blackPt;
     #define maxOverMin ((double)maxSignalTarget/(double)minAutoSignal)
 
-    if(lightStats.filteredMax < 0xffff) {
-      double testMs;
+    if(lightStats.filteredMax < maxLinearValue) {  //numerator
+      double requiredMs = testArea * (double)testExposure.msec * maxSignalTarget;
       unsigned brightestPt = lightStats.filteredMax;
       unsigned whitePt = brightestPt;
       if (whitePt < minAutoValue)
         whitePt = minAutoValue;
-      testMs = testExposure.msec * (double)maxSignalTarget / (whitePt-blackPt);
-      if(testArea * testMs / binArea > exposure->msec) {
+      requiredMs /= (whitePt-blackPt) * binArea;  //denominator
+      if(requiredMs > exposure->msec) {
 	fprintf(stderr,
           "WARNING:  Too Dark -- required %gs exposure > %gs time limit\n",
-				testMs/1000.0, exposure->msec/1000.0);
+				 requiredMs/1000.0, exposure->msec/1000.0);
 	 return 0;
       }
-      if(brightestPt < minAutoValue) { //there was not enough signal
-        testExposure.msec *= maxOverMin;
+      if(brightestPt < minAutoValue) { //not enough signal to trust...
+        //But, could there be enough to shorten next test exposure?
+        testExposure.msec *= brightestPt - lightStats.filteredMin > 500 ?
+          (maxSignalTarget + 3*minAutoSignal)/4 / (double)(brightestPt - blackPt)
+        : //if not enough signal, increase exposure by another full step
+          maxOverMin;
         goto retry;
       }
-      exposure->msec = testArea * testMs / binArea;
+      exposure->msec = requiredMs;
       if (!exposure->msec)
         exposure->msec = 1;
 
@@ -778,13 +799,13 @@ int main(int argc, char **argv)
           if(*optarg != ',') terminator=parseDuration(optarg, &maxAutoExposureSecs);
           switch(*terminator) {
             case ',':
-              switch(*(terminator=parseInt(terminator+1, &maxAutoValue))) {
+              switch(*(terminator=parseADCcounts(terminator+1, &maxAutoValue))) {
                 case ',':
-                  switch(*(terminator=parseInt(terminator+1, &adcBias))) {
+                  switch(*(terminator=parseADCcounts(terminator+1, &adcBias))) {
                     case '\0':
                       break;
                     case ',':                  
-                      if(*parseInt(terminator+1, &minAutoSignal))
+                      if(*parseADCcounts(terminator+1, &minAutoSignal))
                         syntaxErr("Junk text after minAutoSignal A/D counts!");
                       break;
                     default:
