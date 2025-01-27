@@ -58,8 +58,8 @@ static const char *fileTypeName[] = {
 };
 
 
-typedef struct {
-	unsigned minimum, maximum, average, filteredMin, filteredMax;  // pixel values
+typedef struct {  // pixel values
+	unsigned minimum, maximum, average, filteredMin, filteredMax;
 		} imageStats;	// basic image statistics for autoexposure
 
 typedef int writeLineFn(void *file, struct CCDexp *exposure, u16 *lineBuffer);
@@ -211,7 +211,7 @@ static void
 showStats(imageStats *pixel)
 {
   if(debug) fprintf(stderr,
-        "( %u Min < %u FilteredMin | %u Avg | %u FilteredMax < %u Max ) A/D counts\n",
+"( %u Min < %u FilteredMin | %u Avg | %u FilteredMax < %u Max ) A/D counts\n",
         pixel->minimum, pixel->filteredMin,
         pixel->average,
         pixel->filteredMax, pixel->maximum);
@@ -259,11 +259,11 @@ readOutImage(struct CCDexp *exposure, writeLineFn *writeLine,
       for(cursor=line+1; cursor<endLess1; cursor++) {
         u16 pixel = *cursor;
         sum+=pixel;
-        if(pixel < minFiltered) {  //look left and right to filter out dark specks
+        if(pixel < minFiltered) {  //look left & right to ignore dark specks
           if(pixel >= cursor[-1] && pixel >= cursor[1]) minFiltered=pixel;
           if(pixel < minPixel) minPixel=pixel;
         }
-        if(pixel > maxFiltered) {  //look left and right to filter out bright specks
+        if(pixel > maxFiltered) {  //look left & right to ignore bright specks
 	  if(pixel <= cursor[-1] && pixel <= cursor[1]) maxFiltered=pixel;
 	  if(pixel > maxPixel) maxPixel=pixel;
         }
@@ -293,7 +293,7 @@ expose(struct CCDexp *exposure, const char *action)
 {
   time_t snapEndTime, secsLeft = exposure->msec / 1000;
   printf("%s %dx%d pixel %d-bit image for %g seconds\n", action,
-    exposure->width/binX, exposure->height/binY, exposure->dacBits, 
+    exposure->width/binX, exposure->height/binY, exposure->dacBits,
     (double)exposure->msec / 1000.0);
 
   CCDexposeFrame(exposure);
@@ -354,7 +354,7 @@ by the brightest pixel in this coarse image.  Scale exposure time so that this
     #define maxOverMin ((double)maxSignalTarget/(double)minAutoSignal)
 
     if(lightStats.filteredMax < maxLinearValue) {  //numerator
-      double requiredMs = testArea * (double)testExposure.msec * maxSignalTarget;
+      double requiredMs = testArea * (double)testExposure.msec*maxSignalTarget;
       unsigned brightestPt = lightStats.filteredMax;
       unsigned whitePt = brightestPt;
       if (whitePt < minAutoValue)
@@ -369,7 +369,7 @@ by the brightest pixel in this coarse image.  Scale exposure time so that this
       if(brightestPt < minAutoValue) { //not enough signal to trust...
         //But, could there be enough to shorten next test exposure?
         testExposure.msec *= brightestPt - lightStats.filteredMin > 500 ?
-          (maxSignalTarget + 3*minAutoSignal)/4 / (double)(brightestPt - blackPt)
+          (maxSignalTarget + 3*minAutoSignal)/4 / (double)(brightestPt-blackPt)
         : //if not enough signal, increase exposure by another full step
           maxOverMin;
         goto retry;
@@ -388,8 +388,8 @@ by the brightest pixel in this coarse image.  Scale exposure time so that this
           testExposure.ybin != exposure->ybin) {
         testExposure.xbin = exposure->xbin;
         testExposure.ybin = exposure->ybin;
-//  in practice 4x4 binning has higher blackPt than all others, otherwise        
-//        blackPt = adcBias;  //in case we reduced the blackPt while using 4x4 binning
+//  in practice 4x4 binning has higher blackPt than all others, otherwise
+//  blackPt = adcBias;  //in case we reduced the blackPt while using 4x4 binning
 	 //then try using the desired binning mode...
 	goto retry;	// as a last resort
       }
@@ -563,7 +563,7 @@ setTiffDate(TIFF* tif)
 
 int writeTIFFline(void *tif, struct CCDexp *exposure, u16 *lineBuffer)
 {
-  return TIFFWriteScanline((TIFF *)tif, lineBuffer, exposure->readRow-1, 0) != 1;
+  return TIFFWriteScanline((TIFF *)tif, lineBuffer, exposure->readRow-1, 0)!=1;
 }
 
 static void describeImage(struct CCDexp *exposure,
@@ -796,15 +796,16 @@ int main(int argc, char **argv)
       case 'A':  //AUTOINFO
         if(optarg) {
           char *terminator = optarg;
-          if(*optarg != ',') terminator=parseDuration(optarg, &maxAutoExposureSecs);
+          if(*optarg != ',')
+            terminator=parseDuration(optarg, &maxAutoExposureSecs);
           switch(*terminator) {
             case ',':
-              switch(*(terminator=parseADCcounts(terminator+1, &maxAutoValue))) {
+              switch(*(terminator=parseADCcounts(terminator+1,&maxAutoValue))) {
                 case ',':
                   switch(*(terminator=parseADCcounts(terminator+1, &adcBias))) {
                     case '\0':
                       break;
-                    case ',':                  
+                    case ',':
                       if(*parseADCcounts(terminator+1, &minAutoSignal))
                         syntaxErr("Junk text after minAutoSignal A/D counts!");
                       break;
@@ -951,7 +952,8 @@ gotAllOpts: //on to arguments(exposure time and output file name)
   if(exposureSecs < 0.0) {
     exposureSecs = -exposureSecs;
     if(debug) fprintf(stderr,"Determining up to %g second exposure for white "
-      "@%d A/D counts (assuming black@%d)...\n", exposureSecs, maxAutoValue, adcBias);
+      "@%d A/D counts (assuming black@%d)...\n",
+            exposureSecs, maxAutoValue, adcBias);
     exposure.msec = exposureSecs * 1000.0 + 0.5;
     if(optimizeExposure(&exposure)) {
       fprintf(stderr, "Autoexposure failed!\n");
@@ -984,7 +986,7 @@ gotAllOpts: //on to arguments(exposure time and output file name)
       break;
 
     default:
-      syntaxErr("Unsupported image file type:  %s",fileTypeName[outputFileType]);
+      syntaxErr("Unsupported image file type: %s",fileTypeName[outputFileType]);
   }
   printf("%s: %s Upload Complete\n", outFn, fileTypeName[outputFileType]);
   return 0;
