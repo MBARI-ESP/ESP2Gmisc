@@ -41,10 +41,11 @@ static int sizeX = 0, sizeY = 0;
 static double exposureSecs = 0.0;  //negative --> autoexposure time limit
 static double maxAutoExposureSecs = 300.0;
 
-static unsigned adcBias = 4800;    //maximum black value ADC counts/pixel
-static unsigned minAutoSignal = 3000;
-static unsigned maxAutoValue = 55000;
-#define maxLinearValue 62000      //CCD response rolls off beyond this value
+//For tuning auto-exposure
+static unsigned adcBias = 4800;    //maximum black value ADC counts / 4x4 pixel
+#define maxLinearValue 52000       //CCD response is less linear beyond this
+static unsigned minAutoSignal = 8000;  //min rise over black to extrapolate exp
+static unsigned maxAutoValue = 42000;  //target white
 
 static char debug = 0;
 static int PNGcompressLevel = -1;
@@ -68,7 +69,7 @@ typedef int writeLineFn(void *file, struct CCDexp *exposure, u16 *lineBuffer);
 //note that options commented out in usage don't seem to work for SXV-H9 camera
 static void usage(void)
 {
-  printf("%s revised 1/26/25 brent@mbari.org\n", progName);
+  printf("%s revised 1/27/25 brent@mbari.org\n", progName);
   printf(
 "Snap a photo from a monochrome Starlight Xpress CCD camera. Usage:\n"
 "  %s {options} <exposure seconds> <output file>\n"
@@ -99,7 +100,7 @@ static void usage(void)
 "  %s 1.5 myimage.png  #1.5 second exposure to myimage.png w/o binning\n"
 "  %s -bin 2x3 .005 myimage.tif  #5 msec exposure with 2x3 binning\n"
 "  %s -png=0 -auto myimage.png   #auto exposure image to uncompressed PNG file\n"
-"  %s -AUTO=3600 -bin 2 -a i.tif #2x2 binned TIFF image exposed up to 1 hour\n"
+"  %s -AUTO=3600 -bin=2 -a i.tif #2x2 binned TIFF image exposed up to 1 hour\n"
 "Notes:\n"
 "  Progress messages output to file descriptor 3, if it is opened.\n"
 "  Otherwise, progress messages are sent to stderr.\n",
@@ -291,10 +292,11 @@ readOutImage(struct CCDexp *exposure, writeLineFn *writeLine,
 static void
 expose(struct CCDexp *exposure, const char *action)
 {
-  time_t snapEndTime, secsLeft = exposure->msec / 1000;
+  double expSecs = exposure->msec / 1000.0;
+  time_t snapEndTime, secsLeft = expSecs;
   printf("%s %dx%d pixel %d-bit image for %g seconds\n", action,
-    exposure->width/binX, exposure->height/binY, exposure->dacBits,
-    (double)exposure->msec / 1000.0);
+    exposure->width/exposure->xbin, exposure->height/exposure->ybin,
+    exposure->dacBits, expSecs);
 
   CCDexposeFrame(exposure);
   snapEndTime =(exposure->start = time(NULL)) + secsLeft;
@@ -328,10 +330,12 @@ by the brightest pixel in this coarse image.  Scale exposure time so that this
   imageStats lightStats;
   const unsigned binArea = exposure->xbin * exposure->ybin;
   struct CCDexp testExposure = *exposure;
+  int tries = 12;
+  double requiredMs;
+
 //comment out next line if overexposing hires scenes containing points of light
   testExposure.xbin = testExposure.ybin = 4;
-  testExposure.msec /= (1024*(4*4))/binArea;  //initial wild guess
-  int tries = 12;
+  testExposure.msec /= 1000*binArea;  //initial wild guess
 
   unsigned blackPt = adcBias;
  retry:
@@ -341,6 +345,14 @@ by the brightest pixel in this coarse image.  Scale exposure time so that this
     return 1;
   }
   if(!testExposure.msec) testExposure.msec=1;
+  requiredMs = testExposure.msec*testExposure.xbin*testExposure.ybin / binArea;
+  if(requiredMs >= exposure->msec) {
+tooDark:
+	  fprintf(stderr,
+            "WARNING:  Too Dark -- required %gs exposure > %gs time limit\n",
+				   requiredMs/1000.0, exposure->msec/1000.0);
+	   return 0;
+  }
   expose(&testExposure, "Optimizing exposure with");
   if(readOutImage(&testExposure, dummyWrite, NULL, &lightStats)) return -1;
   if(lightStats.filteredMin < blackPt) {
@@ -359,13 +371,9 @@ by the brightest pixel in this coarse image.  Scale exposure time so that this
       unsigned whitePt = brightestPt;
       if (whitePt < minAutoValue)
         whitePt = minAutoValue;
-      requiredMs /= (whitePt-blackPt) * binArea;  //denominator
-      if(requiredMs > exposure->msec) {
-	fprintf(stderr,
-          "WARNING:  Too Dark -- required %gs exposure > %gs time limit\n",
-				 requiredMs/1000.0, exposure->msec/1000.0);
-	 return 0;
-      }
+      requiredMs /= (whitePt-0*blackPt) * binArea;  //denominator
+      if(requiredMs > exposure->msec)
+        goto tooDark;
       if(brightestPt < minAutoValue) { //not enough signal to trust...
         //But, could there be enough to shorten next test exposure?
         testExposure.msec *= brightestPt - lightStats.filteredMin > 500 ?
