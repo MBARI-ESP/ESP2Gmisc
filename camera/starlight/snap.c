@@ -42,10 +42,10 @@ static double exposureSecs = 0.0;  //negative --> autoexposure time limit
 static double maxAutoExposureSecs = 300.0;
 
 //For tuning auto-exposure
+static unsigned maxAutoValue = 42000;  //target white value in ADC counts
 static unsigned adcBias = 4800;    //maximum black value ADC counts / 4x4 pixel
-#define maxLinearValue 52000       //CCD response is less linear beyond this
-static unsigned minAutoSignal = 8000;  //min rise over black to extrapolate exp
-static unsigned maxAutoValue = 42000;  //target white
+static unsigned minAutoSignal = 9000;  //min rise over black to extrapolate exp
+#define maxLinearValue 53000       //CCD response is less linear beyond this
 
 static char debug = 0;
 static int PNGcompressLevel = -1;
