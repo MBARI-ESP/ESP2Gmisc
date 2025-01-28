@@ -346,7 +346,7 @@ by the brightest pixel in this coarse image.  Scale exposure time so that this
   }
   if(!testExposure.msec) testExposure.msec=1;
   requiredMs = testExposure.msec*testExposure.xbin*testExposure.ybin / binArea;
-  if(requiredMs >= exposure->msec) {
+  if(requiredMs > exposure->msec) {
 tooDark:
 	  fprintf(stderr,
             "WARNING:  Too Dark -- required %gs exposure > %gs time limit\n",
@@ -366,7 +366,7 @@ tooDark:
     #define maxOverMin ((double)maxSignalTarget/(double)minAutoSignal)
 
     if(lightStats.filteredMax < maxLinearValue) {  //numerator
-      double requiredMs = testArea * (double)testExposure.msec*maxSignalTarget;
+      requiredMs = testArea * (double)testExposure.msec*maxSignalTarget;
       unsigned brightestPt = lightStats.filteredMax;
       unsigned whitePt = brightestPt;
       if (whitePt < minAutoValue)
