@@ -13,6 +13,8 @@
 #define TRUE (!FALSE)
 #endif
 
+typedef enum{false,true} bool;
+
 typedef unsigned short u16;
 typedef unsigned u32;
 

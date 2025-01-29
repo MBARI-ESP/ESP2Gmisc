@@ -32,7 +32,8 @@
 #define NO_PREDICTOR 1
 
 static char *progName;
-static int progressFD = 3;
+static int progressFD = 3;  //progress file descriptor
+static bool isTTY = false;  //output progress messages
 
 static int CCDdepth = 0;
 static int binX = 1, binY = 1;
@@ -253,9 +254,9 @@ readOutImage(struct CCDexp *exposure, writeLineFn *writeLine,
   endLess1 = (end=line+width) - 1;
 
   while((row = CCDloadFrame(exposure, line)) > 0) {
-    if(row == 1)
-      progress("\r  0%% Uploaded            ");
-    else{  //exclude (typically bogus) first row pixels from stats
+    if(row == 1){
+      if(isTTY) progress("\r  0%% Uploaded            ");
+    }else{  //exclude (typically bogus) first row pixels from stats
       u32 sum = 0;
       for(cursor=line+1; cursor<endLess1; cursor++) {
         u16 pixel = *cursor;
@@ -270,12 +271,12 @@ readOutImage(struct CCDexp *exposure, writeLineFn *writeLine,
         }
       }
       avgPixel += sum / width;
-      if(!(row & 127))
+      if(isTTY && !(row & 127))
         progress("\r%3d%%", row*100 / height);
     }
     if(writeLine(fileDescriptor, exposure, line)) {row=-1; break;}
   }
-  progress("\r");
+  if(isTTY) progress("\r");
   free(line);
   if(stats) {
     stats->minimum = minPixel;
@@ -300,7 +301,7 @@ expose(struct CCDexp *exposure, const char *action)
 
   CCDexposeFrame(exposure);
   snapEndTime =(exposure->start = time(NULL)) + secsLeft;
-  if(secsLeft > 1) {  //output exposure progress messages
+  if(isTTY && secsLeft > 1) {  //output exposure progress messages
     int digits = progress("%d" REMAINING, secsLeft) -(sizeof(REMAINING)-1);
     sleep(1);
     while((secsLeft = snapEndTime - time(NULL)) > 1) {
@@ -308,7 +309,8 @@ expose(struct CCDexp *exposure, const char *action)
       sleep(1);
     }
     progress("\r");
-  }
+  }else
+    fflush(stdout);
 }
 
 
@@ -795,6 +797,7 @@ int main(int argc, char **argv)
 
   progName = basename(argv[0]);
   if(write(progressFD, "", 0)) progressFD=fileno(stderr);
+  isTTY = isatty(progressFD);
   for(;;) {
     int optc = getopt_long_only(argc, argv, "", options, 0);
     switch(optc) {
