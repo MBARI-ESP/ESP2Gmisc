@@ -1,4 +1,4 @@
-# Makefile for snap -- 12/10/24 brent@mbari.org
+# Makefile for snap -- 2/25/25 brent@mbari.org
 CFLAGS=-O2
 
 LTIBUSR=$(HOME)/ltib/rootfs/usr
@@ -13,7 +13,7 @@ ltib/snap:  Makefile snap.c devctl.c devctl.h ccd_msg.h types.h
 	mkdir -p ltib && \
         /ltibarm/bin/gcc $(CFLAGS) snap.c devctl.c \
          -I$(LTIBUSR)/include -L$(LTIBUSR)/lib \
-		-ltiff -ljpeg -lpng16 -lz -o $@
+		-ltiff -lpng16 -lz -o $@
 
 arm/snap:  Makefile snap.c devctl.c devctl.h ccd_msg.h types.h
 	mkdir -p arm && \

@@ -1,10 +1,10 @@
 #!/bin/bash
-# unpack & configure libtiff build for arm-linux -- 10/26/10 brent@mbari.org
+# unpack & configure libtiff build for arm-linux -- 2/25/25 brent@mbari.org
 : ${CFLAGS:=-Os -fomit-frame-pointer}
 : ${CXXFLAGS:=$CFLAGS}
 : ${ARMGCC:=/arm}
 : ${CC:=$ARMGCC/bin/gcc}
-: ${LIBTOP:=${1-$ARMGCC/usr}}
+: ${CXX:=$ARMGCC/bin/g++}
 : ${TIFFVERS:=tiff-3.9.4}
 export CFLAGS CXXFLAGS GCOPTS=$CFLAGS
 top=$PWD
@@ -13,9 +13,8 @@ if [ $TIFFVERS == v3.4 ]; then
   cp -f armport.h $TIFFVERS/libtiff/port.h &&
   cd $TIFFVERS &&
   patch -p1 <$top/tiff-v3.4.patch
-  export CC
   ARMTOP=$ARMGCC configure --host=arm-softfloat-linux --noninteractive
 else
   cd $TIFFVERS
-  configure --host=arm-softfloat-linux --disable-cxx
+  configure --host=arm-none-linux-gnueabi --disable-cxx --disable-jpeg
 fi && echo "Now, run arminstall"

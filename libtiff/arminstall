@@ -1,14 +1,13 @@
 #!/bin/sh
-# build & install libtiff for arm-linux -- 10/26/10 brent@mbari.org
+# build & install libtiff for arm-linux -- 2/25/25 brent@mbari.org
 
 : ${TIFFLIBV:=3.9.4}
 : ${TIFFVERS:=tiff-$TIFFLIBV}
 : ${ARMGCC:=/arm}
 : ${ARMSTRIP:=$ARMGCC/bin/strip}
-: ${TARGETTOP:=${2-/usr/lib}}
-: ${LIBTOP:=$ARMGCC$TARGETTOP}
-: ${INCTOP:=$ARMGCC/include}
-: ${HOSTTOP:=${1-$HOME/armHost$TARGETTOP}}
+: ${HOSTTOP:=${1-$HOME/armHost}}
+: ${TARGETTOP:=${2-$HOSTTOP/usr/lib}}
+: ${CC:=$ARMGCC/bin/gcc}
 
 cplinks() {
 #recursively copy symlinks having the specified target $1
@@ -24,20 +23,18 @@ cplib() {
 }
 
 echo "Installing in $HOSTTOP"
-echo "  for execution at $TARGETTOP on the ARM target"
 cd $TIFFVERS || exit 2
 make || exit 1
 
-#set -x
+set -x
 cd libtiff && 
-  cp -f tiffconf.h tiff.h tiffio.h tiffvers.h $INCTOP &&
-mkdir -pm 755 $HOSTTOP && cd .libs || exit $?
+  cp -f tiffconf.h tiff.h tiffio.h tiffvers.h $ARMPREFIX/include &&
+cd .libs || exit $?
 
 lib=libtiff.so.$TIFFLIBV
-mkdir -pm 755 $LIBTOP && 
-cp -f libtiff.a $LIBTOP && cplib $lib $LIBTOP
+cp -f libtiff.a $ARMPREFIX/lib && cplib $lib $ARMPREFIX/lib
 cplib $lib $HOSTTOP && cd ../../tools/.libs || exit $?
 for tool in tiffcp tiffinfo tiffdump; do
-  $ARMSTRIP $tool -o $HOSTTOP/../bin/$tool
+  $ARMSTRIP $tool -o $HOSTTOP/usr/bin/$tool
 done
 echo "Done."

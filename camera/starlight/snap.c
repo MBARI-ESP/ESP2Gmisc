@@ -43,8 +43,8 @@ static double exposureSecs = 0.0;  //negative --> autoexposure time limit
 static double maxAutoExposureSecs = 300.0;
 
 //For tuning auto-exposure
-static unsigned maxAutoValue = 42000;  //target white value in ADC counts
-static unsigned adcBias = 4800;    //maximum black value ADC counts / 4x4 pixel
+static unsigned maxAutoValue = 48000;  //target white value in ADC counts
+static unsigned adcBias = 4200;    //maximum black value ADC counts / 4x4 pixel
 static unsigned minAutoSignal = 9000;  //min rise over black to extrapolate exp
 #define maxLinearValue 53000       //CCD response is less linear beyond this
 
@@ -70,7 +70,7 @@ typedef int writeLineFn(void *file, struct CCDexp *exposure, u16 *lineBuffer);
 //note that options commented out in usage don't seem to work for SXV-H9 camera
 static void usage(void)
 {
-  printf("%s revised 1/28/25 brent@mbari.org\n", progName);
+  printf("%s revised 2/25/25 brent@mbari.org\n", progName);
   printf(
 "Snap a photo from a monochrome Starlight Xpress CCD camera. Usage:\n"
 "  %s {options} <exposure seconds> <output file>\n"
@@ -337,7 +337,7 @@ by the brightest pixel in this coarse image.  Scale exposure time so that this
 
 //comment out next line if overexposing hires scenes containing points of light
   testExposure.xbin = testExposure.ybin = 4;
-  testExposure.msec /= 1000*binArea;  //initial wild guess
+  testExposure.msec /= 500*binArea;  //initial wild guess
 
   unsigned blackPt = adcBias;
  retry:
@@ -373,7 +373,7 @@ tooDark:
       unsigned whitePt = brightestPt;
       if (whitePt < minAutoValue)
         whitePt = minAutoValue;
-      requiredMs /= (whitePt-0*blackPt) * binArea;  //denominator
+      requiredMs /= (whitePt-1*blackPt) * binArea;  //denominator
       if(requiredMs > exposure->msec)
         goto tooDark;
       if(brightestPt < minAutoValue) { //not enough signal to trust...
