@@ -6,7 +6,6 @@
 : ${ARMGCC:=/arm}
 : ${ARMSTRIP:=$ARMGCC/bin/strip}
 : ${HOSTTOP:=${1-$HOME/armHost}}
-: ${TARGETTOP:=${2-$HOSTTOP/usr/lib}}
 : ${CC:=$ARMGCC/bin/gcc}
 
 cplinks() {
@@ -32,8 +31,8 @@ cd libtiff &&
 cd .libs || exit $?
 
 lib=libtiff.so.$TIFFLIBV
-cp -f libtiff.a $ARMPREFIX/lib && cplib $lib $ARMPREFIX/lib
-cplib $lib $HOSTTOP && cd ../../tools/.libs || exit $?
+cp $lib $ARMPREFIX/lib/$lib && cplinks $lib $ARMPREFIX/lib &&
+cplib $lib $HOSTTOP/usr/lib && cd ../../tools/.libs || exit $?
 for tool in tiffcp tiffinfo tiffdump; do
   $ARMSTRIP $tool -o $HOSTTOP/usr/bin/$tool
 done
