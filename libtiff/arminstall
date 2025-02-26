@@ -6,7 +6,6 @@
 : ${ARMGCC:=/arm}
 : ${ARMSTRIP:=$ARMGCC/bin/strip}
 : ${HOSTTOP:=${1-$HOME/armHost}}
-: ${CC:=$ARMGCC/bin/gcc}
 
 cplinks() {
 #recursively copy symlinks having the specified target $1
@@ -25,8 +24,8 @@ echo "Installing in $HOSTTOP"
 cd $TIFFVERS || exit 2
 make || exit 1
 
-set -x
-cd libtiff && 
+#set -x
+cd libtiff &&
   cp -f tiffconf.h tiff.h tiffio.h tiffvers.h $ARMPREFIX/include &&
 cd .libs || exit $?
 
