@@ -1,5 +1,5 @@
 /***************************  sleepyCmd.c  *********************************
- *  Copyright (C) 2016 MBARI
+ *  Copyright (C) 2025 MBARI
  *
  *  MBARI Proprietary Information. All rights reserved.
  *
@@ -98,7 +98,7 @@ static unsigned wakeTimeout = 10;
 
 static void usage (void)
 {
-  fprintf(stderr, "%s revised 4/6/16 brent@mbari.org\n", progName);
+  fprintf(stderr, "%s revised 3/4/25 brent@mbari.org\n", progName);
   fprintf(stderr, "\
 Send a command to the ESP Sleepy microcontroller.\n\
 Usage:  %s {options} [resetModem|powerOff|powerQuery|wakeString|none] {args}\n\
@@ -108,7 +108,7 @@ resetModem {offSeconds} --> turn off power to the ESP's modem to reset it.\n\
 powerOff sleepSeconds {shutdownDelay} --> turn off ESP host after shutdownDelay\n\
   sleepSeconds is number of seconds system shall sleep\n\
   shutdownDelay is number of seconds before power is shut off [default=%u]\n\
-    (note that zero seconds for sleep or shutdown reads as \"indefinately\")\n\
+    (note that zero seconds for sleep or shutdown reads as \"indefinitely\")\n\
 powerQuery --> display power/sleep status\n\
 wakeString {wakeString} {wakeAckString} --> set or display wake up strings\n\
     The host wakes up when the wakeup string received within timeout seconds\n\
@@ -379,7 +379,7 @@ gotAllOpts:
       if (sleepSecs)
         printf(" for %u seconds\n", sleepSecs);
       else
-        printf(" indefinately\n");
+        printf(" indefinitely\n");
       sync();
       sendCmd(sysPwrOff, sizeof sysPwrOff, "power off");
     }
@@ -415,7 +415,7 @@ showoff:
         if (offSecs)
           goto showoff;
 forever:
-        printf(" indefinately");
+        printf(" indefinitely");
       }
       puts("");
     }
