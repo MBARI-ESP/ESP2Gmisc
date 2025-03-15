@@ -4,7 +4,6 @@ CFLAGS=-O2
 LTIBUSR=$(HOME)/ltib/rootfs/usr
 
 all:	snap ltib/snap
-#ltib/snap
 
 snap:	Makefile snap.c devctl.c devctl.h ccd_msg.h types.h
 	$(CC) $(CFLAGS) snap.c devctl.c -ltiff -lpng16 -ljpeg -lm -o $@
@@ -21,4 +20,4 @@ arm/snap:  Makefile snap.c devctl.c devctl.h ccd_msg.h types.h
                 -L/arm/usr/lib -ltiff -lz -lm -o $@
 
 clean:
-	rm -f *.o snap arm/*.o arm/snap ltib/*.o ltib/snap
+	rm -f *.o snap arm/*.o arm/snap ltib/*.o ltib/snap ltib/*.o
