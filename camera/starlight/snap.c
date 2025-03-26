@@ -70,7 +70,7 @@ typedef int writeLineFn(void *file, struct CCDexp *exposure, u16 *lineBuffer);
 //note that options commented out in usage don't seem to work for SXV-H9 camera
 static void usage(void)
 {
-  printf("%s revised 2/25/25 brent@mbari.org\n", progName);
+  printf("%s revised 3/26/25 brent@mbari.org\n", progName);
   printf(
 "Snap a photo from a monochrome Starlight Xpress CCD camera. Usage:\n"
 "  %s {options} <exposure seconds> <output file>\n"
@@ -347,7 +347,8 @@ by the brightest pixel in this coarse image.  Scale exposure time so that this
     return 1;
   }
   if(!testExposure.msec) testExposure.msec=1;
-  requiredMs = testExposure.msec*testExposure.xbin*testExposure.ybin / binArea;
+  unsigned testArea = testExposure.xbin * testExposure.ybin;
+  requiredMs = testExposure.msec*testArea / binArea;
   if(requiredMs > exposure->msec) {
 tooDark:
 	  fprintf(stderr,
@@ -362,7 +363,6 @@ tooDark:
     if(debug) fprintf(stderr,"Reduced black point to %d\n", blackPt);
   }
   {
-    unsigned testArea = testExposure.xbin * testExposure.ybin;
     unsigned minAutoValue = minAutoSignal + blackPt;
     unsigned maxSignalTarget = maxAutoValue - blackPt;
     #define maxOverMin ((double)maxSignalTarget/(double)minAutoSignal)
