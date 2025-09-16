@@ -43,9 +43,9 @@ static double exposureSecs = 0.0;  //negative --> autoexposure time limit
 static double maxAutoExposureSecs = 300.0;
 
 //For tuning auto-exposure
-static unsigned maxAutoValue = 48000;  //target white value in ADC counts
 static unsigned adcBias = 4200;    //maximum black value ADC counts / 4x4 pixel
-static unsigned minAutoSignal = 9000;  //min rise over black to extrapolate exp
+static unsigned maxAutoValue =  48000; //target white value in ADC counts
+static unsigned minAutoSignal = 20000; //min rise over black to extrapolate exp
 #define maxLinearValue 53000       //CCD response is less linear beyond this
 
 static char debug = 0;
@@ -70,7 +70,7 @@ typedef int writeLineFn(void *file, struct CCDexp *exposure, u16 *lineBuffer);
 //note that options commented out in usage don't seem to work for SXV-H9 camera
 static void usage(void)
 {
-  printf("%s revised 3/26/25 brent@mbari.org\n", progName);
+  printf("%s revised 9/10/25 brent@mbari.org\n", progName);
   printf(
 "Snap a photo from a monochrome Starlight Xpress CCD camera. Usage:\n"
 "  %s {options} <exposure seconds> <output file>\n"
